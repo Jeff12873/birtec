@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Icône de BiRTEC : une mésange (« BiRT » se prononce comme « bird », oiseau en anglais).
+       Pour mettre la vôtre : remplacer ce fichier et icone.png. -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="#122019" stroke="#4ade80" stroke-width="16"/>
+  <g transform="translate(36 52) scale(7)">
+    <path d="M12 40 Q16 26 30 24 Q40 16 50 22 L58 20 L52 27 Q52 40 38 44 Q24 48 12 40 Z" fill="#4ade80"/>
+    <path d="M24 34 Q34 24 46 28 Q38 36 24 34 Z" fill="#14532d"/>
+    <path d="M12 40 L4 44 L9 37 Z" fill="#22c55e"/>
+    <circle cx="46" cy="25" r="1.8" fill="#0b120e"/>
+    <path d="M32 46 L30 52 M38 45 L38 52" stroke="#a3e635" stroke-width="2" stroke-linecap="round"/>
+  </g>
+</svg>

@@ -1,0 +1,3 @@
+# Les lanceurs Windows doivent garder des fins de ligne Windows, ceux de Linux des fins de ligne Unix.
+*.bat text eol=crlf
+*.sh  text eol=lf
