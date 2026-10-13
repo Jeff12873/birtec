@@ -6,8 +6,10 @@ import { h, vider } from '/socle/ui.js'
 const PAGES = [
   ['premiers-pas', 'Premiers pas'],
   ['assistant', 'L’assistant'],
+  ['rapports', 'Rapports : créer, voir, exporter'],
   ['base', 'Base de données et console SQL'],
-  ['configuration', 'Configuration et fichiers BIRT'],
+  ['connaissances', 'Connaissances (fichier .birtec)'],
+  ['configuration', 'Configuration'],
   ['installation', 'Installation et version hors ligne'],
   ['depannage', 'Dépannage'],
 ]

@@ -47,6 +47,20 @@ export function executerRequete(sql, limite = 200) {
   return moteurJava('requete', { limite }, { motDePasse, texte: sql })
 }
 
+// Fait tourner un rapport dans le moteur BIRT (aperçu HTML ou export). Renvoie { erreurs }.
+export function rendreRapport(fichier, format, sortie, parametres = {}, ressources = null) {
+  exigerSession()
+  const options = { rapport: fichier, format, sortie }
+  if (ressources) options.ressources = ressources
+  const parametresListe = Object.entries(parametres).filter(([, v]) => v !== '' && v !== null && v !== undefined).map(([nom, valeur]) => `${nom}=${valeur}`)
+  return moteurJava('rendu', options, { motDePasse, parametres: parametresListe, delai: 300_000 })
+}
+
+// Vérifie un .rptdesign sans le faire tourner (pas besoin de mot de passe). Renvoie { ok, erreurs }.
+export function verifierRapport(fichier) {
+  return moteurJava('verifier', { rapport: fichier })
+}
+
 function exigerSession() {
   if (motDePasse === null) throw Object.assign(new Error('Connexion MySQL fermée : saisissez le mot de passe.'), { statut: 401 })
 }
@@ -65,13 +79,14 @@ export function javaInstalle() {
 }
 
 // Lance une commande du moteur Java et renvoie sa réponse (JSON). Lance une erreur si le moteur en signale une.
-export function moteurJava(commande, options = {}, { motDePasse: mdp = '', texte = '', delai = 120_000 } = {}) {
+export function moteurJava(commande, options = {}, { motDePasse: mdp = '', texte = '', delai = 120_000, parametres = [] } = {}) {
   const config = installation()
   if (!javaInstalle()) throw Object.assign(new Error("Java n'est pas installé sur ce poste : lancez la préparation."), { statut: 409 })
   const { mysql } = reglagesPoste()
   const classes = [config.moteurJava, config.connecteur, path.join(config.birt, 'lib', '*')].join(path.delimiter)
   const args = ['-cp', classes, 'Moteur', commande, '--url', urlJdbc(), '--utilisateur', mysql.utilisateur]
   for (const [nom, valeur] of Object.entries(options)) args.push(`--${nom}`, String(valeur))
+  for (const parametre of parametres) args.push('--param', parametre) // paramètres de rapport « nom=valeur »
 
   return new Promise((ok, echec) => {
     const processus = spawn(config.java, args, { windowsHide: true })

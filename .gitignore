@@ -7,3 +7,6 @@ reglages-poste.json
 cache/
 journal.txt
 BiRTEC-hors-ligne-*/
+
+# Documents personnels de l’utilisateur (jamais publiés)
+messources/

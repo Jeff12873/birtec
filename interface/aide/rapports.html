@@ -1,0 +1,31 @@
+<h1>Rapports : créer, voir, exporter</h1>
+<h2>Créer un rapport</h2>
+<ul>
+<li><b>Avec l'assistant</b> : décrivez le rapport (contenu, période, regroupements, totaux). Quand tout est clair, l'IA termine par une description du rapport ; le bouton <b>Créer le rapport</b> la transforme en fichier .rptdesign.</li>
+<li><b>En collant une description</b> (bouton « Coller une description » de l'écran Rapports), pour reprendre ou retoucher un rapport à la main.</li>
+</ul>
+<p>BiRTEC vérifie le fichier dans le moteur BIRT puis le fait tourner avec les valeurs par défaut des paramètres. En cas d'erreur (colonne inconnue, faute dans la requête…), l'IA corrige la description, deux fois au plus.</p>
+<h2>Description d'un rapport</h2>
+<pre class="code"><code>{
+  "titre": "Heures par équipement",
+  "sousTitre": "Période choisie",
+  "orientation": "portrait",
+  "requete": "SELECT … AS famille, … AS equipement, … AS heures FROM … WHERE date &gt;= ? AND date &lt; ? ORDER BY famille",
+  "parametres": [ { "nom": "debut", "libelle": "Du", "type": "texte", "defaut": "20260101" },
+                  { "nom": "fin", "libelle": "Au", "type": "texte", "defaut": "20270101" } ],
+  "liaisons": ["debut", "fin"],
+  "colonnes": [ { "champ": "equipement", "libelle": "Équipement" },
+                { "champ": "heures", "libelle": "Heures", "format": "decimal", "total": "somme" } ],
+  "groupes": [ { "champ": "famille", "libelle": "Famille", "sousTotaux": true } ]
+}</code></pre>
+<ul>
+<li><b>liaisons</b> : le paramètre de chaque « ? » de la requête, dans l'ordre.</li>
+<li><b>format</b> : texte, entier, decimal, pourcentage, date, dateheure.</li>
+<li><b>total</b> : somme, moyenne, nombre, min, max (total général et sous-totaux de groupe).</li>
+</ul>
+<h2>Aperçu et export</h2>
+<p>Choisissez les paramètres, puis <b>Aperçu</b>. <b>Exporter</b> produit le fichier au format choisi : PDF, Excel, Word, page web, LibreOffice (Writer, Calc) ou PowerPoint. Pour l'aperçu, BiRTEC utilise sa propre connexion MySQL, quelle que soit celle écrite dans le rapport.</p>
+<h2>Mettre le rapport dans la GMAO</h2>
+<p>Le bouton <b>.rptdesign</b> donne le fichier, à déposer là où la GMAO range ses rapports. Il est au format de BIRT Report Designer 4.8 et sa source de données s'appelle « BDD » : sa connexion vient du profil <code>bdd/config_&lt;s&gt;_&lt;bdd&gt;.xml</code> du serveur BIRT, choisi par les paramètres cachés <code>s</code> et <code>bdd</code> (comme les rapports existants). Le mot de passe n'est jamais écrit dans le fichier.</p>
+<h2>Rapports existants</h2>
+<p>Dans <b>Connaissances → Fichiers BIRT</b>, le bouton œil d'un rapport modèle le copie dans les rapports pour l'aperçu. Si le rapport utilise une feuille de style ou une bibliothèque (ex. <code>_style.css</code>), ajoutez-la dans les ressources : sinon BiRTEC affiche un avertissement, et le rapport sort sans ces styles.</p>

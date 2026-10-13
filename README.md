@@ -6,14 +6,18 @@ rien ne sort de l'entreprise.
 
 - **Connexion MySQL en lecture seule** : le mot de passe est demandé à chaque ouverture, jamais enregistré ;
   seules les requêtes de lecture sont acceptées.
-- **Assistant** : décrit en français ce que vous voulez, il choisit les tables utiles, écrit la requête, et
-  « Exécuter » montre le résultat tout de suite.
+- **Assistant** : décrivez en français ce que vous voulez ; il choisit les tables utiles, écrit la requête
+  (« Exécuter » montre le résultat), puis la description du rapport : « Créer le rapport » fabrique le `.rptdesign`.
+- **Rapports** : fichiers `.rptdesign` vérifiés dans le moteur BIRT, aperçu avec paramètres, export PDF, Excel, Word,
+  HTML, LibreOffice ou PowerPoint.
+- **Connaissances** : tout ce que BiRTEC sait du site (conventions, structure de la base, liens, requêtes, rapports
+  modèles, bibliothèques) est rangé dans **un fichier `.birtec`**, hors du programme. Ce dépôt ne contient aucune donnée
+  de site : c'est une coquille vide.
 - **Base de données** : tables, colonnes, liens, premières lignes, console SQL.
-- **Configuration** : connexion, rapports modèles, bibliothèques et ressources BIRT.
 - Windows et Linux, installé dans le profil de l'utilisateur, **version hors ligne** sur clé USB.
 
-À venir : création des fichiers `.rptdesign` d'après vos rapports modèles, aperçu et export (PDF, Excel, Word…),
-modification de rapports existants, onglet « Création d'indicateurs ITM ».
+À venir : modification de rapports existants, reprise de la mise en page des rapports modèles,
+onglet « Création d'indicateurs ITM ».
 
 ## Installer sur un poste
 
@@ -36,9 +40,9 @@ node serveur/demarrer.js                          # lance BiRTEC (http://127.0.0
 
 | Dossier | Contenu |
 |---|---|
-| `serveur/socle/` | Serveur web, IA (`ia.js`), connexion MySQL (`mysql.js`), réglages, téléchargements |
-| `moteur-java/Moteur.java` | Le programme Java : connexion, structure de la base, requêtes en lecture seule (puis moteur BIRT) |
-| `blocs/<écran>/` | `serveur.js` (routes), `vue.js` (écran) : assistant, base, configuration, aide |
+| `serveur/socle/` | Serveur web, IA (`ia.js`), connexion MySQL (`mysql.js`), fichier .birtec (`birtec.js`), réglages |
+| `moteur-java/Moteur.java` | Le programme Java : connexion, structure de la base, requêtes en lecture seule, moteur BIRT |
+| `blocs/<écran>/` | `serveur.js` (routes), `vue.js` (écran) : assistant, rapports, base, connaissances, configuration, aide |
 | `interface/` | Page, thème vert (`theme.css`), icône, outils d'écran, aide |
 | `outils/` | Préparation d'un poste, catalogue des versions, fabrication du kit hors ligne |
 

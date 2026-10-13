@@ -1,0 +1,21 @@
+<h1>Connaissances (fichier .birtec)</h1>
+<p>Tout ce que BiRTEC sait de votre site est rangé dans <b>un seul fichier</b>, d'extension <code>.birtec</code> (par défaut <code>Documents/BiRTEC/connaissances.birtec</code>). Le programme, lui, ne contient aucune donnée : c'est une coquille vide. Copiez le fichier pour le sauvegarder ou pour l'utiliser sur un autre poste (« Autre fichier .birtec » pour l'ouvrir).</p>
+<h2>Ce qu'il contient</h2>
+<ul>
+<li><b>Notes</b> : conventions et explications. Une note marquée <b>toujours</b> est donnée à l'IA à chaque question : mettez-y les règles de votre GMAO (format des dates, statuts, tables principales, pièges). Les autres notes ne sont données que si elles parlent du sujet.</li>
+<li><b>Tables</b> : la structure de la base. Elle est mise à jour à chaque lecture sur MySQL, et sert à l'assistant même quand la connexion est fermée.</li>
+<li><b>Liens</b> : quand la base ne déclare pas ses clés étrangères, BiRTEC les déduit des noms de colonnes (<code>ID_XXX</code> → table <code>xxx</code>) ou les lit dans un tableau importé.</li>
+<li><b>Requêtes</b> : celles de vos fichiers .sql et de vos rapports. L'IA s'inspire des plus proches de la question.</li>
+<li><b>Fichiers BIRT</b> : rapports modèles, bibliothèques (.rptlibrary), feuilles de style, traductions (.properties), images.</li>
+</ul>
+<h2>Importer un dossier</h2>
+<p>Indiquez le chemin d'un dossier : BiRTEC parcourt ses sous-dossiers et range ce qu'il reconnaît.</p>
+<ul>
+<li>Export de structure (« CREATE TABLE », .sql ou .txt) → tables ;</li>
+<li>tableau .csv avec les colonnes table source / colonne / table cible → liens ;</li>
+<li>autres .sql, .txt contenant une requête → requêtes ;</li>
+<li>.md, .txt, .docx → notes ;</li>
+<li>.rptdesign → rapports modèles (et leurs requêtes) ; .rptlibrary, .css, .properties → ressources.</li>
+</ul>
+<div class="conseil">Les profils de connexion BIRT (fichiers .xml avec <code>odaPassword</code>) contiennent le mot de passe de la base : ils ne sont jamais importés. Les dossiers techniques d'un BIRT Designer (plugins, configuration…) sont ignorés.</div>
+<p>Réimporter le même dossier met à jour ce qui a changé, sans doublons.</p>

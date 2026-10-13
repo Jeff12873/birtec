@@ -7,6 +7,12 @@
 //   java -cp "classes:lib/*" Moteur tester  --url jdbc:mysql://serveur:3306/base --utilisateur u
 //   java -cp "classes:lib/*" Moteur schema  --url … --utilisateur u
 //   java -cp "classes:lib/*" Moteur requete --url … --utilisateur u --limite 200     (SQL après le mot de passe)
+//   java -cp "classes:lib/*" Moteur rendu   --url … --utilisateur u --rapport r.rptdesign --format pdf --sortie r.pdf
+//                                            [--ressources dossier] [--param nom=valeur]…
+//
+// « rendu » fait tourner le rapport dans le moteur BIRT : les sources de données JDBC du rapport sont
+// redirigées vers la connexion MySQL de BiRTEC (le mot de passe n'est jamais écrit dans le rapport).
+// Formats : html, pdf, docx, xlsx, xls, odt, ods, pptx.
 //
 // Entrée standard : 1re ligne = mot de passe, lignes suivantes = la requête SQL (commande « requete »).
 //
@@ -47,6 +53,8 @@ public class Moteur {
                 case "tester" -> tester(options, motDePasse);
                 case "schema" -> schema(options, motDePasse);
                 case "requete" -> requete(options, motDePasse, reste.toString());
+                case "rendu" -> rendu(options, motDePasse);
+                case "verifier" -> verifier(options);
                 default -> erreur("Commande inconnue : " + commande);
             }
         } catch (SQLException e) {
@@ -212,12 +220,145 @@ public class Moteur {
         }
     }
 
+    // ---------------------------------------------------------------- rendu d'un rapport par le moteur BIRT
+
+    static void rendu(Map<String, String> options, String motDePasse) throws Exception {
+        org.eclipse.birt.report.engine.api.EngineConfig configuration = new org.eclipse.birt.report.engine.api.EngineConfig();
+        if (options.containsKey("ressources")) configuration.setResourcePath(options.get("ressources"));
+        configuration.setLogConfig(null, java.util.logging.Level.OFF);
+        org.eclipse.birt.core.framework.Platform.startup(configuration);
+        var fabrique = (org.eclipse.birt.report.engine.api.IReportEngineFactory) org.eclipse.birt.core.framework.Platform
+            .createFactoryObject(org.eclipse.birt.report.engine.api.IReportEngineFactory.EXTENSION_REPORT_ENGINE_FACTORY);
+        var moteur = fabrique.createReportEngine(configuration);
+        try {
+            // Les erreurs de conception (feuille de style absente, style inconnu…) sont signalées
+            // mais n'empêchent pas le rendu : BIRT Viewer les ignore aussi.
+            List<String> problemes = erreursDeConception(options.get("rapport"));
+            var rapport = moteur.openReportDesign(options.get("rapport"));
+            var conception = (org.eclipse.birt.report.model.api.ReportDesignHandle) rapport.getDesignHandle();
+
+            // Les sources JDBC du rapport sont redirigées vers la connexion de BiRTEC.
+            // Les rapports de la GMAO lisent leur connexion dans un profil (bdd/config_<s>_<bdd>.xml, choisi par
+            // une « liaison de propriété ») : on retire ces liaisons et le profil, sinon ils l'emporteraient.
+            conception.getPropertyHandle("propertyBindings").clearValue();
+            for (Object element : conception.getAllDataSources()) {
+                if (element instanceof org.eclipse.birt.report.model.api.OdaDataSourceHandle source && source.getExtensionID().contains("jdbc")) {
+                    source.setProperty("odaDriverClass", "com.mysql.cj.jdbc.Driver");
+                    source.setProperty("odaURL", options.get("url") + "?allowPublicKeyRetrieval=true&connectTimeout=10000");
+                    source.setProperty("odaUser", options.getOrDefault("utilisateur", ""));
+                    source.setProperty("odaPassword", motDePasse == null ? "" : motDePasse);
+                    source.setProperty("OdaConnProfileName", null);
+                    source.setProperty("OdaConnProfileStorePath", null);
+                }
+            }
+
+            var tache = moteur.createRunAndRenderTask(rapport);
+            tache.getAppContext().put(org.eclipse.birt.report.engine.api.EngineConstants.APPCONTEXT_CLASSLOADER_KEY, Moteur.class.getClassLoader());
+            tache.setLocale(java.util.Locale.FRANCE);
+            for (var parametre : options.entrySet()) {
+                if (!parametre.getKey().startsWith("param:")) continue;
+                String nom = parametre.getKey().substring(6);
+                var definition = (org.eclipse.birt.report.model.api.ScalarParameterHandle) conception.findParameter(nom);
+                if (definition != null) tache.setParameterValue(nom, convertir(parametre.getValue(), definition.getDataType()));
+            }
+
+            String format = options.getOrDefault("format", "html");
+            org.eclipse.birt.report.engine.api.RenderOption rendu;
+            if (format.equals("html")) {
+                var html = new org.eclipse.birt.report.engine.api.HTMLRenderOption();
+                html.setEmbeddable(false);
+                html.setImageDirectory(new java.io.File(options.get("sortie")).getParent());
+                rendu = html;
+            } else if (format.equals("pdf")) {
+                rendu = new org.eclipse.birt.report.engine.api.PDFRenderOption();
+            } else {
+                rendu = new org.eclipse.birt.report.engine.api.RenderOption();
+            }
+            rendu.setOutputFormat(format);
+            rendu.setOutputFileName(options.get("sortie"));
+            tache.setRenderOption(rendu);
+            tache.run();
+
+            Json r = new Json().ouvrir().champ("ok", true).nom("erreurs").debutListe();
+            boolean premiere = true;
+            for (String probleme : problemes.subList(0, Math.min(5, problemes.size()))) {
+                if (!premiere) r.virgule();
+                premiere = false;
+                r.valeur("Avertissement, " + probleme);
+            }
+            for (Object erreur : tache.getErrors()) {
+                if (!premiere) r.virgule();
+                premiere = false;
+                Throwable t = (Throwable) erreur;
+                while (t.getCause() != null && t.getCause() != t) t = t.getCause(); // la cause première est la plus parlante
+                r.valeur(((Throwable) erreur).getMessage() + (t != erreur ? " — " + t.getMessage() : ""));
+            }
+            tache.close();
+            System.out.println(r.finListe().fermer());
+        } finally {
+            moteur.destroy();
+            org.eclipse.birt.core.framework.Platform.shutdown();
+        }
+    }
+
+    // Vérifie un fichier .rptdesign sans le faire tourner : liste des erreurs de conception (avec leur ligne).
+    static void verifier(Map<String, String> options) throws Exception {
+        List<String> problemes = erreursDeConception(options.get("rapport"));
+        Json r = new Json().ouvrir().champ("ok", problemes.isEmpty()).nom("erreurs").debutListe();
+        for (int i = 0; i < problemes.size(); i++) {
+            if (i > 0) r.virgule();
+            r.valeur(problemes.get(i));
+        }
+        System.out.println(r.finListe().fermer());
+    }
+
+    static List<String> erreursDeConception(String fichier) throws Exception {
+        List<String> problemes = new ArrayList<>();
+        var session = new org.eclipse.birt.report.model.api.DesignEngine(new org.eclipse.birt.report.model.api.DesignConfig())
+            .newSessionHandle(com.ibm.icu.util.ULocale.FRENCH);
+        try {
+            var conception = session.openDesign(fichier);
+            for (Object e : conception.getErrorList()) {
+                var detail = (org.eclipse.birt.report.model.api.ErrorDetail) e;
+                problemes.add("ligne " + detail.getLineNo() + " : " + detail.getMessage());
+            }
+            conception.close();
+        } catch (org.eclipse.birt.report.model.api.DesignFileException e) {
+            for (Object d : e.getErrorList()) {
+                var detail = (org.eclipse.birt.report.model.api.ErrorDetail) d;
+                problemes.add("ligne " + detail.getLineNo() + " : " + detail.getMessage());
+            }
+            if (problemes.isEmpty()) problemes.add(e.getMessage());
+        }
+        return problemes;
+    }
+
+    // Valeur d'un paramètre de rapport, convertie dans le type déclaré dans le rapport.
+    static Object convertir(String valeur, String type) {
+        if (valeur == null || valeur.isEmpty()) return null;
+        return switch (type) {
+            case "date" -> java.sql.Date.valueOf(valeur.substring(0, 10));
+            case "dateTime" -> java.sql.Timestamp.valueOf(valeur.replace('T', ' ').length() == 10 ? valeur + " 00:00:00" : valeur.replace('T', ' '));
+            case "integer" -> Integer.valueOf(valeur.trim());
+            case "decimal", "float" -> Double.valueOf(valeur.trim().replace(',', '.'));
+            case "boolean" -> Boolean.valueOf(valeur.trim());
+            default -> valeur;
+        };
+    }
+
     // ---------------------------------------------------------------- outils
 
+    // « --nom valeur » ; les paramètres de rapport « --param nom=valeur » peuvent être répétés.
     static Map<String, String> lireOptions(String[] args) {
         Map<String, String> options = new HashMap<>();
         for (int i = 1; i + 1 < args.length; i += 2) {
-            if (args[i].startsWith("--")) options.put(args[i].substring(2), args[i + 1]);
+            if (!args[i].startsWith("--")) continue;
+            if (args[i].equals("--param") && args[i + 1].contains("=")) {
+                String[] morceaux = args[i + 1].split("=", 2);
+                options.put("param:" + morceaux[0], morceaux[1]);
+            } else {
+                options.put(args[i].substring(2), args[i + 1]);
+            }
         }
         return options;
     }

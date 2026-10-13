@@ -7,6 +7,7 @@ import { api, flux } from '/socle/api.js'
 import { texteIA } from '/socle/texte-ia.js'
 import { etat } from '/socle/etat.js'
 import { tableauResultats } from '/blocs/base/vue.js'
+import { creerRapport } from '/blocs/rapports/vue.js'
 
 const SUGGESTIONS = [
   'Liste des ordres de travail du mois, par équipement, avec le total des heures',
@@ -17,7 +18,7 @@ const SUGGESTIONS = [
 
 // Conversation en cours : [{ role: 'agent' | 'assistant', contenu }]
 let conversation = lireConversation()
-let tablesUtilisees = []
+let contexte = { tables: [], notes: [], requetes: [] } // ce que l'IA a reçu pour la dernière question
 let enCours = null // AbortController de la réponse en cours
 
 export default {
@@ -31,9 +32,15 @@ export default {
   async afficher(zone) {
     const panneauTables = h('div', { class: 'texte-2', style: { fontSize: '14px' } })
     const dessinerTables = () =>
-      vider(panneauTables, tablesUtilisees.length
-        ? tablesUtilisees.map((t) => h('div', {}, h('a', { href: `#/base/${encodeURIComponent(t)}`, class: 'mono' }, t)))
-        : h('span', { class: 'discret' }, etat.connexion.ouverte ? 'Les tables données à l’IA s’afficheront ici.' : 'Connexion MySQL fermée : l’IA ne connaît pas la base.'))
+      vider(panneauTables, contexte.tables.length || contexte.notes.length
+        ? [
+            contexte.tables.map((t) => h('div', {}, h('a', { href: `#/base/${encodeURIComponent(t)}`, class: 'mono' }, t))),
+            contexte.notes.length ? h('h4', { style: { margin: '12px 0 4px' } }, 'Notes du site') : null,
+            contexte.notes.map((n) => h('div', { class: 'discret' }, n)),
+            contexte.requetes.length ? h('h4', { style: { margin: '12px 0 4px' } }, 'Requêtes du site') : null,
+            contexte.requetes.map((r) => h('div', { class: 'discret' }, r)),
+          ]
+        : h('span', { class: 'discret' }, 'Les tables, notes et requêtes données à l’IA s’afficheront ici.'))
     dessinerTables()
 
     const messages = h('div', { class: 'messages' })
@@ -96,7 +103,7 @@ export default {
       try {
         await flux('/api/assistant', { question, historique }, (type, donnees) => {
           if (type === 'tables') {
-            tablesUtilisees = donnees
+            contexte = donnees
             dessinerTables()
           }
           if (type === 'texte') reponse.contenu += donnees
@@ -145,7 +152,7 @@ export default {
           'div',
           { class: 'carte', style: { position: 'sticky', top: '86px' } },
           h('div', { class: 'actions', style: { marginBottom: '16px' } }, h('button', { onclick: nouvelleConversation }, ic('plus', 16), 'Nouvelle conversation')),
-          h('h3', { style: { marginBottom: '8px' } }, 'Tables données à l’IA'),
+          h('h3', { style: { marginBottom: '8px' } }, 'Donné à l’IA'),
           panneauTables,
           h('h3', { style: { margin: '22px 0 8px' } }, 'Bon à savoir'),
           h('ul', { class: 'texte-2', style: { paddingLeft: '18px', fontSize: '14px', margin: 0 } },
@@ -183,6 +190,7 @@ function dessinerMessage(message, envoyer) {
   const texte = h('div', { class: `texte-ia ${message.enCours ? 'curseur' : ''}`, html: contenu ? texteIA(contenu) : '' })
   if (!message.contenu && message.enCours) texte.innerHTML = '<p class="discret">L’IA lit la structure de la base…</p>'
   if (!message.enCours) for (const bloc of texte.querySelectorAll('pre.code[data-langue="sql"]')) ajouterActionsSQL(bloc)
+  if (!message.enCours) for (const bloc of texte.querySelectorAll('pre.code[data-langue="rapport"], pre.code[data-langue="json"]')) ajouterActionsRapport(bloc)
 
   return h(
     'div',
@@ -224,6 +232,32 @@ function ajouterActionsSQL(bloc) {
       h('button', { class: 'petit discret', onclick: () => navigator.clipboard.writeText(sql).then(() => notifier('Requête copiée')) }, ic('copier', 14), 'Copier'),
     ),
     resultat,
+  )
+}
+
+// Sous une description de rapport : le résumé, et le bouton qui fabrique le .rptdesign.
+function ajouterActionsRapport(bloc) {
+  let description
+  try {
+    description = JSON.parse(bloc.textContent)
+  } catch {
+    return // pas une description de rapport
+  }
+  if (!description?.requete || !Array.isArray(description.colonnes)) return
+  bloc.style.display = 'none'
+  const voir = h('button', { class: 'petit discret', onclick: () => { bloc.style.display = bloc.style.display ? '' : 'none' } }, 'Voir la description')
+  bloc.before(
+    h('div', { class: 'carte-rapport' },
+      h('strong', {}, ic('document', 15), ' ', description.titre || 'Rapport'),
+      h('div', { class: 'texte-2', style: { fontSize: '13px', margin: '4px 0 8px' } },
+        `Colonnes : ${description.colonnes.map((c) => c.libelle || c.champ).join(', ')}`,
+        description.groupes?.length ? ` — groupé par ${description.groupes.map((g) => g.libelle || g.champ).join(', ')}` : '',
+        description.parametres?.length ? ` — paramètres : ${description.parametres.map((p) => p.libelle || p.nom).join(', ')}` : ''),
+      h('div', { class: 'actions' },
+        h('button', { class: 'petit principal', onclick: async (e) => { const bouton = e.currentTarget; bouton.disabled = true; await creerRapport(description); bouton.disabled = false } }, ic('document', 14), 'Créer le rapport'),
+        voir,
+      ),
+    ),
   )
 }
 

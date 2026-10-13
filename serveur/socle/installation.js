@@ -78,7 +78,8 @@ export function installation() {
 const REGLAGES_DEFAUT = {
   // Connexion MySQL. Le mot de passe n'est jamais enregistré : il est demandé à chaque ouverture.
   mysql: { serveur: '', port: 3306, base: '', utilisateur: '' },
-  dossierTravail: '',   // rapports, modèles et fichiers BIRT (vide = Documents/BiRTEC)
+  dossierTravail: '',   // rapports créés et fichier .birtec par défaut (vide = Documents/BiRTEC)
+  fichierBirtec: '',    // fichier de connaissances du site (vide = <dossier de travail>/connaissances.birtec)
   arretIAMinutes: 20,   // l'IA libère la mémoire après ce délai sans question
 }
 
@@ -87,10 +88,10 @@ export function reglagesPoste() {
   return { ...REGLAGES_DEFAUT, ...lus, mysql: { ...REGLAGES_DEFAUT.mysql, ...(lus.mysql || {}) } }
 }
 
-// Le dossier de travail : rapports (.rptdesign), modèles, bibliothèques et ressources BIRT.
+// Le dossier de travail : rapports créés (.rptdesign) et, par défaut, le fichier .birtec.
 export function dossierTravail() {
   const dossier = reglagesPoste().dossierTravail || path.join(os.homedir(), 'Documents', 'BiRTEC')
-  for (const sous of ['rapports', 'modeles', 'ressources']) fs.mkdirSync(path.join(dossier, sous), { recursive: true })
+  for (const sous of ['rapports']) fs.mkdirSync(path.join(dossier, sous), { recursive: true })
   return dossier
 }
 

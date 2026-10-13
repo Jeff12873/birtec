@@ -1,9 +1,8 @@
 <h1>Premiers pas</h1>
-<p>BiRTEC aide à écrire les requêtes SQL et à concevoir les rapports BIRT de la GMAO, avec une IA qui tourne sur ce poste et qui connaît la structure de votre base MySQL.</p>
+<p>BiRTEC aide à écrire les requêtes SQL et à créer les rapports BIRT de la GMAO, avec une IA qui tourne sur ce poste et qui connaît la structure de votre base MySQL et les habitudes de votre site.</p>
 <h2>1. Connexion à la base</h2>
 <p>Dans <b>Configuration</b>, renseignez le serveur, le port, la base et l'utilisateur MySQL (de préférence un compte en <b>lecture seule</b>). Le mot de passe est demandé à chaque ouverture de BiRTEC et n'est jamais enregistré.</p>
-<h2>2. Fichiers BIRT</h2>
-<p>Toujours dans Configuration, ajoutez vos <b>rapports modèles</b> (pour reprendre leur mise en page) et vos <b>bibliothèques et ressources</b> (.rptlibrary, .properties, images…).</p>
-<h2>3. Questions</h2>
-<p>Dans l'<b>Assistant</b>, décrivez ce que vous voulez : « liste des OT du mois par équipement avec le total des heures ». L'IA écrit la requête ; le bouton <b>Exécuter</b> montre le résultat tout de suite.</p>
-<div class="conseil">La création automatique des fichiers .rptdesign et l'aperçu des rapports arrivent dans les prochaines versions.</div>
+<h2>2. Connaissances du site</h2>
+<p>Dans <b>Connaissances</b>, « Importer un dossier » range dans le fichier <code>.birtec</code> vos documents : export de structure de la base, requêtes .sql, notes, rapports modèles, bibliothèques… Écrivez aussi une note « toujours » avec les conventions de votre GMAO (format des dates, statuts…) : l'IA la lit à chaque question.</p>
+<h2>3. Questions et rapports</h2>
+<p>Dans l'<b>Assistant</b>, décrivez ce que vous voulez : « nombre d'interventions par équipement sur une période, avec le total ». L'IA écrit la requête (<b>Exécuter</b> montre le résultat) puis la description du rapport : <b>Créer le rapport</b> fabrique le fichier .rptdesign, le vérifie dans le moteur BIRT et l'ouvre dans <b>Rapports</b> pour l'aperçu et l'export.</p>

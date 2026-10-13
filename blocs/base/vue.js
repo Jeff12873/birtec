@@ -15,12 +15,12 @@ export default {
   aide: 'base',
 
   async afficher(zone, { id, query }) {
-    if (!etat.connexion.ouverte) {
-      vider(zone, h('div', { class: 'bandeau' }, ic('cadenas'), h('span', { style: { flex: 1 } }, 'Connexion MySQL fermée.'), h('button', { onclick: () => demanderMotDePasse().then(() => window.birtec.recharger()) }, 'Se connecter')))
-      return
-    }
     if (query.sql) sqlConsole = query.sql
     const schema = await api('/api/schema')
+    // Connexion fermée : on montre la structure gardée dans le fichier .birtec.
+    const ferme = !etat.connexion.ouverte
+      ? h('div', { class: 'bandeau' }, ic('cadenas'), h('span', { style: { flex: 1 } }, 'Connexion MySQL fermée : structure du fichier .birtec. Connectez-vous pour exécuter des requêtes.'), h('button', { onclick: () => demanderMotDePasse().then(() => window.birtec.recharger()) }, 'Se connecter'))
+      : null
     const filtre = h('input', { type: 'search', placeholder: 'Filtrer les tables…' })
     const liste = h('div', { class: 'liste-tables' })
     const detail = h('div')
@@ -41,6 +41,7 @@ export default {
 
     vider(
       zone,
+      ferme,
       h('div', { class: 'entete-page' },
         h('div', {}, h('h1', {}, 'Base de données'), h('p', { class: 'sous-titre' }, `${schema.base} — ${schema.tables.length} tables`)),
         h('button', { onclick: async () => { await essayer(() => api('/api/schema?rafraichir=1'), 'Structure relue'); window.birtec.recharger() } }, ic('rafraichir', 16), 'Relire la structure'),

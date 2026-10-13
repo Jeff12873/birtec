@@ -338,3 +338,21 @@ textarea.sql { font-family: var(--mono); font-size: 13px; min-height: 160px; }
 .liste-tables { max-height: calc(100vh - 220px); overflow: auto; }
 .liste-tables a { display: block; padding: 7px 10px; border-radius: 8px; color: var(--texte-2); }
 .liste-tables a:hover, .liste-tables a.actif { background: var(--carte-2); color: var(--texte); text-decoration: none; }
+
+/* Rapports : paramètres et aperçu */
+.parametres-rapport { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 8px; }
+iframe.apercu-rapport { display: block; width: 100%; height: calc(100vh - 330px); min-height: 420px; border: 0; background: #fff; }
+.carte-rapport { border: 1px solid var(--bord); border-radius: var(--rayon); padding: 12px 14px; margin: 6px 0; background: var(--carte-2); }
+.carte-rapport .mono { font-size: 13px; }
+
+/* Connaissances : onglets, chiffres du fichier .birtec, notes */
+.onglets { display: flex; gap: 4px; border-bottom: 1px solid var(--bord); margin-bottom: 16px; }
+.onglets a { padding: 9px 16px; color: var(--texte-2); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.onglets a:hover { color: var(--texte); text-decoration: none; }
+.onglets a.actif { color: var(--texte); border-bottom-color: var(--accent); }
+.chiffres { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+.chiffre { display: flex; flex-direction: column; min-width: 92px; padding: 8px 12px; border-radius: 10px; background: var(--carte-2); }
+.chiffre strong { font-size: 20px; color: var(--accent); }
+.chiffre span { font-size: 12px; color: var(--texte-3); }
+pre.note-contenu { white-space: pre-wrap; font-family: inherit; font-size: 14px; color: var(--texte-2); margin: 0 0 8px; max-height: 260px; overflow: auto; }
+details.carte summary { cursor: pointer; }

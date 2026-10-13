@@ -1,6 +1,6 @@
-// Configuration : connexion MySQL, fichiers de configuration BIRT, réglages du poste.
+// Configuration : connexion MySQL, réglages du poste. (Fichiers BIRT et connaissances : écran « Connaissances ».)
 
-import { h, vider, ic, fenetre, formulaire, notifier, essayer, confirmer, tailleFr, dateHeureFr } from '/socle/ui.js'
+import { h, vider, ic, fenetre, formulaire, notifier, essayer, confirmer } from '/socle/ui.js'
 import { api } from '/socle/api.js'
 import { etat, actualiserEtat } from '/socle/etat.js'
 
@@ -14,8 +14,8 @@ export default {
   async afficher(zone) {
     vider(
       zone,
-      h('div', { class: 'entete-page' }, h('div', {}, h('h1', {}, 'Configuration'), h('p', { class: 'sous-titre' }, 'Connexion à la base, fichiers BIRT et réglages de ce poste'))),
-      h('div', { class: 'grille grille-2' }, carteMySQL(), cartePoste(), carteFichiersBirt()),
+      h('div', { class: 'entete-page' }, h('div', {}, h('h1', {}, 'Configuration'), h('p', { class: 'sous-titre' }, 'Connexion à la base et réglages de ce poste'))),
+      h('div', { class: 'grille grille-2' }, carteMySQL(), cartePoste()),
     )
   },
 }
@@ -92,58 +92,6 @@ function carteMySQL() {
   )
 }
 
-// ---------------------------------------------------------------- fichiers de configuration BIRT
-
-function carteFichiersBirt() {
-  const zone = h('div', {}, h('p', { class: 'discret' }, 'Chargement…'))
-  async function dessiner() {
-    const dossiers = await api('/api/fichiers-birt')
-    vider(
-      zone,
-      h('p', { class: 'texte-2' }, 'Dossier de travail : ', h('span', { class: 'mono' }, etat.dossierTravail)),
-      h('div', { class: 'grille grille-2' }, Object.entries(dossiers).map(([cle, d]) => blocFichiers(cle, d, dessiner))),
-    )
-  }
-  dessiner()
-  return h(
-    'div',
-    { class: 'carte pleine' },
-    h('div', { class: 'carte-entete' }, h('h2', {}, ic('document', 18), 'Fichiers de configuration BIRT')),
-    h('p', { class: 'texte-2' }, 'Rapports modèles (mise en page, styles, page maîtresse à reprendre), bibliothèques (.rptlibrary), fichiers de traduction (.properties), images, feuilles de style… BiRTEC s’en sert pour construire les rapports et pour l’aperçu.'),
-    zone,
-  )
-}
-
-function blocFichiers(cle, dossier, redessiner) {
-  const choix = h('input', {
-    type: 'file',
-    multiple: true,
-    accept: dossier.extensions.join(','),
-    style: { display: 'none' },
-    onchange: async (e) => {
-      for (const fichier of e.target.files) {
-        await essayer(() => api(`/api/fichiers-birt/${cle}`, { methode: 'POST', fichier, entetes: { 'X-Nom': encodeURIComponent(fichier.name) } }), `${fichier.name} ajouté`)
-      }
-      redessiner()
-    },
-  })
-  return h(
-    'div',
-    {},
-    h('div', { class: 'actions', style: { justifyContent: 'space-between', marginBottom: '8px' } }, h('h3', {}, dossier.libelle), h('button', { class: 'petit', onclick: () => choix.click() }, ic('plus', 14), 'Ajouter'), choix),
-    h('div', { class: 'discret', style: { fontSize: '12px', marginBottom: '8px' } }, dossier.extensions.join(' ')),
-    dossier.fichiers.length
-      ? h('div', { class: 'tableau-conteneur' }, h('table', {}, h('tbody', {}, dossier.fichiers.map((f) =>
-          h('tr', {},
-            h('td', {}, f.nom),
-            h('td', { class: 'nombre discret' }, tailleFr(f.taille)),
-            h('td', { class: 'discret' }, dateHeureFr(f.modifie)),
-            h('td', {}, h('button', { class: 'petit danger', title: 'Retirer', onclick: async () => { if (await confirmer(`Retirer ${f.nom} ?`, { texte: 'Retirer', danger: true })) { await essayer(() => api(`/api/fichiers-birt/${cle}/${encodeURIComponent(f.nom)}`, { methode: 'DELETE' })); redessiner() } } }, ic('poubelle', 14))),
-          )))))
-      : h('div', { class: 'vide', style: { padding: '18px' } }, 'Aucun fichier.'),
-  )
-}
-
 // ---------------------------------------------------------------- ce poste
 
 function cartePoste() {
@@ -157,6 +105,7 @@ function cartePoste() {
     ligne('Modèle d’IA', ia.installee ? ia.modele : 'non installé'),
     ligne('Calcul sur', ia.appareil),
     ligne('Java et BIRT', etat.java ? 'installés' : 'non installés : lancez la préparation'),
+    ligne('Connaissances', h('a', { href: '#/connaissances', class: 'mono' }, etat.fichierBirtec)),
     h('label', { class: 'champ', style: { marginTop: '14px' } }, h('span', {}, 'Mettre l’IA en veille après (minutes)'), arret),
     h('div', { class: 'actions', style: { marginTop: '14px' } },
       h('button', { onclick: () => essayer(() => api('/api/poste', { methode: 'POST', corps: { arretIAMinutes: Number(arret.value) } }), 'Enregistré') }, 'Enregistrer'),
