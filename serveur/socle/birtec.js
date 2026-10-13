@@ -6,6 +6,8 @@
 //   liens      → liens entre tables (la base n'en déclare pas toujours : ils sont alors déduits ou importés)
 //   requetes   → requêtes SQL du site, servant d'exemples à l'IA
 //   fichiers   → rapports modèles, bibliothèques, feuilles de style… (le contenu des fichiers)
+//   indicateurs→ indicateurs de la GMAO (requête indicateur + requête liste)
+//   infos      → réglages propres au site : charte des rapports, fenêtres des indicateurs…
 //
 // Rien de tout cela n'est dans le programme ni sur GitHub : le programme est une « coquille vide ».
 // Le fichier se copie, s'envoie ou se sauvegarde comme n'importe quel document.
@@ -62,6 +64,9 @@ function preparer(db) {
     CREATE TABLE IF NOT EXISTS requetes (
       id INTEGER PRIMARY KEY, titre TEXT NOT NULL, sql TEXT NOT NULL, description TEXT,
       source TEXT UNIQUE, modifie TEXT);
+    CREATE TABLE IF NOT EXISTS indicateurs (
+      id INTEGER PRIMARY KEY, nom TEXT NOT NULL, fenetre TEXT, demande TEXT, definition TEXT,
+      requete_indicateur TEXT, requete_liste TEXT, source TEXT, modifie TEXT);
     CREATE TABLE IF NOT EXISTS fichiers (
       categorie TEXT, nom TEXT, contenu BLOB, taille INTEGER, source TEXT, modifie TEXT,
       PRIMARY KEY (categorie, nom));
@@ -71,6 +76,44 @@ function preparer(db) {
 }
 
 const maintenant = () => new Date().toISOString()
+
+// ---------------------------------------------------------------- réglages du site (infos)
+
+// Valeur JSON rangée dans la table infos (ex. « charte », « itm »), ou la valeur par défaut.
+export function lireInfo(cle, defaut = null) {
+  const ligne = birtec().prepare('SELECT valeur FROM infos WHERE cle = ?').get(cle)
+  if (!ligne) return defaut
+  try {
+    return JSON.parse(ligne.valeur)
+  } catch {
+    return defaut
+  }
+}
+
+export function ecrireInfo(cle, valeur) {
+  birtec().prepare('INSERT OR REPLACE INTO infos VALUES (?, ?)').run(cle, JSON.stringify(valeur))
+}
+
+// ---------------------------------------------------------------- indicateurs
+
+export function listerIndicateurs() {
+  return birtec().prepare('SELECT id, nom, fenetre, demande, definition, requete_indicateur AS requeteIndicateur, requete_liste AS requeteListe, source, modifie FROM indicateurs ORDER BY nom').all()
+    .map((i) => ({ ...i, definition: i.definition ? JSON.parse(i.definition) : null }))
+}
+
+export function enregistrerIndicateur({ id, nom, fenetre, demande = '', definition = null, requeteIndicateur, requeteListe, source = null }) {
+  const db = birtec()
+  const valeurs = [nom, fenetre, demande, definition ? JSON.stringify(definition) : null, requeteIndicateur, requeteListe, source, maintenant()]
+  if (id) {
+    db.prepare('UPDATE indicateurs SET nom = ?, fenetre = ?, demande = ?, definition = ?, requete_indicateur = ?, requete_liste = ?, source = ?, modifie = ? WHERE id = ?').run(...valeurs, id)
+    return id
+  }
+  return Number(db.prepare('INSERT INTO indicateurs (nom, fenetre, demande, definition, requete_indicateur, requete_liste, source, modifie) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(...valeurs).lastInsertRowid)
+}
+
+export function supprimerIndicateur(id) {
+  birtec().prepare('DELETE FROM indicateurs WHERE id = ?').run(id)
+}
 
 // ---------------------------------------------------------------- résumé
 
@@ -85,6 +128,7 @@ export function resumeBirtec() {
     tables: compter('tables_base'),
     liens: compter('liens'),
     requetes: compter('requetes'),
+    indicateurs: compter('indicateurs'),
     fichiers: Object.fromEntries(db.prepare('SELECT categorie, COUNT(*) AS n FROM fichiers GROUP BY categorie').all().map((l) => [l.categorie, l.n])),
   }
 }

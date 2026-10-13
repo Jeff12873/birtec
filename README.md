@@ -10,14 +10,16 @@ rien ne sort de l'entreprise.
   (« Exécuter » montre le résultat), puis la description du rapport : « Créer le rapport » fabrique le `.rptdesign`.
 - **Rapports** : fichiers `.rptdesign` vérifiés dans le moteur BIRT, aperçu avec paramètres, export PDF, Excel, Word,
   HTML, LibreOffice ou PowerPoint.
+- **Indicateurs ITM** : requête indicateur (`VAL`) et requête liste associée, tirées d'une même définition, essayées
+  sur la base (chiffre = nombre de lignes, pas de doublon, état filtré), à coller dans la GMAO.
 - **Connaissances** : tout ce que BiRTEC sait du site (conventions, structure de la base, liens, requêtes, rapports
   modèles, bibliothèques) est rangé dans **un fichier `.birtec`**, hors du programme. Ce dépôt ne contient aucune donnée
   de site : c'est une coquille vide.
 - **Base de données** : tables, colonnes, liens, premières lignes, console SQL.
 - Windows et Linux, installé dans le profil de l'utilisateur, **version hors ligne** sur clé USB.
 
-À venir : modification de rapports existants, reprise de la mise en page des rapports modèles,
-onglet « Création d'indicateurs ITM ».
+Aspect des rapports (couleurs, feuille de style, logo, conventions de connexion) réglé par la « charte » du fichier
+`.birtec`. À venir : graphiques, modification de rapports existants.
 
 ## Installer sur un poste
 
@@ -42,7 +44,7 @@ node serveur/demarrer.js                          # lance BiRTEC (http://127.0.0
 |---|---|
 | `serveur/socle/` | Serveur web, IA (`ia.js`), connexion MySQL (`mysql.js`), fichier .birtec (`birtec.js`), réglages |
 | `moteur-java/Moteur.java` | Le programme Java : connexion, structure de la base, requêtes en lecture seule, moteur BIRT |
-| `blocs/<écran>/` | `serveur.js` (routes), `vue.js` (écran) : assistant, rapports, base, connaissances, configuration, aide |
+| `blocs/<écran>/` | `serveur.js` (routes), `vue.js` (écran) : assistant, rapports, itm, base, connaissances, configuration, aide |
 | `interface/` | Page, thème vert (`theme.css`), icône, outils d'écran, aide |
 | `outils/` | Préparation d'un poste, catalogue des versions, fabrication du kit hors ligne |
 

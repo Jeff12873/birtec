@@ -57,8 +57,8 @@ export function rendreRapport(fichier, format, sortie, parametres = {}, ressourc
 }
 
 // Vérifie un .rptdesign sans le faire tourner (pas besoin de mot de passe). Renvoie { ok, erreurs }.
-export function verifierRapport(fichier) {
-  return moteurJava('verifier', { rapport: fichier })
+export function verifierRapport(fichier, ressources = null) {
+  return moteurJava('verifier', ressources ? { rapport: fichier, ressources } : { rapport: fichier })
 }
 
 function exigerSession() {

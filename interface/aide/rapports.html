@@ -25,7 +25,8 @@
 </ul>
 <h2>Aperçu et export</h2>
 <p>Choisissez les paramètres, puis <b>Aperçu</b>. <b>Exporter</b> produit le fichier au format choisi : PDF, Excel, Word, page web, LibreOffice (Writer, Calc) ou PowerPoint. Pour l'aperçu, BiRTEC utilise sa propre connexion MySQL, quelle que soit celle écrite dans le rapport.</p>
-<h2>Mettre le rapport dans la GMAO</h2>
-<p>Le bouton <b>.rptdesign</b> donne le fichier, à déposer là où la GMAO range ses rapports. Il est au format de BIRT Report Designer 4.8 et sa source de données s'appelle « BDD » : sa connexion vient du profil <code>bdd/config_&lt;s&gt;_&lt;bdd&gt;.xml</code> du serveur BIRT, choisi par les paramètres cachés <code>s</code> et <code>bdd</code> (comme les rapports existants). Le mot de passe n'est jamais écrit dans le fichier.</p>
+<h2>Aspect et mise dans la GMAO</h2>
+<p>Couleurs, police, feuille de style, logo, nom de la source de données, profil de connexion et paramètres cachés passés par la GMAO viennent de la <b>charte des rapports</b> (écran Connaissances, bouton « Charte des rapports ») : réglée comme vos rapports existants, elle donne des rapports qui leur ressemblent et se déposent tels quels. Le fichier est au format de BIRT Report Designer 4.8. Le mot de passe n'est jamais écrit dedans.</p>
+<p>Le bouton <b>.rptdesign</b> donne le fichier, à déposer là où la GMAO range ses rapports.</p>
 <h2>Rapports existants</h2>
 <p>Dans <b>Connaissances → Fichiers BIRT</b>, le bouton œil d'un rapport modèle le copie dans les rapports pour l'aperçu. Si le rapport utilise une feuille de style ou une bibliothèque (ex. <code>_style.css</code>), ajoutez-la dans les ressources : sinon BiRTEC affiche un avertissement, et le rapport sort sans ces styles.</p>

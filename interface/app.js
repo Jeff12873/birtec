@@ -10,11 +10,12 @@ import assistant from '/blocs/assistant/vue.js'
 import base from '/blocs/base/vue.js'
 import rapports from '/blocs/rapports/vue.js'
 import connaissances from '/blocs/connaissances/vue.js'
+import itm from '/blocs/itm/vue.js'
 import configuration, { demanderMotDePasse } from '/blocs/configuration/vue.js'
 import aide from '/blocs/aide/vue.js'
 
 // L'ordre est celui du menu.
-const BLOCS = [assistant, rapports, base, connaissances, configuration, aide]
+const BLOCS = [assistant, rapports, itm, base, connaissances, configuration, aide]
 
 const racine = document.getElementById('appli')
 const menu = h('nav', { class: 'menu' })

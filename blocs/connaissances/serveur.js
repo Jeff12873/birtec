@@ -7,10 +7,11 @@ import { ErreurHttp, envoyerOctets } from '../../serveur/socle/http.js'
 import { dossierTravail, journal } from '../../serveur/socle/installation.js'
 import {
   resumeBirtec, changerBirtec, cheminBirtec, listerNotes, enregistrerNote, supprimerNote, lireTables, lireLiens,
-  listerRequetes, supprimerRequete, listerFichiers, lireFichier, enregistrerFichier, supprimerFichier,
+  listerRequetes, supprimerRequete, listerFichiers, lireFichier, enregistrerFichier, supprimerFichier, lireInfo, ecrireInfo,
 } from '../../serveur/socle/birtec.js'
 import { oublierSchema } from '../base/schema.js'
 import { importerDossier } from './importation.js'
+import { completerCharte } from '../rapports/generateur.js'
 
 // Les fichiers BIRT acceptés dans chaque catégorie.
 export const FICHIERS_BIRT = {
@@ -41,6 +42,16 @@ export function routes(r) {
     oublierSchema()
     journal(`Importation de ${dossier} dans le .birtec : ${JSON.stringify({ ...bilan, ignores: bilan.ignores.length })}`)
     return bilan
+  })
+
+  // ---- charte des rapports (aspect et conventions de connexion de la GMAO)
+
+  r.get('/api/connaissances/charte', () => completerCharte(lireInfo('charte')))
+
+  r.post('/api/connaissances/charte', async (ctx) => {
+    const charte = await ctx.json()
+    if (typeof charte !== 'object' || Array.isArray(charte)) throw new ErreurHttp(400, 'La charte doit être un objet JSON.')
+    ecrireInfo('charte', completerCharte(charte))
   })
 
   // ---- notes

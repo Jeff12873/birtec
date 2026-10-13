@@ -7,6 +7,7 @@ const PAGES = [
   ['premiers-pas', 'Premiers pas'],
   ['assistant', 'L’assistant'],
   ['rapports', 'Rapports : créer, voir, exporter'],
+  ['itm', 'Indicateurs ITM'],
   ['base', 'Base de données et console SQL'],
   ['connaissances', 'Connaissances (fichier .birtec)'],
   ['configuration', 'Configuration'],

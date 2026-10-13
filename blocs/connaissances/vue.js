@@ -23,6 +23,7 @@ export default {
         h('div', {}, h('h1', {}, 'Connaissances'), h('p', { class: 'sous-titre' }, 'Ce que BiRTEC sait de votre GMAO : conventions, structure, requêtes et rapports du site')),
         h('div', { class: 'actions' },
           h('button', { class: 'principal', onclick: importer }, ic('dossier', 16), 'Importer un dossier'),
+          h('button', { class: 'discret', onclick: modifierCharte }, ic('crayon', 16), 'Charte des rapports'),
           h('button', { class: 'discret', onclick: () => changerFichier(resume.chemin) }, ic('document', 16), 'Autre fichier .birtec'),
         ),
       ),
@@ -102,6 +103,25 @@ async function changerFichier(actuel) {
   if (!chemin) return
   await essayer(() => api('/api/connaissances/fichier', { methode: 'POST', corps: { chemin } }), 'Fichier ouvert')
   window.birtec.recharger()
+}
+
+// ---------------------------------------------------------------- charte des rapports
+
+async function modifierCharte() {
+  const charte = await api('/api/connaissances/charte')
+  const zoneTexte = h('textarea', { class: 'sql', rows: 24, spellcheck: false }, JSON.stringify(charte, null, 2))
+  const ok = await fenetre({
+    titre: 'Charte des rapports',
+    large: true,
+    contenu: h('div', {},
+      h('p', { class: 'texte-2' }, 'Aspect et conventions des rapports créés par BiRTEC, pour qu’ils ressemblent à ceux de la GMAO et s’y déposent tels quels : couleurs, police, feuille de style et logo ; nom de la source de données, pilote, profil de connexion ; paramètres cachés passés par la GMAO. Voir l’aide « Rapports ».'),
+      zoneTexte),
+    boutons: [
+      { texte: 'Annuler', classe: 'discret', valeur: null },
+      { texte: 'Enregistrer', classe: 'principal', action: () => api('/api/connaissances/charte', { methode: 'POST', corps: JSON.parse(zoneTexte.value) }).then(() => true) },
+    ],
+  })
+  if (ok) notifier('Charte enregistrée : elle s’applique aux prochains rapports créés.')
 }
 
 // ---------------------------------------------------------------- notes

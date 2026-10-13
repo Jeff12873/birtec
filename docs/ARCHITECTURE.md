@@ -21,8 +21,13 @@ navigateur ──► serveur Node (127.0.0.1:47900) ──► llama.cpp (IA)
   (mots de la question, tables citées par les conventions et par les requêtes du site proches de la question, tables liées)
   et donne à l'IA les conventions (notes « toujours »), les notes et requêtes du site en rapport, et la structure.
 - **Rapports** (`blocs/rapports/`) : `generateur.js` transforme une description JSON (écrite par l'IA) en `.rptdesign`
-  (format BIRT 4.8, source « BDD » avec profil de connexion choisi par les paramètres `s` et `bdd`) ; `serveur.js` le
+  (format BIRT 4.8 ; aspect, source de données, profil de connexion et paramètres cachés selon la « charte » du .birtec) ; `serveur.js` le
   vérifie, le fait tourner, demande à l'IA de corriger la description en cas d'erreur (2 essais), puis aperçu et exports.
+
+- **Indicateurs ITM** (`blocs/itm/`) : `indicateur.js` assemble la requête indicateur et la requête liste à partir d'une
+  définition (jointures, conditions, date, tri) ; `serveur.js` fait écrire la définition par l'IA, essaie les deux
+  requêtes (variables de la GMAO remplacées par leurs valeurs d'essai) et fait corriger en cas d'écart.
+  Fenêtres et variables de la GMAO : réglage « itm » du .birtec.
 
 Réglages du poste : `reglages-poste.json` (connexion MySQL sans mot de passe, dossier de travail, fichier .birtec).
 Dossier de travail (par défaut `Documents/BiRTEC`) : `rapports/` et `connaissances.birtec`.

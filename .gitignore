@@ -1,12 +1,22 @@
-# Programmes et modèles téléchargés par la préparation (jamais dans Git)
-moteur/
-modeles/
-# Fichiers propres à chaque poste
-installation.json
-reglages-poste.json
-cache/
-journal.txt
-BiRTEC-hors-ligne-*/
+# Liste blanche : seuls les fichiers du programme sont publiés.
+# Tout autre fichier ou dossier déposé ici (documents, exports de la GMAO, rapports, fichier .birtec…)
+# reste sur le poste et n'est jamais envoyé sur GitHub.
+/*
+!/.github/
+!/.gitignore
+!/.gitattributes
+!/blocs/
+!/docs/
+!/interface/
+!/moteur-java/
+!/outils/
+!/serveur/
+!/*.bat
+!/*.sh
+!/README.md
+!/VERSION
+!/package.json
 
-# Documents personnels de l’utilisateur (jamais publiés)
-messources/
+# Fichiers propres à chaque poste, même dans les dossiers du programme
+*.birtec
+*.datassitec

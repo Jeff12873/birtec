@@ -233,7 +233,7 @@ public class Moteur {
         try {
             // Les erreurs de conception (feuille de style absente, style inconnu…) sont signalées
             // mais n'empêchent pas le rendu : BIRT Viewer les ignore aussi.
-            List<String> problemes = erreursDeConception(options.get("rapport"));
+            List<String> problemes = erreursDeConception(options.get("rapport"), options.get("ressources"));
             var rapport = moteur.openReportDesign(options.get("rapport"));
             var conception = (org.eclipse.birt.report.model.api.ReportDesignHandle) rapport.getDesignHandle();
 
@@ -303,7 +303,7 @@ public class Moteur {
 
     // Vérifie un fichier .rptdesign sans le faire tourner : liste des erreurs de conception (avec leur ligne).
     static void verifier(Map<String, String> options) throws Exception {
-        List<String> problemes = erreursDeConception(options.get("rapport"));
+        List<String> problemes = erreursDeConception(options.get("rapport"), options.get("ressources"));
         Json r = new Json().ouvrir().champ("ok", problemes.isEmpty()).nom("erreurs").debutListe();
         for (int i = 0; i < problemes.size(); i++) {
             if (i > 0) r.virgule();
@@ -312,10 +312,11 @@ public class Moteur {
         System.out.println(r.finListe().fermer());
     }
 
-    static List<String> erreursDeConception(String fichier) throws Exception {
+    static List<String> erreursDeConception(String fichier, String ressources) throws Exception {
         List<String> problemes = new ArrayList<>();
         var session = new org.eclipse.birt.report.model.api.DesignEngine(new org.eclipse.birt.report.model.api.DesignConfig())
             .newSessionHandle(com.ibm.icu.util.ULocale.FRENCH);
+        if (ressources != null) session.setResourceFolder(ressources); // feuilles de style, bibliothèques…
         try {
             var conception = session.openDesign(fichier);
             for (Object e : conception.getErrorList()) {

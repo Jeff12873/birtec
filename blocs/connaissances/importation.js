@@ -6,7 +6,7 @@
 //   autres .sql, .txt contenant une requête     → requêtes du site (exemples pour l'IA)
 //   .md, .txt, .docx                            → notes
 //   .rptdesign, .rpttemplate                    → rapports modèles (+ leurs requêtes, comme exemples)
-//   .rptlibrary, .css, .properties              → ressources BIRT
+//   .rptlibrary, .css, .js, .properties         → ressources BIRT
 // Les fichiers de connexion contenant un mot de passe (profils BIRT) sont volontairement ignorés.
 
 import fs from 'node:fs'
@@ -14,7 +14,7 @@ import path from 'node:path'
 import { lireZip, lireTexteDansZip } from '../../serveur/socle/zip.js'
 import {
   enregistrerTables, enregistrerLiens, deduireLiens, lireTables, enregistrerRequete,
-  enregistrerNote, enregistrerFichier,
+  enregistrerNote, enregistrerFichier, listerRequetes,
 } from '../../serveur/socle/birtec.js'
 
 // Dossiers d'un BIRT Designer ou d'outils : rien d'utile pour l'assistant.
@@ -25,6 +25,8 @@ export function importerDossier(dossier) {
   dossier = path.resolve(dossier)
   if (!fs.existsSync(dossier) || !fs.statSync(dossier).isDirectory()) throw Object.assign(new Error(`Dossier introuvable : ${dossier}`), { statut: 404 })
   const bilan = { tables: 0, liens: 0, requetes: 0, notes: 0, modeles: 0, ressources: 0, ignores: [] }
+  // Les rapports d'une GMAO répètent souvent les mêmes petites requêtes (version, client…) : une seule suffit.
+  bilan.dejaVues = new Set(listerRequetes().map((r) => empreinte(r.sql)))
 
   for (const fichier of parcourir(dossier)) {
     const relatif = path.relative(dossier, fichier).split(path.sep).join('/')
@@ -39,6 +41,7 @@ export function importerDossier(dossier) {
   const deduits = deduireLiens(lireTables())
   enregistrerLiens(deduits, 'déduit')
   bilan.liensDeduits = deduits.length
+  delete bilan.dejaVues
   return bilan
 }
 
@@ -55,7 +58,7 @@ function importerFichier(fichier, relatif, bilan) {
   const ext = path.extname(fichier).toLowerCase()
   const nom = path.basename(fichier)
   const taille = fs.statSync(fichier).size
-  if (!['.sql', '.txt', '.md', '.csv', '.docx', '.rptdesign', '.rpttemplate', '.rptlibrary', '.css', '.properties', '.xml'].includes(ext)) return
+  if (!['.sql', '.txt', '.md', '.csv', '.docx', '.rptdesign', '.rpttemplate', '.rptlibrary', '.css', '.js', '.properties', '.xml'].includes(ext)) return
   if (taille > TAILLE_MAX) return bilan.ignores.push(`${relatif} : trop gros`)
   const octets = fs.readFileSync(fichier)
 
@@ -68,12 +71,14 @@ function importerFichier(fichier, relatif, bilan) {
     enregistrerFichier('modeles', nom, octets, relatif)
     bilan.modeles++
     for (const r of requetesDuRapport(octets.toString('utf8'))) {
+      if (bilan.dejaVues.has(empreinte(r.sql))) continue
+      bilan.dejaVues.add(empreinte(r.sql))
       enregistrerRequete({ titre: `${nom} — ${r.nom}`, sql: r.sql, description: `Jeu de données « ${r.nom} » du rapport ${nom}`, source: `${relatif}#${r.nom}` })
       bilan.requetes++
     }
     return
   }
-  if (['.rptlibrary', '.css', '.properties'].includes(ext)) {
+  if (['.rptlibrary', '.css', '.js', '.properties'].includes(ext)) {
     enregistrerFichier('ressources', nom, octets, relatif)
     bilan.ressources++
     return
@@ -112,6 +117,11 @@ function importerFichier(fichier, relatif, bilan) {
     enregistrerNote({ titre: nom.replace(/\.(md|txt)$/i, ''), contenu: texte.trim(), source: relatif })
     bilan.notes++
   }
+}
+
+// Une requête sans ses blancs ni sa casse, pour reconnaître les doublons.
+function empreinte(sql) {
+  return String(sql).replace(/\s+/g, ' ').trim().toLowerCase()
 }
 
 // ---------------------------------------------------------------- lecteurs

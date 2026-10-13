@@ -10,7 +10,7 @@ import { chemins, dossierTravail, reglagesPoste, journal } from '../../serveur/s
 import { rendreRapport, verifierRapport, etatConnexion } from '../../serveur/socle/mysql.js'
 import { discuter, iaInstallee } from '../../serveur/socle/ia.js'
 import { obtenirSchema, tablesUtiles, decrireTables } from '../base/schema.js'
-import { dossierRessources } from '../../serveur/socle/birtec.js'
+import { dossierRessources, lireInfo } from '../../serveur/socle/birtec.js'
 import { genererRptdesign, verifierDescription } from './generateur.js'
 
 export const FORMATS = {
@@ -52,7 +52,7 @@ export function routes(r) {
   r.post('/api/rapports/generer', async (ctx) => {
     let { description, nom } = await ctx.json()
     const { mysql } = reglagesPoste()
-    const connexion = { url: `jdbc:mysql://${mysql.serveur}:${mysql.port || 3306}/${mysql.base}`, utilisateur: mysql.utilisateur }
+    const connexion = { url: `jdbc:mysql://${mysql.serveur}:${mysql.port || 3306}/${mysql.base}`, utilisateur: mysql.utilisateur, charte: lireInfo('charte') }
     nom = nomDeFichier(nom || description?.titre || 'rapport')
     const fichier = path.join(dossierTravail(), 'rapports', `${nom}.rptdesign`)
     const corrections = []
@@ -117,8 +117,10 @@ async function essayer(description, fichier, connexion) {
   const erreursDescription = verifierDescription(description)
   if (erreursDescription.length) return erreursDescription
   fs.writeFileSync(fichier, genererRptdesign(description, connexion))
-  const verification = await verifierRapport(fichier)
-  if (!verification.ok) return verification.erreurs
+  const verification = await verifierRapport(fichier, dossierRessources(chemins.cache))
+  // Une ressource absente (feuille de style du serveur BIRT…) n'empêche pas le rapport de fonctionner.
+  const bloquantes = verification.erreurs.filter((e) => !/style sheet .* is not found|The style ".*" .* is not found|library .* not found/i.test(e))
+  if (bloquantes.length) return bloquantes
   // On le fait tourner avec les valeurs par défaut des paramètres : la requête est ainsi vraiment essayée.
   if (etatConnexion().ouverte) {
     const parametres = Object.fromEntries((description.parametres || []).map((p) => [p.nom, p.defaut ?? '']))

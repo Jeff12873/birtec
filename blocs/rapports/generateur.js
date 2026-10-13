@@ -17,13 +17,39 @@
 // Le mot de passe MySQL n'est jamais écrit dans le rapport : BiRTEC le fournit au moment de l'aperçu,
 // et la GMAO utilise sa propre connexion.
 //
-// Conventions des rapports de la GMAO :
-//   - format de fichier 3.2.23, celui de BIRT Report Designer 4.8 : le rapport s'ouvre dans le BIRT du poste ;
-//   - source de données « BDD » dont la connexion vient du profil bdd/config_<s>_<bdd>.xml du serveur BIRT,
-//     choisi par les paramètres cachés « s » et « bdd » que la GMAO passe dans l'adresse du rapport.
+// L'aspect et les conventions de connexion viennent de la « charte » du site (fichier .birtec, réglage
+// « charte »), pour que les rapports ressemblent à ceux de la GMAO et s'y déposent tels quels :
+// couleurs, police, feuille de style, logo, nom de la source de données, pilote, profil de connexion,
+// paramètres cachés passés par la GMAO. Sans charte, un aspect neutre et une connexion simple.
 
-const VERSION_FORMAT = '3.2.23' // format des fichiers de BIRT 4.8 (celui de la GMAO)
-const PROFIL_CONNEXION = '"bdd/config_" + params["s"].value + "_" + params["bdd"].value + ".xml"'
+const VERSION_FORMAT = '3.2.23' // format des fichiers de BIRT Report Designer 4.8 (lu aussi par les versions suivantes)
+
+export const CHARTE_PAR_DEFAUT = {
+  couleurs: { titre: '#1F2937', entete: '#374151', texteEntete: '#FFFFFF', groupe: '#F3F4F6', ligne: '#DDDDDD' },
+  police: 'sans-serif',
+  feuilleStyle: '',        // ex. « _style.css » (dans les ressources du serveur BIRT)
+  logo: '',                // expression JavaScript donnant l'adresse du logo, affiché en haut de page
+  source: {
+    nom: 'Données',
+    pilote: 'com.mysql.cj.jdbc.Driver',
+    optionsUrl: '',        // ajouté à l'adresse JDBC, ex. « ?useOldAliasMetadataBehavior=true »
+    profilNom: '',         // profil de connexion BIRT : son nom,
+    profilFichier: '',     // le fichier utilisé dans BIRT Designer,
+    profilChemin: '',      // et l'expression JavaScript du fichier utilisé par le serveur BIRT
+  },
+  parametresCaches: [],    // [{ nom, type, defaut }] : paramètres passés par la GMAO dans l'adresse du rapport
+}
+
+export function completerCharte(charte = {}) {
+  const c = charte || {}
+  return {
+    ...CHARTE_PAR_DEFAUT,
+    ...c,
+    couleurs: { ...CHARTE_PAR_DEFAUT.couleurs, ...(c.couleurs || {}) },
+    source: { ...CHARTE_PAR_DEFAUT.source, ...(c.source || {}) },
+    parametresCaches: c.parametresCaches || [],
+  }
+}
 
 const TYPES = {
   texte: { donnee: 'string', parametre: 'string' },
@@ -35,11 +61,6 @@ const TYPES = {
 }
 
 const FONCTIONS = { somme: 'SUM', moyenne: 'AVE', nombre: 'COUNT', min: 'MIN', max: 'MAX' }
-
-// Couleurs de la mise en page générique (à remplacer par celles des rapports modèles).
-const COULEUR_TITRE = '#14532D'
-const COULEUR_ENTETE = '#1F5E3B'
-const COULEUR_GROUPE = '#E8F5EC'
 
 // ---------------------------------------------------------------- vérification de la description
 
@@ -72,7 +93,9 @@ function compterMarques(sql) {
 
 // ---------------------------------------------------------------- génération
 
-export function genererRptdesign(d, { url, utilisateur }) {
+export function genererRptdesign(d, { url, utilisateur, charte: charteSite }) {
+  const charte = completerCharte(charteSite)
+  const { couleurs, police, source } = charte
   let id = 1
   const nouvelId = () => ++id
   const colonnes = d.colonnes.map((c) => ({ ...c, format: c.format || 'texte', libelle: c.libelle || c.champ }))
@@ -198,17 +221,17 @@ ${sur ? `
                 </footer>` : ''}
             </group>`).join('')
 
-  // Paramètres cachés passés par la GMAO pour choisir le profil de connexion.
-  const parametresCaches = ['s', 'bdd'].filter((nom) => !parametres.some((p) => p.nom === nom)).map((nom) => `
-        <scalar-parameter name="${nom}" id="${nouvelId()}">
+  // Paramètres cachés passés par la GMAO (choix du profil de connexion, adresse du logo…).
+  const parametresCaches = charte.parametresCaches.filter((c) => !parametres.some((p) => p.nom === c.nom)).map((c) => `
+        <scalar-parameter name="${x(c.nom)}" id="${nouvelId()}">
             <property name="hidden">true</property>
             <property name="valueType">static</property>
             <property name="isRequired">false</property>
-            <property name="dataType">integer</property>
-            <property name="distinct">true</property>
+            <property name="dataType">${(TYPES[c.type] || TYPES.texte).parametre}</property>
+            <property name="distinct">true</property>${c.defaut !== undefined && c.defaut !== '' ? `
             <simple-property-list name="defaultValue">
-                <value type="constant">1</value>
-            </simple-property-list>
+                <value type="constant">${x(c.defaut)}</value>
+            </simple-property-list>` : ''}
             <list-property name="selectionList"/>
             <property name="paramType">simple</property>
             <property name="controlType">text-box</property>
@@ -250,94 +273,85 @@ ${sur ? `
   }).join('')
 
   const idSource = nouvelId()
+  const style = (nom, proprietes) => `
+        <style name="${nom}" id="${nouvelId()}">${Object.entries(proprietes).map(([cle, valeur]) => `
+            <property name="${cle}">${x(valeur)}</property>`).join('')}
+        </style>`
   return `<?xml version="1.0" encoding="UTF-8"?>
 <report xmlns="http://www.eclipse.org/birt/2005/design" version="${VERSION_FORMAT}" id="1">
-    <property name="createdBy">BiRTEC</property>
+    <property name="createdBy">BiRTEC</property>${source.profilChemin ? `
     <list-property name="propertyBindings">
         <structure>
             <property name="name">OdaConnProfileStorePath</property>
             <property name="id">${idSource}</property>
-            <expression name="value" type="javascript">${x(PROFIL_CONNEXION)}</expression>
+            <expression name="value" type="javascript">${x(source.profilChemin)}</expression>
         </structure>
-    </list-property>
+    </list-property>` : ''}
     <text-property name="title">${x(d.titre)}</text-property>
     <property name="units">mm</property>
-    <property name="layoutPreference">auto layout</property>
+    <property name="layoutPreference">auto layout</property>${charte.feuilleStyle ? `
+    <list-property name="cssStyleSheets">
+        <structure>
+            <property name="fileName">${x(charte.feuilleStyle)}</property>
+        </structure>
+    </list-property>` : ''}${parametres.length || parametresCaches ? `
     <parameters>${parametresXml}${parametresCaches}
-    </parameters>
+    </parameters>` : ''}
     <data-sources>
-        <oda-data-source extensionID="org.eclipse.birt.report.data.oda.jdbc" name="BDD" id="${idSource}">
-            <property name="odaDriverClass">com.mysql.jdbc.Driver</property>
-            <property name="odaURL">${x(url)}?useOldAliasMetadataBehavior=true</property>
-            <property name="odaUser">${x(utilisateur)}</property>
-            <property name="OdaConnProfileName">BDD</property>
-            <property name="OdaConnProfileStorePath">bdd/config_1_1.xml</property>
+        <oda-data-source extensionID="org.eclipse.birt.report.data.oda.jdbc" name="${x(source.nom)}" id="${idSource}">
+            <property name="odaDriverClass">${x(source.pilote)}</property>
+            <property name="odaURL">${x(url)}${x(source.optionsUrl)}</property>
+            <property name="odaUser">${x(utilisateur)}</property>${source.profilNom ? `
+            <property name="OdaConnProfileName">${x(source.profilNom)}</property>
+            <property name="OdaConnProfileStorePath">${x(source.profilFichier)}</property>` : ''}
         </oda-data-source>
     </data-sources>
     <data-sets>
         <oda-data-set extensionID="org.eclipse.birt.report.data.oda.jdbc.JdbcSelectDataSet" name="Données" id="${nouvelId()}">${liaisons.length ? `
             <list-property name="parameters">${liaisonsXml}
             </list-property>` : ''}
-            <property name="dataSource">BDD</property>
+            <property name="dataSource">${x(source.nom)}</property>
             <xml-property name="queryText"><![CDATA[${String(d.requete).trim().replace(/;+\s*$/, '').replaceAll(']]>', ']]]]><![CDATA[>')}]]></xml-property>
         </oda-data-set>
     </data-sets>
-    <styles>
-        <style name="birtec-titre" id="${nouvelId()}">
-            <property name="fontFamily">sans-serif</property>
-            <property name="fontSize">16pt</property>
-            <property name="fontWeight">bold</property>
-            <property name="color">${COULEUR_TITRE}</property>
-            <property name="marginBottom">4pt</property>
-        </style>
-        <style name="birtec-sous-titre" id="${nouvelId()}">
-            <property name="fontFamily">sans-serif</property>
-            <property name="fontSize">10pt</property>
-            <property name="color">#555555</property>
-            <property name="marginBottom">10pt</property>
-        </style>
-        <style name="birtec-entete" id="${nouvelId()}">
-            <property name="fontFamily">sans-serif</property>
-            <property name="fontSize">9pt</property>
-            <property name="fontWeight">bold</property>
-            <property name="color">#FFFFFF</property>
-            <property name="backgroundColor">${COULEUR_ENTETE}</property>
-            <property name="paddingTop">4pt</property>
-            <property name="paddingBottom">4pt</property>
-        </style>
-        <style name="birtec-groupe" id="${nouvelId()}">
-            <property name="fontFamily">sans-serif</property>
-            <property name="fontSize">9pt</property>
-            <property name="fontWeight">bold</property>
-            <property name="backgroundColor">${COULEUR_GROUPE}</property>
-            <property name="paddingTop">3pt</property>
-            <property name="paddingBottom">3pt</property>
-        </style>
-        <style name="birtec-sous-total" id="${nouvelId()}">
-            <property name="fontFamily">sans-serif</property>
-            <property name="fontSize">9pt</property>
-            <property name="fontWeight">bold</property>
-        </style>
-        <style name="birtec-total" id="${nouvelId()}">
-            <property name="fontFamily">sans-serif</property>
-            <property name="fontSize">9pt</property>
-            <property name="fontWeight">bold</property>
-            <property name="borderTopColor">${COULEUR_TITRE}</property>
-            <property name="borderTopStyle">solid</property>
-            <property name="borderTopWidth">medium</property>
-        </style>
-        <style name="table-detail-cell" id="${nouvelId()}">
-            <property name="fontFamily">sans-serif</property>
-            <property name="fontSize">9pt</property>
-            <property name="borderBottomColor">#DDDDDD</property>
-            <property name="borderBottomStyle">solid</property>
-            <property name="borderBottomWidth">thin</property>
-        </style>
+    <styles>${style('birtec-titre', { fontFamily: police, fontSize: '16pt', fontWeight: 'bold', color: couleurs.titre, marginBottom: '4pt' })}${style('birtec-sous-titre', { fontFamily: police, fontSize: '10pt', color: '#555555', marginBottom: '10pt' })}${style('birtec-entete', { fontFamily: police, fontSize: '9pt', fontWeight: 'bold', color: couleurs.texteEntete, backgroundColor: couleurs.entete, paddingTop: '4pt', paddingBottom: '4pt' })}${style('birtec-groupe', { fontFamily: police, fontSize: '9pt', fontWeight: 'bold', backgroundColor: couleurs.groupe, paddingTop: '3pt', paddingBottom: '3pt' })}${style('birtec-sous-total', { fontFamily: police, fontSize: '9pt', fontWeight: 'bold' })}${style('birtec-total', { fontFamily: police, fontSize: '9pt', fontWeight: 'bold', borderTopColor: couleurs.titre, borderTopStyle: 'solid', borderTopWidth: 'medium' })}${style('table-detail-cell', { fontFamily: police, fontSize: '9pt', borderBottomColor: couleurs.ligne, borderBottomStyle: 'solid', borderBottomWidth: 'thin' })}
     </styles>
     <page-setup>
         <simple-master-page name="Page" id="${nouvelId()}">
             <property name="type">a4</property>
-            <property name="orientation">${d.orientation === 'paysage' ? 'landscape' : 'portrait'}</property>
+            <property name="orientation">${d.orientation === 'paysage' ? 'landscape' : 'portrait'}</property>${charte.logo ? `
+            <property name="headerHeight">0.6in</property>
+            <page-header>
+                <grid id="${nouvelId()}">
+                    <property name="width">100%</property>
+                    <property name="borderBottomColor">${couleurs.titre}</property>
+                    <property name="borderBottomStyle">solid</property>
+                    <property name="borderBottomWidth">medium</property>
+                    <column id="${nouvelId()}">
+                        <property name="width">30mm</property>
+                    </column>
+                    <column id="${nouvelId()}"/>
+                    <row id="${nouvelId()}">
+                        <cell id="${nouvelId()}">
+                            <image id="${nouvelId()}">
+                                <property name="source">url</property>
+                                <expression name="uri" type="javascript">${x(charte.logo)}</expression>
+                            </image>
+                        </cell>
+                        <cell id="${nouvelId()}">
+                            <property name="verticalAlign">middle</property>
+                            <label id="${nouvelId()}">
+                                <property name="fontFamily">${x(police)}</property>
+                                <property name="fontSize">11pt</property>
+                                <property name="fontWeight">bold</property>
+                                <property name="color">${couleurs.titre}</property>
+                                <property name="textAlign">right</property>
+                                <text-property name="text">${x(d.titre)}</text-property>
+                            </label>
+                        </cell>
+                    </row>
+                </grid>
+            </page-header>` : ''}
             <page-footer>
                 <grid id="${nouvelId()}">
                     <property name="width">100%</property>
