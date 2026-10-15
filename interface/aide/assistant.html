@@ -1,9 +1,13 @@
 <h1>L'assistant</h1>
-<p>À chaque question, BiRTEC choisit dans la base les tables qui correspondent à vos mots (plus les tables qui leur sont liées) et les décrit à l'IA. La liste « Tables données à l'IA » montre lesquelles.</p>
+<p>C'est le point d'entrée pour tout : requêtes SQL, <b>rapports BIRT</b> et <b>indicateurs ITM</b>. À chaque question, BiRTEC lui donne les tables utiles (avec les noms clairs du dictionnaire), les chemins de jointure entre ces tables, les conventions de votre site et les requêtes ou indicateurs déjà écrits qui ressemblent à la demande. Le panneau « Donné à l'IA » montre lesquels.</p>
+<h2>Comment il mène la discussion</h2>
+<p>Il suit les <b>Consignes</b> (bouton dans le panneau de droite, modifiables, gardées dans le fichier .birtec). Par défaut : il pose les questions utiles pour cerner le périmètre, propose des compléments à cocher (oui / non), demande les paramètres à choisir au lancement, le logo et la description du rapport, et demande s'il s'agit d'un rapport ou d'un indicateur quand ce n'est pas dit.</p>
 <ul>
-<li>Nommez les choses comme dans la GMAO (ordre de travail, équipement, intervenant…) : la recherche des tables s'appuie sur les noms et les commentaires.</li>
-<li>Précisez la période, les regroupements, les totaux et le tri voulus.</li>
-<li>Sous chaque requête : <b>Exécuter</b> (50 premières lignes), <b>Console</b> (pour la retoucher), <b>Copier</b>.</li>
-<li>Pour un paramètre de rapport BIRT (une période, un équipement), l'IA écrit « ? » à sa place.</li>
+<li>Les réponses toutes prêtes s'affichent en boutons ; les compléments en cases à cocher, puis <b>Valider</b>.</li>
+<li>Sous chaque requête : <b>Exécuter</b>, <b>Console</b>, <b>Copier</b>.</li>
+<li>Sous une description de rapport : <b>Créer le rapport</b> (le rapport est rangé dans l'onglet Rapports).</li>
+<li>Sous une définition d'indicateur : <b>Créer l'indicateur</b> : BiRTEC assemble la requête indicateur et la requête liste, les essaie sur la base, fait corriger l'IA en cas d'écart, puis range l'indicateur dans l'onglet Indicateurs ITM.</li>
 </ul>
-<div class="conseil">L'IA peut se tromper : vérifiez toujours le résultat de la requête avant de l'utiliser dans un rapport.</div>
+<h2>Contrôle des réponses</h2>
+<p>L'IA réfléchit avant d'écrire une requête (« L'IA réfléchit… »), puis BiRTEC contrôle chaque requête sur la vraie structure : table inexistante, colonne absente de sa table (avec les tables qui l'ont), alias non défini. En cas d'erreur, la réponse est réécrite automatiquement (deux fois au plus) ; la mention « Réponse vérifiée et corrigée » l'indique.</p>
+<div class="conseil">Le contrôle garantit que les tables et colonnes existent, pas que la requête répond exactement à la question : vérifiez le résultat (bouton Exécuter). Plus le dictionnaire (noms clairs, descriptions, liens nommés) est complet, plus l'IA est juste.</div>

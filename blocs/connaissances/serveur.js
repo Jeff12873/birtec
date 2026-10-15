@@ -16,6 +16,7 @@ import { completerCharte } from '../rapports/generateur.js'
 // Les fichiers BIRT acceptés dans chaque catégorie.
 export const FICHIERS_BIRT = {
   modeles: { libelle: 'Rapports modèles', extensions: ['.rptdesign', '.rpttemplate'] },
+  images: { libelle: 'Images pour le haut des rapports', extensions: ['.png', '.jpg', '.jpeg', '.gif', '.bmp'] },
   ressources: { libelle: 'Bibliothèques et ressources', extensions: ['.rptlibrary', '.properties', '.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.dat'] },
 }
 

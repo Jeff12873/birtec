@@ -1,12 +1,8 @@
 <h1>Indicateurs ITM</h1>
 <p>Cet onglet écrit les indicateurs de l'écran « indicateurs personnalisés » de la GMAO : une <b>requête indicateur</b> (le chiffre, colonne <code>VAL</code>) et sa <b>requête liste</b> (les fiches comptées, colonnes <code>ID</code>, <code>CODE</code>, <code>DESI1</code>, <code>ACTIF</code> et, en option, <code>DATE_INDICATEUR</code>). Le résultat reste du SQL : copiez chaque requête dans la GMAO.</p>
 <h2>Créer un indicateur</h2>
-<ol>
-<li>Donnez un nom (ex. <code>[Maintenance] - FI à exécuter</code>) et choisissez la fenêtre à ouvrir.</li>
-<li>Décrivez ce qu'il faut compter, en français.</li>
-<li><b>Écrire avec l'IA</b> : l'IA écrit une <i>définition</i> (jointures, conditions, date, tri) ; BiRTEC en tire les deux requêtes, les essaie sur la base et vérifie qu'elles concordent. En cas d'erreur, l'IA corrige (deux fois au plus).</li>
-<li><b>Copier</b> chaque requête dans la GMAO, puis <b>Enregistrer</b> pour la garder dans le fichier .birtec.</li>
-</ol>
+<p>Dans l'<b>Assistant</b> : décrivez ce qu'il faut compter. Il pose ses questions, puis propose une définition (table comptée, jointures, conditions, date, tri) et un nom au format <code>[Catégorie] - Nom court</code>. <b>Créer l'indicateur</b> assemble les deux requêtes, les essaie et les range ici. La fenêtre à ouvrir dans la GMAO est indiquée ; c'est vous qui la choisissez dans la GMAO.</p>
+<p>Ici : choisissez un indicateur pour <b>copier</b> ses requêtes, le <b>tester</b>, le retoucher à la main (« Enregistrer les retouches ») ou le confier à l'assistant (« Modifier avec l'assistant »).</p>
 <h2>Ce que BiRTEC vérifie</h2>
 <ul>
 <li>Les deux requêtes ont exactement les mêmes jointures et conditions : le chiffre correspond toujours à la liste.</li>
@@ -17,5 +13,5 @@
 <p>Pour l'essai sur MySQL, les variables de la GMAO sont remplacées par une valeur d'essai : <code>{{ARBO_FILTRE_…}}</code> par <code>1=1</code> (aucun filtre), <code>{{DATE_DEB_MOIS}}</code> par le premier jour du mois. Dans la GMAO, elles gardent leur vrai sens.</p>
 <h2>Retoucher à la main</h2>
 <p>Vous pouvez modifier directement les deux requêtes puis <b>Tester</b>. Pour qu'elles restent identiques, préférez modifier la <b>définition</b> puis « Refaire les requêtes ».</p>
-<h2>Réglages</h2>
-<p>Le bouton <b>Réglages</b> décrit les fenêtres de la GMAO (table principale, colonnes identifiant, code, désignation, état, variable d'arborescence) et les variables (nom, valeur d'essai). Ils sont rangés dans le fichier .birtec. Les indicateurs existants y sont aussi : l'IA s'en inspire.</p>
+<h2>Variables</h2>
+<p>Le bouton <b>Variables</b> décrit les variables de la GMAO (nom, valeur d'essai, description pour l'IA). Les tables comptables sont reconnues seules : toute table qui a ID_X, X, DESI1 et ACTIF. Tout est rangé dans le fichier .birtec ; les indicateurs existants servent d'exemples à l'IA.</p>

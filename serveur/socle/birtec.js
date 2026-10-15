@@ -7,6 +7,8 @@
 //   requetes   → requêtes SQL du site, servant d'exemples à l'IA
 //   fichiers   → rapports modèles, bibliothèques, feuilles de style… (le contenu des fichiers)
 //   indicateurs→ indicateurs de la GMAO (requête indicateur + requête liste)
+//   dictionnaire → nom clair et description des tables et colonnes, tables écartées de l'IA
+//   liens_dico → nom clair et description des liens entre tables
 //   infos      → réglages propres au site : charte des rapports, fenêtres des indicateurs…
 //
 // Rien de tout cela n'est dans le programme ni sur GitHub : le programme est une « coquille vide ».
@@ -67,6 +69,12 @@ function preparer(db) {
     CREATE TABLE IF NOT EXISTS indicateurs (
       id INTEGER PRIMARY KEY, nom TEXT NOT NULL, fenetre TEXT, demande TEXT, definition TEXT,
       requete_indicateur TEXT, requete_liste TEXT, source TEXT, modifie TEXT);
+    CREATE TABLE IF NOT EXISTS dictionnaire (
+      table_nom TEXT NOT NULL, colonne TEXT NOT NULL DEFAULT '', libelle TEXT, description TEXT,
+      exclue INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (table_nom, colonne));
+    CREATE TABLE IF NOT EXISTS liens_dico (
+      de_table TEXT, de_colonne TEXT, vers_table TEXT, libelle TEXT, description TEXT,
+      PRIMARY KEY (de_table, de_colonne, vers_table));
     CREATE TABLE IF NOT EXISTS fichiers (
       categorie TEXT, nom TEXT, contenu BLOB, taille INTEGER, source TEXT, modifie TEXT,
       PRIMARY KEY (categorie, nom));
@@ -209,6 +217,49 @@ export function deduireLiens(tables) {
     }
   }
   return liens
+}
+
+// ---------------------------------------------------------------- dictionnaire (noms clairs, descriptions, tables écartées)
+
+// { tables: Map(nom → { libelle, description, exclue }), colonnes: Map('table.colonne' → { libelle, description }) }
+// Les clés sont en minuscules : MySQL sous Windows ne distingue pas FI de fi.
+export function lireDictionnaire() {
+  const tables = new Map()
+  const colonnes = new Map()
+  for (const l of birtec().prepare('SELECT table_nom, colonne, libelle, description, exclue FROM dictionnaire').all()) {
+    const entree = { libelle: l.libelle || '', description: l.description || '', exclue: Boolean(l.exclue) }
+    if (l.colonne) colonnes.set(`${l.table_nom}.${l.colonne}`.toLowerCase(), entree)
+    else tables.set(l.table_nom.toLowerCase(), entree)
+  }
+  return { tables, colonnes }
+}
+
+// Enregistre le nom clair, la description ou l'exclusion d'une table (colonne vide) ou d'une colonne.
+// Seuls les champs fournis sont modifiés.
+export function enregistrerDictionnaire({ table, colonne = '', libelle, description, exclue }) {
+  const db = birtec()
+  const actuel = db.prepare('SELECT libelle, description, exclue FROM dictionnaire WHERE table_nom = ? AND colonne = ?').get(table, colonne) || {}
+  db.prepare('INSERT OR REPLACE INTO dictionnaire (table_nom, colonne, libelle, description, exclue) VALUES (?, ?, ?, ?, ?)').run(
+    table, colonne,
+    libelle ?? actuel.libelle ?? '',
+    description ?? actuel.description ?? '',
+    exclue === undefined ? (actuel.exclue ?? 0) : (exclue ? 1 : 0),
+  )
+}
+
+export function lireLiensDictionnaire() {
+  const liens = new Map()
+  for (const l of birtec().prepare('SELECT * FROM liens_dico').all()) liens.set(`${l.de_table}.${l.de_colonne}>${l.vers_table}`.toLowerCase(), { libelle: l.libelle || '', description: l.description || '' })
+  return liens
+}
+
+export function enregistrerLienDictionnaire({ deTable, deColonne, versTable, libelle = '', description = '' }) {
+  birtec().prepare('INSERT OR REPLACE INTO liens_dico VALUES (?, ?, ?, ?, ?)').run(deTable, deColonne, versTable, libelle, description)
+}
+
+// Ajoute un lien saisi à la main (ex. une colonne au nom inhabituel) : il l'emporte sur un lien déduit.
+export function ajouterLien({ deTable, deColonne, versTable, versColonne }) {
+  birtec().prepare('INSERT OR REPLACE INTO liens VALUES (?, ?, ?, ?, ?)').run(deTable, deColonne, versTable, versColonne, 'saisi')
 }
 
 // ---------------------------------------------------------------- requêtes du site

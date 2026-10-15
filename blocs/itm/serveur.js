@@ -1,6 +1,7 @@
-// Création d'indicateurs ITM : l'IA écrit la définition d'un indicateur de la GMAO, BiRTEC en tire
-// la requête indicateur et la requête liste, les essaie sur MySQL et vérifie qu'elles concordent.
-// Le résultat reste du SQL, à coller dans l'écran des indicateurs de la GMAO.
+// Indicateurs ITM : l'assistant écrit la définition d'un indicateur de la GMAO, BiRTEC en tire la
+// requête indicateur et la requête liste, les contrôle (tables et colonnes existantes), les essaie sur
+// MySQL, vérifie qu'elles concordent et fait corriger l'IA en cas d'écart. Les indicateurs créés sont
+// gardés dans le fichier .birtec (historique). Le résultat reste du SQL, à coller dans la GMAO.
 
 import { ErreurHttp } from '../../serveur/socle/http.js'
 import { discuter, iaInstallee } from '../../serveur/socle/ia.js'
@@ -8,21 +9,31 @@ import { executerRequete, etatConnexion } from '../../serveur/socle/mysql.js'
 import { journal } from '../../serveur/socle/installation.js'
 import { lireInfo, ecrireInfo, listerIndicateurs, enregistrerIndicateur, supprimerIndicateur, listerNotes, listerRequetes } from '../../serveur/socle/birtec.js'
 import { obtenirSchema, tablesUtiles, decrireTables, connaissancesUtiles, tablesDesConventions } from '../base/schema.js'
+import { verifierSQL } from '../base/verification.js'
 import { extraireJson } from '../rapports/serveur.js'
-import { REGLAGES_VIDES, verifierDefinition, assembler, remplacerVariables, trouverFenetre, normaliser } from './indicateur.js'
+import { REGLAGES_VIDES, verifierDefinition, assembler, remplacerVariables, trouverFenetre, normaliser, deduireFenetres } from './indicateur.js'
 
 const ESSAIS_DE_CORRECTION = 2
 const LIGNES_MAX = 5000
 
-export function reglagesITM() {
-  return { ...REGLAGES_VIDES, ...lireInfo('itm', {}) }
+// Fenêtres décrites dans le .birtec, complétées par celles déduites de la structure (tables en forme de fiche).
+export async function reglagesITM() {
+  const enregistres = { ...REGLAGES_VIDES, ...lireInfo('itm', {}) }
+  const schema = await obtenirSchema()
+  const connues = new Set(enregistres.fenetres.map((f) => f.table.toLowerCase()))
+  const deduites = deduireFenetres(schema.tables).filter((f) => !connues.has(f.table.toLowerCase()))
+  return { ...enregistres, fenetres: [...enregistres.fenetres, ...deduites] }
 }
 
 export function routes(r) {
-  r.get('/api/itm/reglages', () => reglagesITM())
+  r.get('/api/itm/reglages', async () => {
+    const reglages = await reglagesITM()
+    return { ...reglages, fenetres: reglages.fenetres.filter((f) => !f.deduite), deduites: reglages.fenetres.filter((f) => f.deduite).length }
+  })
 
   r.post('/api/itm/reglages', async (ctx) => {
     const reglages = await ctx.json()
+    reglages.fenetres ||= []
     if (!Array.isArray(reglages.fenetres) || !Array.isArray(reglages.variables)) throw new ErreurHttp(400, 'Il faut deux listes : fenetres et variables.')
     for (const f of reglages.fenetres) if (!f.libelle || !f.table || !f.id || !f.code) throw new ErreurHttp(400, 'Chaque fenêtre a besoin de libelle, table, id et code.')
     ecrireInfo('itm', { fenetres: reglages.fenetres, variables: reglages.variables })
@@ -38,13 +49,24 @@ export function routes(r) {
 
   r.delete('/api/itm/indicateurs/:id', (ctx) => supprimerIndicateur(Number(ctx.params.id)))
 
+  // La valeur seule d'un indicateur (page d'accueil) : requête indicateur, variables remplacées.
+  r.get('/api/itm/indicateurs/:id/valeur', async (ctx) => {
+    const indicateur = listerIndicateurs().find((i) => i.id === Number(ctx.params.id))
+    if (!indicateur) throw new ErreurHttp(404, 'Indicateur introuvable')
+    if (!etatConnexion().ouverte) return { valeur: null }
+    const { sql } = remplacerVariables(indicateur.requeteIndicateur || '', await reglagesITM())
+    const r = await executerRequete(sql, 2)
+    const colonne = r.colonnes.findIndex((c) => c.nom.toUpperCase() === 'VAL')
+    return { valeur: r.lignes[0]?.[colonne < 0 ? 0 : colonne] ?? null }
+  })
+
   // Assemble les deux requêtes à partir d'une définition (écrite ou retouchée à la main).
   r.post('/api/itm/assembler', async (ctx) => {
     const { definition } = await ctx.json()
-    const reglages = reglagesITM()
+    const reglages = await reglagesITM()
     const erreurs = verifierDefinition(definition, reglages)
     if (erreurs.length) return { erreurs }
-    return { erreurs: [], ...assembler(definition, reglages) }
+    return { erreurs: [], definition: normaliser(definition, reglages), ...assembler(definition, reglages) }
   })
 
   // Essaie les deux requêtes (éventuellement retouchées à la main) sur la base.
@@ -53,40 +75,37 @@ export function routes(r) {
     return tester(requeteIndicateur, requeteListe)
   })
 
-  // POST /api/itm/generer { demande, fenetre, nom? } : l'IA écrit la définition, BiRTEC assemble et essaie.
-  r.post('/api/itm/generer', async (ctx) => {
-    const { demande, fenetre, nom } = await ctx.json()
-    if (!demande?.trim()) throw new ErreurHttp(400, 'Décrivez l’indicateur voulu.')
-    if (!iaInstallee()) throw new ErreurHttp(409, 'L’IA n’est pas installée sur ce poste.')
-    const reglages = reglagesITM()
-    if (!reglages.fenetres.length) throw new ErreurHttp(409, 'Aucune fenêtre définie : renseignez les réglages des indicateurs.')
-
-    const contexte = await contexteIA(demande, fenetre, reglages)
-    let definition = extraireJson(await discuter(
-      [{ role: 'system', content: consignes(reglages) }, { role: 'user', content: `${contexte}\n\nFENÊTRE CHOISIE : ${fenetre || '(à choisir)'}\nNOM SOUHAITÉ : ${nom || '(à proposer)'}\nDEMANDE : ${demande}` }],
-      { temperature: 0.1, maxMots: 1500 },
-    ))
-    if (!definition) throw new ErreurHttp(502, 'L’IA n’a pas rendu de définition lisible : reformulez la demande.')
-    if (fenetre) definition.fenetre = fenetre
-    if (nom) definition.nom = nom
-
+  // POST /api/itm/creer { definition, demande } : depuis l'assistant. BiRTEC assemble, contrôle et essaie ;
+  // en cas d'erreur, l'IA corrige la définition (2 fois au plus). Enregistré dans le .birtec si tout va bien
+  // (ou si « forcer » est demandé).
+  r.post('/api/itm/creer', async (ctx) => {
+    const { definition: proposee, demande = '', forcer = false } = await ctx.json()
+    const reglages = await reglagesITM()
+    let definition = normaliser(proposee, reglages)
+    let resultat = await essayer(definition, reglages)
     const corrections = []
-    for (let essai = 0; ; essai++) {
-      definition = normaliser(definition, reglages)
-      const resultat = await essayer(definition, reglages)
-      if (!resultat.erreurs.length || essai >= ESSAIS_DE_CORRECTION) return { definition, corrections, ...resultat }
-      journal(`Indicateur « ${definition.nom} » : correction par l'IA (${resultat.erreurs[0]})`)
-      corrections.push(resultat.erreurs[0])
-      const corrigee = extraireJson(await discuter(
-        [
-          { role: 'system', content: consignes(reglages) },
-          { role: 'user', content: `${contexte}\n\nDÉFINITION :\n${JSON.stringify(definition, null, 2)}\n\nERREUR OBTENUE :\n${resultat.erreurs.join('\n')}\n\nCorrige la définition. Réponds uniquement par le JSON corrigé.` },
-        ],
-        { temperature: 0.1, maxMots: 1500 },
-      ))
-      if (!corrigee) return { definition, corrections, ...resultat }
-      definition = { ...corrigee, fenetre: fenetre || corrigee.fenetre, nom: nom || corrigee.nom }
+    if (!forcer) {
+      for (let essai = 0; resultat.erreurs.length && essai < ESSAIS_DE_CORRECTION && iaInstallee(); essai++) {
+        journal(`Indicateur « ${definition.nom} » : correction par l'IA (${resultat.erreurs[0]})`)
+        corrections.push(resultat.erreurs[0])
+        const contexte = await contexteIA(`${demande} ${definition.nom} ${definition.explication || ''}`, definition.table, reglages)
+        const corrigee = extraireJson(await discuter(
+          [
+            { role: 'system', content: consignes(reglages) },
+            { role: 'user', content: `${contexte}\n\nDEMANDE : ${demande}\n\nDÉFINITION :\n${JSON.stringify(definition, null, 2)}\n\nERREURS OBTENUES :\n${resultat.erreurs.join('\n')}\n\nCorrige la définition. Réponds uniquement par le JSON corrigé.` },
+          ],
+          { temperature: 0.1, maxMots: 1500, reflechir: true },
+        ))
+        if (!corrigee) break
+        definition = normaliser({ ...corrigee, nom: corrigee.nom || definition.nom }, reglages)
+        resultat = await essayer(definition, reglages)
+      }
     }
+    let id = null
+    if (!resultat.erreurs.length || forcer) {
+      id = enregistrerIndicateur({ nom: definition.nom, fenetre: definition.fenetre, demande, definition, requeteIndicateur: resultat.requeteIndicateur, requeteListe: resultat.requeteListe, source: 'assistant' })
+    }
+    return { id, definition, corrections, ...resultat }
   })
 }
 
@@ -96,6 +115,9 @@ async function essayer(definition, reglages) {
   const erreurs = verifierDefinition(definition, reglages)
   if (erreurs.length) return { erreurs, avertissements: [] }
   const { requeteIndicateur, requeteListe, avertissements } = assembler(definition, reglages)
+  // Tables et colonnes inexistantes : signalées avant tout essai, avec les tables qui ont la colonne.
+  const inconnues = verifierSQL(requeteListe, await obtenirSchema())
+  if (inconnues.length) return { requeteIndicateur, requeteListe, erreurs: inconnues, avertissements }
   const essai = etatConnexion().ouverte ? await tester(requeteIndicateur, requeteListe) : { erreurs: [], avertissements: ['Connexion MySQL fermée : requêtes non essayées.'] }
   return { requeteIndicateur, requeteListe, ...essai, avertissements: [...avertissements, ...essai.avertissements] }
 }
@@ -103,7 +125,7 @@ async function essayer(definition, reglages) {
 // Les deux requêtes sur la base, variables remplacées par leurs valeurs d'essai.
 // Vérifie : une seule valeur VAL, colonnes ID/CODE/DESI1/ACTIF, et le chiffre égal au nombre de lignes.
 export async function tester(requeteIndicateur, requeteListe) {
-  const reglages = reglagesITM()
+  const reglages = await reglagesITM()
   const erreurs = []
   const avertissements = []
   const indicateur = remplacerVariables(requeteIndicateur || '', reglages)
@@ -150,16 +172,20 @@ export async function tester(requeteIndicateur, requeteListe) {
 
 // ---------------------------------------------------------------- IA
 
-function consignes(reglages) {
-  const fenetres = reglages.fenetres.map((f) => `- « ${f.libelle} » : table ${f.table}, identifiant ${f.table}.${f.id}, code ${f.table}.${f.code}${f.variableArbo ? `, filtre d'arborescence ${f.variableArbo}` : ''}`).join('\n')
+// Règles d'écriture d'une définition d'indicateur (aussi données à l'assistant).
+export function reglesIndicateur(reglages, tablesUtiles = null) {
+  const garder = tablesUtiles ? new Set(tablesUtiles.map((t) => t.toLowerCase())) : null
+  const fenetres = reglages.fenetres
+    .filter((f) => !garder || garder.has(f.table.toLowerCase()) || !f.deduite)
+    .map((f) => `- table ${f.table} « ${f.libelle} » : identifiant ${f.table}.${f.id}, code ${f.table}.${f.code}${f.variableArbo ? `, filtre d'arborescence ${f.variableArbo}` : ''}`).join('\n')
   const variables = reglages.variables.map((v) => `- ${v.nom} : ${v.description || ''}`).join('\n')
-  return `Tu écris des indicateurs pour l'écran « indicateurs personnalisés » d'une GMAO (base MySQL).
-Un indicateur = une requête qui compte des fiches d'une fenêtre, et une requête liste qui affiche ces fiches.
-BiRTEC construit lui-même les deux requêtes : tu donnes seulement la définition, en JSON, sans texte autour :
-{"nom": "…", "fenetre": "…", "jointures": "LEFT JOIN … ON …\\nLEFT JOIN … ON …", "conditions": "…", "arborescence": true, "dateIndicateur": "table.COLONNE ou null", "tri": "DATE_INDICATEUR DESC", "explication": "une phrase"}
+  return `Un indicateur ITM = une requête qui compte des fiches d'une table (la fenêtre que la GMAO ouvrira), et une requête liste qui affiche ces fiches.
+BiRTEC construit lui-même les deux requêtes à partir de cette définition JSON :
+{"nom": "[Catégorie] - Nom court", "table": "table principale", "jointures": "LEFT JOIN … ON …\\nLEFT JOIN … ON …", "conditions": "…", "arborescence": true, "dateIndicateur": "table.COLONNE ou null", "tri": "DATE_INDICATEUR DESC", "explication": "une phrase"}
 
 Règles :
-- La table principale est celle de la fenêtre : ne la remets pas dans « jointures ». Préfixe toujours les colonnes par leur table, écrite comme dans la STRUCTURE.
+- « nom » au format « [Catégorie] - Nom court » : catégorie d'un mot ou deux (Préventif, Dépannage, Magasin, Qualité saisie…), nom de quelques mots.
+- « table » : la table des fiches comptées (une des tables listées plus bas). Ne la remets pas dans « jointures ». Préfixe toujours les colonnes par leur table, écrite comme dans la STRUCTURE.
 - « jointures » : uniquement des JOIN / LEFT JOIN / INNER JOIN, sans FROM ni WHERE. Préfère LEFT JOIN.
 - « conditions » : le contenu du WHERE, sans le mot WHERE et sans la variable d'arborescence (BiRTEC l'ajoute si « arborescence » est true). Pas de point-virgule, lecture seule.
 - N'ajoute AUCUNE condition qui n'est pas demandée (pas de filtre de date si la demande n'en parle pas).
@@ -173,11 +199,15 @@ ${variables || '- (aucune)'}
 - Respecte les CONVENTIONS DU SITE et inspire-toi des INDICATEURS EXISTANTS.
 - N'invente ni table ni colonne : utilise seulement la STRUCTURE fournie.
 
-Fenêtres possibles :
-${fenetres}`
+Tables possibles pour un indicateur :
+${fenetres || '- (aucune : la structure de la base est inconnue)'}`
 }
 
-async function contexteIA(demande, libelleFenetre, reglages) {
+function consignes(reglages) {
+  return `Tu écris des indicateurs pour l'écran « indicateurs personnalisés » d'une GMAO (base MySQL). Réponds uniquement par la définition JSON, sans texte autour.\n\n${reglesIndicateur(reglages)}`
+}
+
+export async function contexteIA(demande, libelleFenetre, reglages) {
   const fenetre = trouverFenetre(reglages, libelleFenetre)
   const notes = listerNotes()
   const schema = await obtenirSchema()

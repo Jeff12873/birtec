@@ -6,16 +6,18 @@
 
 import { h, vider, ic, fenetreOuverte, notifier } from './socle/ui.js'
 import { etat, suivreEtat, surChangement } from './socle/etat.js'
+import accueil from '/blocs/accueil/vue.js'
 import assistant from '/blocs/assistant/vue.js'
 import base from '/blocs/base/vue.js'
 import rapports from '/blocs/rapports/vue.js'
 import connaissances from '/blocs/connaissances/vue.js'
 import itm from '/blocs/itm/vue.js'
+import schema from '/blocs/schema/vue.js'
 import configuration, { demanderMotDePasse } from '/blocs/configuration/vue.js'
 import aide from '/blocs/aide/vue.js'
 
 // L'ordre est celui du menu.
-const BLOCS = [assistant, rapports, itm, base, connaissances, configuration, aide]
+const BLOCS = [accueil, assistant, rapports, itm, base, schema, connaissances, configuration, aide]
 
 const racine = document.getElementById('appli')
 const menu = h('nav', { class: 'menu' })
@@ -40,7 +42,7 @@ afficherBloc()
 function routeActuelle() {
   const [chemin = '', ...reste] = location.hash.replace(/^#\/?/, '').split('?')[0].split('/')
   const query = Object.fromEntries(new URLSearchParams(location.hash.split('?')[1] || ''))
-  const bloc = BLOCS.find((b) => b.chemin === chemin) || assistant
+  const bloc = BLOCS.find((b) => b.chemin === chemin) || accueil
   return { bloc, id: reste.join('/') || null, query }
 }
 

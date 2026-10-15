@@ -7,11 +7,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { ErreurHttp, envoyerOctets } from '../../serveur/socle/http.js'
 import { chemins, dossierTravail, reglagesPoste, journal } from '../../serveur/socle/installation.js'
-import { rendreRapport, verifierRapport, etatConnexion } from '../../serveur/socle/mysql.js'
+import { rendreRapport, verifierRapport, etatConnexion, executerRequete } from '../../serveur/socle/mysql.js'
 import { discuter, iaInstallee } from '../../serveur/socle/ia.js'
 import { obtenirSchema, tablesUtiles, decrireTables } from '../base/schema.js'
-import { dossierRessources, lireInfo } from '../../serveur/socle/birtec.js'
-import { genererRptdesign, verifierDescription } from './generateur.js'
+import { dossierRessources, lireInfo, lireFichier } from '../../serveur/socle/birtec.js'
+import { verifierSQL } from '../base/verification.js'
+import { genererRptdesign, verifierDescription, THEMES } from './generateur.js'
 
 export const FORMATS = {
   pdf: { libelle: 'PDF', type: 'application/pdf' },
@@ -57,19 +58,39 @@ export function routes(r) {
     const fichier = path.join(dossierTravail(), 'rapports', `${nom}.rptdesign`)
     const corrections = []
 
+    let avertissements = []
     for (let essai = 0; ; essai++) {
-      const erreurs = await essayer(description, fichier, connexion)
-      if (!erreurs.length) break
+      const resultat = await essayer(description, fichier, connexion)
+      avertissements = resultat.avertissements
+      if (!resultat.erreurs.length) break
       if (essai >= ESSAIS_DE_CORRECTION || !iaInstallee()) {
-        return { nom, ok: false, erreurs, corrections }
+        return { nom, ok: false, erreurs: resultat.erreurs, corrections }
       }
-      journal(`Rapport « ${nom} » : correction par l'IA (${erreurs[0]})`)
-      description = await corrigerParIA(description, erreurs)
-      corrections.push(erreurs[0])
+      journal(`Rapport « ${nom} » : correction par l'IA (${resultat.erreurs[0]})`)
+      description = await corrigerParIA(description, resultat.erreurs)
+      corrections.push(resultat.erreurs[0])
     }
     fs.writeFileSync(fichier.replace(/\.rptdesign$/, '.birtec.json'), JSON.stringify(description, null, 2) + '\n')
     journal(`Rapport créé : ${fichier}`)
-    return { nom, ok: true, erreurs: [], corrections }
+    return { nom, ok: true, erreurs: [], avertissements, corrections }
+  })
+
+  r.get('/api/rapports-themes', () => Object.keys(THEMES))
+
+  // Refait un rapport créé par BiRTEC avec un autre thème, une image ou sans logo (sans passer par l'IA).
+  r.post('/api/rapports/:nom/refaire', async (ctx) => {
+    const changements = await ctx.json()
+    const fichier = fichierRapport(ctx.params.nom)
+    const fichierDescription = fichier.replace(/\.rptdesign$/, '.birtec.json')
+    const description = lireJson(fichierDescription)
+    if (!description) throw new ErreurHttp(409, 'Ce rapport n’a pas été créé par BiRTEC : sa description est introuvable.')
+    for (const cle of ['theme', 'image', 'logo', 'description', 'positionDescription']) if (cle in changements) description[cle] = changements[cle]
+    const { mysql } = reglagesPoste()
+    const connexion = { url: `jdbc:mysql://${mysql.serveur}:${mysql.port || 3306}/${mysql.base}`, utilisateur: mysql.utilisateur, charte: lireInfo('charte') }
+    const resultat = await essayer(description, fichier, connexion)
+    if (resultat.erreurs.length) throw new ErreurHttp(400, resultat.erreurs.join(' ; '))
+    fs.writeFileSync(fichierDescription, JSON.stringify(description, null, 2) + '\n')
+    return { avertissements: resultat.avertissements }
   })
 
   // Aperçu HTML (dans un cadre de la page) avec les paramètres choisis.
@@ -77,8 +98,12 @@ export function routes(r) {
     const { parametres = {} } = await ctx.json()
     const sortie = path.join(chemins.cache, 'apercus', `${ctx.params.nom}.html`)
     fs.mkdirSync(path.dirname(sortie), { recursive: true })
-    const resultat = await rendreRapport(fichierRapport(ctx.params.nom), 'html', sortie, parametres, dossierRessources(chemins.cache))
-    return { erreurs: resultat.erreurs, adresse: `/api/rapports/${encodeURIComponent(ctx.params.nom)}/apercu.html?t=${Date.now()}` }
+    const fichier = fichierRapport(ctx.params.nom)
+    const resultat = await rendreRapport(fichier, 'html', sortie, parametres, dossierRessources(chemins.cache))
+    // Nombre de lignes de la requête avec ces paramètres (rapports créés par BiRTEC seulement).
+    const description = lireJson(fichier.replace(/\.rptdesign$/, '.birtec.json'))
+    const lignes = description ? await compterLignes(description, parametres).catch(() => null) : null
+    return { erreurs: resultat.erreurs, lignes, adresse: `/api/rapports/${encodeURIComponent(ctx.params.nom)}/apercu.html?t=${Date.now()}` }
   })
 
   r.get('/api/rapports/:nom/apercu.html', (ctx) => {
@@ -112,28 +137,62 @@ export function routes(r) {
 
 // ---------------------------------------------------------------- génération et correction
 
-// Génère et vérifie le rapport. Renvoie la liste des erreurs (vide = rapport bon).
+// Génère et vérifie le rapport. Renvoie { erreurs, avertissements } (pas d'erreur = rapport bon).
 async function essayer(description, fichier, connexion) {
   const erreursDescription = verifierDescription(description)
-  if (erreursDescription.length) return erreursDescription
-  fs.writeFileSync(fichier, genererRptdesign(description, connexion))
+  if (erreursDescription.length) return { erreurs: erreursDescription, avertissements: [] }
+  // Tables et colonnes inexistantes : signalées avant tout essai, avec les tables qui ont la colonne.
+  const inconnues = verifierSQL(description.requete, await obtenirSchema())
+  if (inconnues.length) return { erreurs: inconnues, avertissements: [] }
+  fs.writeFileSync(fichier, genererRptdesign(description, { ...connexion, image: imageDu(description) }))
   const verification = await verifierRapport(fichier, dossierRessources(chemins.cache))
   // Une ressource absente (feuille de style du serveur BIRT…) n'empêche pas le rapport de fonctionner.
   const bloquantes = verification.erreurs.filter((e) => !/style sheet .* is not found|The style ".*" .* is not found|library .* not found/i.test(e))
-  if (bloquantes.length) return bloquantes
+  if (bloquantes.length) return { erreurs: bloquantes, avertissements: [] }
+  if (!etatConnexion().ouverte) return { erreurs: [], avertissements: ['Connexion MySQL fermée : le rapport n’a pas été essayé sur la base.'] }
+
   // On le fait tourner avec les valeurs par défaut des paramètres : la requête est ainsi vraiment essayée.
-  if (etatConnexion().ouverte) {
-    const parametres = Object.fromEntries((description.parametres || []).map((p) => [p.nom, p.defaut ?? '']))
-    const sortie = path.join(chemins.cache, 'apercus', `${path.basename(fichier, '.rptdesign')}.html`)
-    fs.mkdirSync(path.dirname(sortie), { recursive: true })
-    try {
-      const resultat = await rendreRapport(fichier, 'html', sortie, parametres, dossierRessources(chemins.cache))
-      return resultat.erreurs
-    } catch (erreur) {
-      return [erreur.message]
-    }
+  const parametres = Object.fromEntries((description.parametres || []).map((p) => [p.nom, p.defaut ?? '']))
+  const sortie = path.join(chemins.cache, 'apercus', `${path.basename(fichier, '.rptdesign')}.html`)
+  fs.mkdirSync(path.dirname(sortie), { recursive: true })
+  try {
+    const resultat = await rendreRapport(fichier, 'html', sortie, parametres, dossierRessources(chemins.cache))
+    const erreurs = resultat.erreurs.filter((e) => !e.startsWith('Avertissement'))
+    if (erreurs.length) return { erreurs, avertissements: [] }
+  } catch (erreur) {
+    return { erreurs: [erreur.message], avertissements: [] }
   }
-  return []
+  // Un rapport vide avec les valeurs par défaut cache souvent une erreur de filtre (mauvaise table, code inexistant…).
+  const lignes = await compterLignes(description, parametres).catch(() => null)
+  const avertissements = lignes === 0
+    ? [`Le rapport ne contient aucune ligne avec les valeurs par défaut des paramètres${(description.parametres || []).length ? ` (${description.parametres.map((p) => `${p.libelle || p.nom} = ${p.defaut ?? ''}`).join(', ')})` : ''} : vérifiez les filtres de la requête.`]
+    : []
+  return { erreurs: [], avertissements, lignes }
+}
+
+// L'image choisie pour le haut du rapport (rangée dans le .birtec, catégorie « images »).
+function imageDu(description) {
+  if (!description.image) return null
+  const octets = lireFichier('images', description.image)
+  if (!octets) return null
+  const ext = path.extname(description.image).toLowerCase()
+  const type = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.bmp': 'image/bmp' }[ext] || 'image/png'
+  return { nom: path.basename(description.image), type, octets }
+}
+
+// Nombre de lignes de la requête du rapport, les « ? » remplacés par les valeurs des paramètres.
+export async function compterLignes(description, valeurs) {
+  const parametres = description.parametres || []
+  const liaisons = description.liaisons || parametres.map((p) => p.nom)
+  let i = 0
+  const morceaux = String(description.requete).trim().replace(/;+\s*$/, '').split(/('(?:[^'\\]|\\.|'')*')/)
+  const sql = morceaux.map((m, n) => (n % 2 ? m : m.replace(/\?/g, () => {
+    const p = parametres.find((q) => q.nom === liaisons[i++]) || {}
+    const v = valeurs[p.nom] ?? p.defaut ?? ''
+    return ['entier', 'decimal'].includes(p.type) && v !== '' && !isNaN(Number(v)) ? String(Number(v)) : `'${String(v).replace(/\\/g, '\\\\').replace(/'/g, "''")}'`
+  }))).join('')
+  const r = await executerRequete(`SELECT COUNT(*) AS n FROM (${sql}) AS birtec_compte`, 1)
+  return Number(r.lignes[0][0])
 }
 
 async function corrigerParIA(description, erreurs) {
@@ -151,9 +210,13 @@ Champs : titre, sousTitre, orientation (portrait|paysage), requete (SQL MySQL, l
       },
       { role: 'user', content: `${structure}DESCRIPTION :\n${JSON.stringify(description, null, 2)}\n\nERREUR OBTENUE :\n${erreurs.join('\n')}` },
     ],
-    { temperature: 0.1, maxMots: 2000 },
+    { temperature: 0.1, maxMots: 2000, reflechir: true },
   )
-  return extraireJson(reponse) || description
+  const corrigee = extraireJson(reponse)
+  if (!corrigee) return description
+  // L'IA ne corrige que la requête et les colonnes : l'aspect choisi (thème, image, logo, description) est gardé.
+  const aspect = Object.fromEntries(['theme', 'image', 'logo', 'description', 'positionDescription'].filter((c) => c in description).map((c) => [c, description[c]]))
+  return { ...corrigee, ...aspect }
 }
 
 // Le premier objet JSON trouvé dans un texte (l'IA l'entoure parfois de ```json … ```).

@@ -2,11 +2,12 @@
 // et son résumé pour l'IA.
 //
 // Une base de GMAO compte souvent des centaines de tables : on ne peut pas toutes les donner à l'IA.
-// Pour chaque question, on choisit les tables dont le nom, les colonnes ou les commentaires
-// ressemblent aux mots de la question, plus les tables qui leur sont liées.
+// Pour chaque question, on choisit les tables dont le nom, les colonnes, les commentaires ou le
+// dictionnaire (noms clairs et descriptions du fichier .birtec) ressemblent aux mots de la question,
+// plus les tables qui leur sont liées. Les tables écartées dans le dictionnaire ne sont jamais données.
 
 import { lireSchema, etatConnexion } from '../../serveur/socle/mysql.js'
-import { enregistrerTables, lireTables, lireLiens, enregistrerLiens, deduireLiens } from '../../serveur/socle/birtec.js'
+import { enregistrerTables, lireTables, lireLiens, enregistrerLiens, deduireLiens, lireDictionnaire, lireLiensDictionnaire } from '../../serveur/socle/birtec.js'
 
 let schema = null
 
@@ -24,7 +25,30 @@ export async function obtenirSchema({ rafraichir = false } = {}) {
   } else if (!schema || schema.direct || rafraichir) {
     schema = { base: 'structure du fichier .birtec', tables: lireTables().map((t) => ({ ...t, type: 'TABLE', liens: [] })), direct: false }
   }
-  return completerLiens(schema)
+  return completerDictionnaire(completerLiens(schema))
+}
+
+// Noms clairs, descriptions et exclusions du dictionnaire (relus à chaque fois : ils changent souvent).
+function completerDictionnaire(schema) {
+  const dico = lireDictionnaire()
+  const liensDico = lireLiensDictionnaire()
+  for (const t of schema.tables) {
+    const d = dico.tables.get(t.nom.toLowerCase()) || {}
+    t.libelle = d.libelle || ''
+    t.description = d.description || ''
+    t.exclue = Boolean(d.exclue)
+    for (const c of t.colonnes) {
+      const dc = dico.colonnes.get(`${t.nom}.${c.nom}`.toLowerCase()) || {}
+      c.libelle = dc.libelle || ''
+      c.description = dc.description || ''
+    }
+    for (const l of t.liens) {
+      const dl = liensDico.get(`${t.nom}.${l.colonne}>${l.versTable}`.toLowerCase()) || {}
+      l.libelle = dl.libelle || ''
+      l.description = dl.description || ''
+    }
+  }
+  return schema
 }
 
 function completerLiens(schema) {
@@ -57,16 +81,20 @@ function mots(texte) {
 // « imposees » : noms de tables à prendre d'office (ex. celles des requêtes du site proches de la question).
 export function tablesUtiles(schema, question, nombre = 12, imposees = []) {
   const recherches = mots(question)
-  const scores = schema.tables.map((table) => {
-    const texte = [table.nom, table.commentaire, ...table.colonnes.flatMap((c) => [c.nom, c.commentaire])].join(' ')
+  const disponibles = schema.tables.filter((t) => !t.exclue)
+  const scores = disponibles.map((table) => {
+    const texte = [table.nom, table.commentaire, table.description, ...table.colonnes.flatMap((c) => [c.nom, c.commentaire, c.libelle])].join(' ')
     const sesMots = mots(texte)
+    const nomClair = mots(table.libelle)
     let score = 0
     for (const m of recherches) {
       if (mots(table.nom).some((t) => t.startsWith(m) || m.startsWith(t))) score += 3
+      else if (nomClair.some((t) => t.startsWith(m) || (m.length > 3 && m.startsWith(t)))) score += 3
       else if (sesMots.some((t) => t.startsWith(m) || (m.length > 3 && t.includes(m)))) score += 1
     }
     return { table, score }
   })
+  schema = { ...schema, tables: disponibles }
   const dOffice = imposees.map((nom) => schema.tables.find((t) => t.nom.toLowerCase() === nom.toLowerCase())).filter(Boolean).slice(0, Math.ceil(nombre / 2))
   const choisies = [...new Set([...dOffice, ...scores.filter((s) => s.score > 0).sort((a, b) => b.score - a.score).map((s) => s.table)])].slice(0, nombre)
   // Petite base, ou aucun mot reconnu : on donne tout (dans la limite).
@@ -88,13 +116,18 @@ export function tablesUtiles(schema, question, nombre = 12, imposees = []) {
   return choisies
 }
 
-// Description compacte d'une liste de tables, lisible par l'IA.
+// Description compacte d'une liste de tables, lisible par l'IA, avec les noms clairs du dictionnaire :
+//   TABLE ri « Rapport d'intervention » -- description
+//     colonnes : TPS_ARRET_P decimal « Temps d'arrêt production (h) », …
 export function decrireTables(tables) {
+  const clair = (o) => `${o.libelle ? ` « ${o.libelle} »` : ''}${o.description ? ` (${o.description})` : ''}`
   return tables
     .map((t) => {
-      const colonnes = t.colonnes.map((c) => `${c.nom} ${c.type}${c.cle ? ' (clé)' : ''}${c.commentaire ? ` -- ${c.commentaire}` : ''}`).join(', ')
-      const liens = t.liens.length ? `\n  liens : ${t.liens.map((l) => `${l.colonne} → ${l.versTable}.${l.versColonne}`).join(', ')}` : ''
-      return `TABLE ${t.nom}${t.commentaire ? ` -- ${t.commentaire}` : ''}\n  colonnes : ${colonnes}${liens}`
+      // Les colonnes décrites d'abord : ce sont les plus utiles.
+      const colonnes = [...t.colonnes].sort((a, b) => Boolean(b.libelle) - Boolean(a.libelle))
+        .map((c) => `${c.nom} ${c.type}${c.cle ? ' (clé)' : ''}${clair(c)}${c.commentaire ? ` -- ${c.commentaire}` : ''}`).join(', ')
+      const liens = t.liens.length ? `\n  liens : ${t.liens.map((l) => `${l.colonne} → ${l.versTable}.${l.versColonne}${l.libelle ? ` « ${l.libelle} »` : ''}`).join(', ')}` : ''
+      return `TABLE ${t.nom}${clair(t)}${t.commentaire ? ` -- ${t.commentaire}` : ''}\n  colonnes : ${colonnes}${liens}`
     })
     .join('\n')
 }
@@ -157,4 +190,55 @@ export function tablesDesConventions(notes, question, schema) {
     for (const mot of l.texte.toLowerCase().split(/[^\p{L}\p{N}_]+/u)) if (noms.has(mot) && !trouvees.includes(mot)) trouvees.push(mot)
   }
   return trouvees
+}
+
+// ---------------------------------------------------------------- chemins de jointure
+
+// Les chemins de jointure les plus courts entre les tables principales de la question, calculés sur les
+// liens connus (déclarés, déduits, importés ou saisis). Un lien nommé dans le dictionnaire, ou vers une
+// table « fille » (ot_equipement pour ot), coûte moins : c'est le chemin habituel du site.
+// Renvoie des lignes du genre : « ot → equipement : ot_equipement.ID_OT = ot.ID_OT ; ot_equipement.ID_EQUIPEMENT = equipement.ID_EQUIPEMENT »
+export function cheminsDeJointure(noms, schema, longueurMax = 3) {
+  const tables = new Map(schema.tables.filter((t) => !t.exclue).map((t) => [t.nom.toLowerCase(), t]))
+  const voisins = new Map([...tables.keys()].map((n) => [n, []]))
+  for (const t of tables.values()) {
+    for (const l of t.liens) {
+      const a = t.nom.toLowerCase()
+      const b = l.versTable.toLowerCase()
+      if (!tables.has(b) || a === b) continue
+      const cout = l.libelle ? 0.6 : a.startsWith(b) || b.startsWith(a) ? 0.8 : 1
+      const jointure = `${t.nom}.${l.colonne} = ${tables.get(b).nom}.${l.versColonne}`
+      voisins.get(a).push({ vers: b, cout, jointure })
+      voisins.get(b).push({ vers: a, cout, jointure })
+    }
+  }
+  const chemin = (depart, arrivee) => {
+    // Dijkstra sur un petit graphe, limité en nombre d'étapes.
+    const meilleurs = new Map([[depart, { cout: 0, etapes: [] }]])
+    const aTraiter = [depart]
+    while (aTraiter.length) {
+      aTraiter.sort((x, y) => meilleurs.get(x).cout - meilleurs.get(y).cout)
+      const courant = aTraiter.shift()
+      const etat = meilleurs.get(courant)
+      if (courant === arrivee) return etat.etapes
+      if (etat.etapes.length >= longueurMax) continue
+      for (const v of voisins.get(courant) || []) {
+        const cout = etat.cout + v.cout
+        if (!meilleurs.has(v.vers) || meilleurs.get(v.vers).cout > cout) {
+          meilleurs.set(v.vers, { cout, etapes: [...etat.etapes, v.jointure] })
+          aTraiter.push(v.vers)
+        }
+      }
+    }
+    return null
+  }
+  const lignes = []
+  const liste = [...new Set(noms.map((n) => n.toLowerCase()))].filter((n) => tables.has(n))
+  for (let i = 0; i < liste.length; i++) {
+    for (let j = i + 1; j < liste.length; j++) {
+      const etapes = chemin(liste[i], liste[j])
+      if (etapes?.length) lignes.push(`${tables.get(liste[i]).nom} → ${tables.get(liste[j]).nom} : ${etapes.join(' ; ')}`)
+    }
+  }
+  return lignes
 }

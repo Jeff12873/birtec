@@ -6,8 +6,8 @@
 //
 // Définition (écrite par l'IA ou à la main) :
 // {
-//   "nom": "[Maintenance] - FI à exécuter",
-//   "fenetre": "Fiches d'intervention",                         (une des fenêtres des réglages)
+//   "nom": "[Maintenance] - FI à exécuter",                     (format « [catégorie] - nom court »)
+//   "table": "fi",                                               (table principale : celle de la fenêtre à ouvrir)
 //   "jointures": "LEFT JOIN di ON di.ID_DI = fi.ID_DI …",        (facultatif)
 //   "conditions": "fi.ID_AVANC = 8 OR fi.ID_AVANC IS NULL",      (facultatif)
 //   "arborescence": true,          (ajoute la variable de filtre d'arborescence de la fenêtre, si elle existe)
@@ -16,15 +16,38 @@
 //   "explication": "…"
 // }
 //
-// Les fenêtres et les variables propres à la GMAO sont dans le fichier .birtec (réglage « itm »),
-// pas dans ce programme.
+// Les fenêtres sont déduites de la structure : toute table qui a ID_<TABLE>, <TABLE>, DESI1 et ACTIF peut
+// être comptée par un indicateur (c'est la forme des fiches de la GMAO). Les variables propres à la GMAO,
+// et d'éventuelles fenêtres décrites à la main, sont dans le fichier .birtec (réglage « itm »).
 
 export const REGLAGES_VIDES = { fenetres: [], variables: [] }
 
 const MOTS_INTERDITS = /\b(INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|CREATE|TRUNCATE|GRANT|REVOKE|CALL|HANDLER|LOAD|INTO\s+OUTFILE)\b/i
 
-export function trouverFenetre(reglages, libelle) {
-  return reglages.fenetres.find((f) => f.libelle.toLowerCase() === String(libelle || '').toLowerCase()) || null
+// La fenêtre désignée par son libellé ou par sa table.
+export function trouverFenetre(reglages, cle) {
+  const c = String(cle || '').toLowerCase()
+  return reglages.fenetres.find((f) => f.libelle.toLowerCase() === c) || reglages.fenetres.find((f) => f.table.toLowerCase() === c) || null
+}
+
+// Les tables qui ont la forme d'une fiche (ID_X, X, DESI1, ACTIF), avec le nom clair du dictionnaire.
+export function deduireFenetres(tables) {
+  return tables
+    .filter((t) => !t.exclue)
+    .map((t) => {
+      const noms = new Map(t.colonnes.map((c) => [c.nom.toUpperCase(), c.nom]))
+      const T = t.nom.toUpperCase()
+      if (!noms.has(`ID_${T}`) || !noms.has(T) || !noms.has('DESI1') || !noms.has('ACTIF')) return null
+      return { libelle: t.libelle || t.nom, table: t.nom, id: noms.get(`ID_${T}`), code: noms.get(T), desi: noms.get('DESI1'), actif: noms.get('ACTIF'), deduite: true }
+    })
+    .filter(Boolean)
+}
+
+// Nom au format de la GMAO : « [catégorie] - nom court ».
+export function formaterNom(nom) {
+  const texte = String(nom || '').trim().replace(/\s+/g, ' ')
+  const m = texte.match(/^\[\s*([^\]]+?)\s*\]\s*-?\s*(.+)$/)
+  return m ? `[${m[1]}] - ${m[2]}` : `[Divers] - ${texte}`
 }
 
 // Remet d'aplomb les écarts habituels de l'IA, sans changer le sens de l'indicateur :
@@ -32,7 +55,12 @@ export function trouverFenetre(reglages, libelle) {
 export function normaliser(d, reglages) {
   if (!d || typeof d !== 'object') return d
   const n = { ...d }
-  const f = trouverFenetre(reglages, n.fenetre)
+  const f = trouverFenetre(reglages, n.table || n.fenetre)
+  if (f) {
+    n.table = f.table
+    n.fenetre = f.libelle
+  }
+  if (n.nom) n.nom = formaterNom(n.nom)
   if (f?.variableArbo && String(n.conditions || '').includes(f.variableArbo)) {
     n.conditions = String(n.conditions).replace(f.variableArbo, '').replace(/^\s*AND\s+/i, '').trim()
     n.arborescence = true
@@ -54,7 +82,7 @@ export function verifierDefinition(d, reglages) {
   const erreurs = []
   if (!d || typeof d !== 'object') return ['La définition de l’indicateur est vide.']
   if (!String(d.nom || '').trim()) erreurs.push('Il manque le nom de l’indicateur.')
-  if (!trouverFenetre(reglages, d.fenetre)) erreurs.push(`Fenêtre inconnue : « ${d.fenetre} ». Fenêtres possibles : ${reglages.fenetres.map((f) => f.libelle).join(', ')}`)
+  if (!trouverFenetre(reglages, d.table || d.fenetre)) erreurs.push(`Table principale inconnue ou qui n’a pas la forme d’une fiche (ID_X, X, DESI1, ACTIF) : « ${d.table || d.fenetre || '?'} ».`)
   for (const champ of ['jointures', 'conditions', 'dateIndicateur', 'tri']) {
     const texte = String(d[champ] || '')
     if (texte.includes(';')) erreurs.push(`« ${champ} » ne doit pas contenir de point-virgule.`)
@@ -69,7 +97,7 @@ export function verifierDefinition(d, reglages) {
 // Les deux requêtes, prêtes à coller dans la GMAO.
 export function assembler(d, reglages) {
   d = normaliser(d, reglages)
-  const f = trouverFenetre(reglages, d.fenetre)
+  const f = trouverFenetre(reglages, d.table)
   // La table principale est écrite comme l'IA (ou la personne) l'a écrite ailleurs : FI ou fi.
   const t = `${d.jointures || ''} ${d.conditions || ''} ${d.dateIndicateur || ''}`.match(new RegExp(`\\b(${f.table})\\.`, 'i'))?.[1] || f.table
   const actif = f.actif || 'ACTIF'

@@ -6,8 +6,11 @@ rien ne sort de l'entreprise.
 
 - **Connexion MySQL en lecture seule** : le mot de passe est demandé à chaque ouverture, jamais enregistré ;
   seules les requêtes de lecture sont acceptées.
-- **Assistant** : décrivez en français ce que vous voulez ; il choisit les tables utiles, écrit la requête
-  (« Exécuter » montre le résultat), puis la description du rapport : « Créer le rapport » fabrique le `.rptdesign`.
+- **Accueil** : indicateurs du jour et raccourcis de rapports, à organiser par glisser-déposer.
+- **Assistant** (point d'entrée unique) : il mène la discussion selon des consignes modifiables, écrit la requête,
+  puis « Créer le rapport » (`.rptdesign`) ou « Créer l'indicateur ». Chaque requête est contrôlée sur la vraie
+  structure (tables, colonnes, alias) et réécrite par l'IA en cas d'erreur ; l'IA raisonne avant d'écrire du SQL et
+  reçoit les chemins de jointure calculés.
 - **Rapports** : fichiers `.rptdesign` vérifiés dans le moteur BIRT, aperçu avec paramètres, export PDF, Excel, Word,
   HTML, LibreOffice ou PowerPoint.
 - **Indicateurs ITM** : requête indicateur (`VAL`) et requête liste associée, tirées d'une même définition, essayées
@@ -15,11 +18,12 @@ rien ne sort de l'entreprise.
 - **Connaissances** : tout ce que BiRTEC sait du site (conventions, structure de la base, liens, requêtes, rapports
   modèles, bibliothèques) est rangé dans **un fichier `.birtec`**, hors du programme. Ce dépôt ne contient aucune donnée
   de site : c'est une coquille vide.
-- **Base de données** : tables, colonnes, liens, premières lignes, console SQL.
+- **Base de données** : tables à donner ou non à l'IA, dictionnaire (noms clairs, descriptions), console SQL.
+- **Schéma** : « araignée » des liens entre tables, liens nommés et décrits, liens manquants à ajouter.
 - Windows et Linux, installé dans le profil de l'utilisateur, **version hors ligne** sur clé USB.
 
-Aspect des rapports (couleurs, feuille de style, logo, conventions de connexion) réglé par la « charte » du fichier
-`.birtec`. À venir : graphiques, modification de rapports existants.
+Aspect des rapports : charte du fichier `.birtec` (couleurs, feuille de style, logo, conventions de connexion),
+thèmes au choix, image centrée en haut, description en en-tête ou en pied. À venir : graphiques.
 
 ## Installer sur un poste
 
@@ -44,7 +48,7 @@ node serveur/demarrer.js                          # lance BiRTEC (http://127.0.0
 |---|---|
 | `serveur/socle/` | Serveur web, IA (`ia.js`), connexion MySQL (`mysql.js`), fichier .birtec (`birtec.js`), réglages |
 | `moteur-java/Moteur.java` | Le programme Java : connexion, structure de la base, requêtes en lecture seule, moteur BIRT |
-| `blocs/<écran>/` | `serveur.js` (routes), `vue.js` (écran) : assistant, rapports, itm, base, connaissances, configuration, aide |
+| `blocs/<écran>/` | `serveur.js` (routes), `vue.js` (écran) : accueil, assistant, rapports, itm, base, schema, connaissances, configuration, aide |
 | `interface/` | Page, thème vert (`theme.css`), icône, outils d'écran, aide |
 | `outils/` | Préparation d'un poste, catalogue des versions, fabrication du kit hors ligne |
 

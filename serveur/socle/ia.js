@@ -47,7 +47,9 @@ function argumentsDuMoteur(nom, config, port, surProcesseur) {
   else communs.push('--device', 'none', '-ngl', '0')
 
   if (nom === 'chat') {
-    const args = [...communs, '-m', config.modele.fichier, '-c', '32768', '-np', '2', '--jinja', '--reasoning', 'off']
+    // Un seul échange à la fois (BiRTEC n'a qu'un utilisateur) : tout le contexte pour la structure de la
+    // base et le raisonnement du modèle.
+    const args = [...communs, '-m', config.modele.fichier, '-c', '32768', '-np', '1', '--jinja', '--reasoning', 'off']
     if (config.modele.vision && fs.existsSync(config.modele.vision)) args.push('--mmproj', config.modele.vision)
     return args
   }
@@ -163,8 +165,10 @@ export function surProcesseur() {
 // Pose une question au modèle.
 //   messages   : [{ role: 'system'|'user'|'assistant', content }]
 //   surMorceau : si fourni, reçoit le texte au fur et à mesure (affichage progressif)
+//   reflechir  : le modèle raisonne avant de répondre (plus lent, nettement plus juste pour le SQL) ;
+//                surReflexion reçoit alors le raisonnement au fur et à mesure (il n'est pas dans la réponse)
 // Renvoie le texte complet de la réponse.
-export async function discuter(messages, { surMorceau, temperature = 0.3, maxMots = 1500, signal } = {}) {
+export async function discuter(messages, { surMorceau, surReflexion, reflechir = false, temperature = 0.3, maxMots = 1500, signal } = {}) {
   const moteur = moteurs.chat
   await demarrer(moteur)
   moteur.enCours++
@@ -172,18 +176,37 @@ export async function discuter(messages, { surMorceau, temperature = 0.3, maxMot
     const reponse = await fetch(`http://127.0.0.1:${moteur.port}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages, temperature, max_tokens: maxMots, stream: true }),
+      body: JSON.stringify({
+        messages,
+        temperature,
+        // Le raisonnement compte dans la longueur : on lui laisse de la place en plus de la réponse.
+        max_tokens: reflechir ? maxMots + 8000 : maxMots,
+        stream: true,
+        ...(reflechir ? { chat_template_kwargs: { enable_thinking: true } } : {}),
+      }),
       signal,
     })
     if (!reponse.ok) throw new Error(`L'IA a refusé la demande (${reponse.status}) : ${await reponse.text()}`)
 
     let texte = ''
+    let fin = null
     for await (const evenement of lireFluxSSE(reponse.body)) {
+      fin = evenement.choices?.[0]?.finish_reason || fin
+      const reflexion = evenement.choices?.[0]?.delta?.reasoning_content
+      if (reflexion) surReflexion?.(reflexion)
       const morceau = evenement.choices?.[0]?.delta?.content
       if (morceau) {
         texte += morceau
         surMorceau?.(morceau)
       }
+    }
+    if (!texte.trim() && fin === 'length') {
+      // Raisonnement trop long, sans réponse : on redemande sans raisonnement plutôt que d'échouer.
+      if (reflechir) {
+        journal('IA : raisonnement trop long, nouvelle demande sans raisonnement')
+        return discuter(messages, { surMorceau, temperature, maxMots, signal })
+      }
+      throw new Error('L’IA a manqué de place pour répondre : la question ou la structure de la base est trop longue. Reformulez plus court, ou écartez des tables inutiles.')
     }
     return texte.trim()
   } finally {

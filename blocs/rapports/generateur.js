@@ -40,6 +40,16 @@ export const CHARTE_PAR_DEFAUT = {
   parametresCaches: [],    // [{ nom, type, defaut }] : paramètres passés par la GMAO dans l'adresse du rapport
 }
 
+// Thèmes au choix pour un rapport (« theme » de la description). « charte » = les couleurs de la charte du site.
+export const THEMES = {
+  charte: null,
+  sobre: { couleurs: { titre: '#1F2937', entete: '#374151', texteEntete: '#FFFFFF', groupe: '#F3F4F6', ligne: '#DDDDDD' } },
+  bleu: { couleurs: { titre: '#0B3D91', entete: '#1D4ED8', texteEntete: '#FFFFFF', groupe: '#DBEAFE', ligne: '#BFDBFE' } },
+  vert: { couleurs: { titre: '#14532D', entete: '#1F5E3B', texteEntete: '#FFFFFF', groupe: '#E8F5EC', ligne: '#CFE8D7' } },
+  orange: { couleurs: { titre: '#9A3412', entete: '#C2410C', texteEntete: '#FFFFFF', groupe: '#FFEDD5', ligne: '#FED7AA' } },
+  impression: { couleurs: { titre: '#000000', entete: '#FFFFFF', texteEntete: '#000000', groupe: '#FFFFFF', ligne: '#000000' } },
+}
+
 export function completerCharte(charte = {}) {
   const c = charte || {}
   return {
@@ -93,9 +103,15 @@ function compterMarques(sql) {
 
 // ---------------------------------------------------------------- génération
 
-export function genererRptdesign(d, { url, utilisateur, charte: charteSite }) {
+// « image » : { nom, type, octets } d'une image à placer au centre, en haut du rapport (embarquée dans le fichier).
+export function genererRptdesign(d, { url, utilisateur, charte: charteSite, image = null }) {
   const charte = completerCharte(charteSite)
+  const theme = THEMES[d.theme]
+  if (theme) charte.couleurs = { ...charte.couleurs, ...theme.couleurs }
   const { couleurs, police, source } = charte
+  const logo = d.logo === false ? '' : charte.logo
+  const description = String(d.description || '').trim()
+  const descriptionEnPied = description && d.positionDescription === 'pied'
   let id = 1
   const nouvelId = () => ++id
   const colonnes = d.colonnes.map((c) => ({ ...c, format: c.format || 'texte', libelle: c.libelle || c.champ }))
@@ -294,6 +310,13 @@ ${sur ? `
         <structure>
             <property name="fileName">${x(charte.feuilleStyle)}</property>
         </structure>
+    </list-property>` : ''}${image ? `
+    <list-property name="images">
+        <structure>
+            <property name="name">${x(image.nom)}</property>
+            <property name="type">${x(image.type)}</property>
+            <property name="data">${Buffer.from(image.octets).toString('base64')}</property>
+        </structure>
     </list-property>` : ''}${parametres.length || parametresCaches ? `
     <parameters>${parametresXml}${parametresCaches}
     </parameters>` : ''}
@@ -319,7 +342,7 @@ ${sur ? `
     <page-setup>
         <simple-master-page name="Page" id="${nouvelId()}">
             <property name="type">a4</property>
-            <property name="orientation">${d.orientation === 'paysage' ? 'landscape' : 'portrait'}</property>${charte.logo ? `
+            <property name="orientation">${d.orientation === 'paysage' ? 'landscape' : 'portrait'}</property>${logo ? `
             <property name="headerHeight">0.6in</property>
             <page-header>
                 <grid id="${nouvelId()}">
@@ -335,7 +358,7 @@ ${sur ? `
                         <cell id="${nouvelId()}">
                             <image id="${nouvelId()}">
                                 <property name="source">url</property>
-                                <expression name="uri" type="javascript">${x(charte.logo)}</expression>
+                                <expression name="uri" type="javascript">${x(logo)}</expression>
                             </image>
                         </cell>
                         <cell id="${nouvelId()}">
@@ -356,7 +379,17 @@ ${sur ? `
                 <grid id="${nouvelId()}">
                     <property name="width">100%</property>
                     <column id="${nouvelId()}"/>
-                    <column id="${nouvelId()}"/>
+                    <column id="${nouvelId()}"/>${descriptionEnPied ? `
+                    <row id="${nouvelId()}">
+                        <cell id="${nouvelId()}">
+                            <property name="colSpan">2</property>
+                            <label id="${nouvelId()}">
+                                <property name="fontSize">8pt</property>
+                                <property name="color">#555555</property>
+                                <text-property name="text">${x(description)}</text-property>
+                            </label>
+                        </cell>
+                    </row>` : ''}
                     <row id="${nouvelId()}">
                         <cell id="${nouvelId()}">
                             <text id="${nouvelId()}">
@@ -378,7 +411,21 @@ ${sur ? `
             </page-footer>
         </simple-master-page>
     </page-setup>
-    <body>
+    <body>${image ? `
+        <grid id="${nouvelId()}">
+            <property name="width">100%</property>
+            <column id="${nouvelId()}"/>
+            <row id="${nouvelId()}">
+                <cell id="${nouvelId()}">
+                    <property name="textAlign">center</property>
+                    <property name="paddingBottom">6pt</property>
+                    <image id="${nouvelId()}">
+                        <property name="source">embed</property>
+                        <property name="imageName">${x(image.nom)}</property>
+                    </image>
+                </cell>
+            </row>
+        </grid>` : ''}
         <label id="${nouvelId()}">
             <property name="style">birtec-titre</property>
             <text-property name="text">${x(d.titre)}</text-property>
@@ -386,6 +433,11 @@ ${sur ? `
         <label id="${nouvelId()}">
             <property name="style">birtec-sous-titre</property>
             <text-property name="text">${x(d.sousTitre)}</text-property>
+        </label>` : ''}${description && !descriptionEnPied ? `
+        <label id="${nouvelId()}">
+            <property name="style">birtec-sous-titre</property>
+            <property name="fontStyle">italic</property>
+            <text-property name="text">${x(description)}</text-property>
         </label>` : ''}
         <table id="${nouvelId()}">
             <property name="width">100%</property>

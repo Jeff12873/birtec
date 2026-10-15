@@ -1,7 +1,9 @@
-// Base de données : structure des tables et requêtes de lecture (console SQL).
+// Base de données : structure des tables, dictionnaire (noms clairs, descriptions, tables écartées),
+// et requêtes de lecture (console SQL).
 
 import { ErreurHttp } from '../../serveur/socle/http.js'
-import { executerRequete } from '../../serveur/socle/mysql.js'
+import { executerRequete, etatConnexion } from '../../serveur/socle/mysql.js'
+import { enregistrerDictionnaire, enregistrerLienDictionnaire, ajouterLien } from '../../serveur/socle/birtec.js'
 import { obtenirSchema } from './schema.js'
 
 export function routes(r) {
@@ -21,5 +23,39 @@ export function routes(r) {
     const table = schema.tables.find((t) => t.nom === ctx.params.nom)
     if (!table) throw new ErreurHttp(404, 'Table inconnue')
     return executerRequete(`SELECT * FROM \`${table.nom.replaceAll('`', '')}\``, 20)
+  })
+
+  // ---- dictionnaire (gardé dans le fichier .birtec)
+
+  // POST /api/dictionnaire { table, colonne?, libelle?, description?, exclue? }
+  r.post('/api/dictionnaire', async (ctx) => {
+    const entree = await ctx.json()
+    if (!entree.table) throw new ErreurHttp(400, 'Table manquante.')
+    enregistrerDictionnaire(entree)
+  })
+
+  // POST /api/dictionnaire/lien { deTable, deColonne, versTable, versColonne?, libelle, description, nouveau? }
+  r.post('/api/dictionnaire/lien', async (ctx) => {
+    const lien = await ctx.json()
+    if (!lien.deTable || !lien.deColonne || !lien.versTable) throw new ErreurHttp(400, 'Lien incomplet.')
+    if (lien.nouveau) ajouterLien({ ...lien, versColonne: lien.versColonne || lien.deColonne })
+    enregistrerLienDictionnaire(lien)
+  })
+
+  // Écarte les tables vides (nombre de lignes lu dans information_schema) : il faut la connexion.
+  r.post('/api/dictionnaire/ecarter-vides', async () => {
+    if (!etatConnexion().ouverte) throw new ErreurHttp(409, 'Connexion MySQL fermée : impossible de savoir quelles tables sont vides.')
+    const schema = await obtenirSchema()
+    const r = await executerRequete('SELECT TABLE_NAME, TABLE_ROWS FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()', 5000)
+    let ecartees = 0
+    for (const [nom, lignes] of r.lignes) {
+      if (Number(lignes) > 0) continue
+      const table = schema.tables.find((t) => t.nom.toLowerCase() === String(nom).toLowerCase())
+      if (table && !table.exclue && !table.libelle) {
+        enregistrerDictionnaire({ table: table.nom, exclue: true })
+        ecartees++
+      }
+    }
+    return { ecartees }
   })
 }
