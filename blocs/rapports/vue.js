@@ -2,7 +2,7 @@
 // au format choisi. Un rapport se crée depuis l'assistant (bouton « Créer le rapport ») ou ici, en
 // collant sa description.
 
-import { h, vider, ic, essayer, notifier, confirmer, fenetre, dateHeureFr } from '/socle/ui.js'
+import { h, vider, ic, essayer, notifier, confirmer, fenetre, dateHeureFr, deuxPanneaux } from '/socle/ui.js'
 import { api } from '/socle/api.js'
 import { etat } from '/socle/etat.js'
 import { demanderMotDePasse } from '/blocs/configuration/vue.js'
@@ -39,9 +39,10 @@ export default {
           h('button', { class: 'discret', onclick: () => creerDepuisDescription() }, ic('plus', 16), 'Coller une description'),
         ),
       ),
-      h('div', { style: { display: 'grid', gridTemplateColumns: '260px minmax(0, 1fr)', gap: '16px', alignItems: 'start' } },
+      deuxPanneaux(
         h('div', { class: 'carte', style: { padding: '12px' } }, liste),
         detail,
+        { cle: 'rapports', largeur: 380 },
       ),
     )
 

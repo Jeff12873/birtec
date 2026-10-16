@@ -1,6 +1,6 @@
 // Base de données : liste des tables, détail d'une table, console SQL (lecture seule).
 
-import { h, vider, ic, essayer, notifier } from '/socle/ui.js'
+import { h, vider, ic, essayer, notifier, deuxPanneaux } from '/socle/ui.js'
 import { api } from '/socle/api.js'
 import { etat } from '/socle/etat.js'
 import { demanderMotDePasse } from '/blocs/configuration/vue.js'
@@ -63,7 +63,7 @@ export default {
         h('a', { class: 'bouton discret', href: `#/schema${id ? `/${encodeURIComponent(id)}` : ''}` }, ic('reseau', 16), 'Schéma des liens'),
         h('button', { onclick: async () => { await essayer(() => api('/api/schema?rafraichir=1'), 'Structure relue'); window.birtec.recharger() } }, ic('rafraichir', 16), 'Relire la structure'),
       ),
-      h('div', { style: { display: 'grid', gridTemplateColumns: '260px minmax(0, 1fr)', gap: '16px', alignItems: 'start' } },
+      deuxPanneaux(
         h('div', { class: 'carte', style: { padding: '12px' } },
           filtre,
           h('div', { class: 'discret', style: { fontSize: '12px', margin: '8px 0', display: 'flex', flexDirection: 'column', gap: '4px' } },
@@ -72,6 +72,7 @@ export default {
             etat.connexion.ouverte ? h('a', { href: '#', onclick: async (e) => { e.preventDefault(); const r = await api('/api/dictionnaire/ecarter-vides', { methode: 'POST' }); notifier(`${r.ecartees} table(s) vide(s) écartée(s)`); window.birtec.recharger() } }, 'Écarter les tables vides') : null),
           liste),
         h('div', { class: 'grille' }, detail, console_.element),
+        { cle: 'base', largeur: 300 },
       ),
     )
   },

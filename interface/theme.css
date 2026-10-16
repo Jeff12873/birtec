@@ -88,7 +88,7 @@ p { margin: 0 0 10px; }
 .barre .espace { flex: 1; }
 .barre .etiquette { max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
 
-.contenu { padding: 26px 28px 60px; max-width: 1500px; width: 100%; }
+.contenu { padding: 26px 28px 60px; max-width: 1600px; width: 100%; margin: 0 auto; }
 .entete-page { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 20px; }
 .entete-page h1 { flex: 1; min-width: 200px; }
 .sous-titre { color: var(--texte-2); margin-top: 4px; font-size: 14px; }
@@ -417,3 +417,18 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 .liste-champs a:hover { background: var(--carte-3); color: var(--texte); text-decoration: none; }
 .liste-champs a.decrit { color: var(--texte); }
 .valeur-filtre { display: flex; gap: 8px; align-items: center; padding: 3px 4px; }
+
+/* Liste à gauche, détail à droite, séparés par une poignée à glisser */
+.deux-panneaux { display: grid; grid-template-columns: var(--largeur-liste, 340px) 10px minmax(0, 1fr); gap: 6px; align-items: start; }
+.poignee-panneaux { align-self: stretch; min-height: 120px; cursor: col-resize; border-radius: 6px; position: relative; }
+.poignee-panneaux::after { content: ''; position: absolute; left: 4px; top: 0; bottom: 0; width: 2px; border-radius: 2px; background: var(--bord); transition: background 0.15s; }
+.poignee-panneaux:hover::after, .deux-panneaux.redimensionne .poignee-panneaux::after { background: var(--accent); }
+.deux-panneaux.redimensionne { user-select: none; cursor: col-resize; }
+.deux-panneaux > .carte:first-child .liste-tables { max-height: calc(100vh - 200px); }
+@media (max-width: 900px) { .deux-panneaux { grid-template-columns: minmax(0, 1fr); } .poignee-panneaux { display: none; } }
+.deux-panneaux > * { min-width: 0; }
+.deux-panneaux .carte-entete { flex-wrap: wrap; gap: 8px; }
+.deux-panneaux .carte-entete h2 { flex: 1 1 240px; min-width: 0; overflow-wrap: break-word; }
+.deux-panneaux textarea.sql, .deux-panneaux pre.code { max-width: 100%; }
+.deux-panneaux .grille > *, .deux-panneaux .carte > * { min-width: 0; }
+.deux-panneaux .grille { grid-template-columns: minmax(0, 1fr); }

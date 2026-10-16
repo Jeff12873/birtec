@@ -2,7 +2,7 @@
 // Pour chacun : la requête indicateur et la requête liste à copier dans la GMAO, l'essai sur la base,
 // et la retouche (à la main, ou en le confiant à l'assistant).
 
-import { h, vider, ic, fenetre, notifier, confirmer, dateHeureFr } from '/socle/ui.js'
+import { h, vider, ic, fenetre, notifier, confirmer, dateHeureFr, deuxPanneaux } from '/socle/ui.js'
 import { api } from '/socle/api.js'
 import { etat } from '/socle/etat.js'
 import { demanderMotDePasse } from '/blocs/configuration/vue.js'
@@ -38,10 +38,11 @@ export default {
           h('button', { class: 'discret', onclick: modifierReglages }, ic('reglages', 16), 'Variables'),
         ),
       ),
-      h('div', { style: { display: 'grid', gridTemplateColumns: '280px minmax(0, 1fr)', gap: '16px', alignItems: 'start' } },
+      deuxPanneaux(
         h('div', { class: 'carte', style: { padding: '12px' } }, filtre, h('div', { style: { height: '10px' } }), liste),
         choisi ? detail(choisi) : h('div', { class: 'carte' }, h('p', { class: 'texte-2' },
           'Les indicateurs se créent dans l’assistant : décrivez ce qu’il faut compter, il pose ses questions, puis « Créer l’indicateur » assemble les deux requêtes, les vérifie sur la base et les range ici. Choisissez un indicateur à gauche pour copier ses requêtes.')),
+        { cle: 'itm', largeur: 380 },
       ),
     )
   },

@@ -246,3 +246,46 @@ export function apresPause(action, delai = 300) {
     minuterie = setTimeout(() => action(...args), delai)
   }
 }
+
+// Deux panneaux côte à côte (liste à gauche, détail à droite), séparés par une poignée à glisser
+// pour élargir la liste. La largeur choisie est gardée sur ce poste ; double-clic sur la poignée : largeur d'origine.
+export function deuxPanneaux(gauche, droite, { cle, largeur = 340, min = 200, max = 760 } = {}) {
+  const memoire = `birtec-largeur-${cle}`
+  let actuelle = largeur
+  try {
+    actuelle = Number(localStorage.getItem(memoire)) || largeur
+  } catch {
+    // stockage indisponible : largeur par défaut
+  }
+  const poignee = h('div', { class: 'poignee-panneaux', title: 'Glisser pour élargir la liste (double-clic : largeur d’origine)' })
+  const grille = h('div', { class: 'deux-panneaux' }, gauche, poignee, droite)
+  const appliquer = (valeur) => {
+    actuelle = Math.max(min, Math.min(max, valeur))
+    grille.style.setProperty('--largeur-liste', `${actuelle}px`)
+  }
+  appliquer(actuelle)
+  poignee.addEventListener('pointerdown', (e) => {
+    e.preventDefault()
+    poignee.setPointerCapture(e.pointerId)
+    const depart = e.clientX
+    const largeurDepart = actuelle
+    grille.classList.add('redimensionne')
+    const bouger = (ev) => appliquer(largeurDepart + ev.clientX - depart)
+    const finir = () => {
+      grille.classList.remove('redimensionne')
+      poignee.removeEventListener('pointermove', bouger)
+      try {
+        localStorage.setItem(memoire, String(actuelle))
+      } catch {}
+    }
+    poignee.addEventListener('pointermove', bouger)
+    poignee.addEventListener('pointerup', finir, { once: true })
+  })
+  poignee.addEventListener('dblclick', () => {
+    appliquer(largeur)
+    try {
+      localStorage.removeItem(memoire)
+    } catch {}
+  })
+  return grille
+}
