@@ -368,7 +368,11 @@ input.champ-dico.enregistre { border-color: var(--accent); }
 
 /* Schéma des liens (graphe en bulles) */
 canvas.toile-schema { display: block; width: 100%; height: calc(100vh - 210px); min-height: 480px; cursor: grab; touch-action: none; }
-.option-schema { position: absolute; left: 12px; bottom: 10px; display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--texte-3); background: var(--carte); padding: 4px 8px; border-radius: 8px; }
+.reglages-schema { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: 12px; color: var(--texte-2); background: color-mix(in srgb, var(--carte) 88%, transparent); padding: 6px 10px; border-radius: 10px; border: 1px solid var(--bord); }
+.curseur-schema { display: flex; gap: 6px; align-items: center; }
+.curseur-schema input[type=range] { width: 110px; padding: 0; accent-color: var(--accent); }
+.valeur-curseur { min-width: 30px; color: var(--texte-3); font-variant-numeric: tabular-nums; }
+.case-schema { display: flex; gap: 6px; align-items: center; }
 .panneau-schema { position: sticky; top: 86px; max-height: calc(100vh - 110px); overflow: auto; }
 .liste-voisins { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; }
 ol.chemin-tables { margin: 6px 0; padding-left: 20px; font-size: 14px; }

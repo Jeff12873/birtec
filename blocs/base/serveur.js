@@ -3,7 +3,7 @@
 
 import { ErreurHttp } from '../../serveur/socle/http.js'
 import { executerRequete, etatConnexion } from '../../serveur/socle/mysql.js'
-import { enregistrerDictionnaire, enregistrerLienDictionnaire, ajouterLien } from '../../serveur/socle/birtec.js'
+import { enregistrerDictionnaire, enregistrerLienDictionnaire, ajouterLien, lireInfo, ecrireInfo } from '../../serveur/socle/birtec.js'
 import { obtenirSchema } from './schema.js'
 
 export function routes(r) {
@@ -23,6 +23,16 @@ export function routes(r) {
     const table = schema.tables.find((t) => t.nom === ctx.params.nom)
     if (!table) throw new ErreurHttp(404, 'Table inconnue')
     return executerRequete(`SELECT * FROM \`${table.nom.replaceAll('`', '')}\``, 20)
+  })
+
+  // ---- disposition du schéma des liens (positions des bulles, bulles figées), gardée dans le .birtec
+
+  r.get('/api/schema/disposition', () => lireInfo('disposition_schema', { positions: {} }))
+
+  r.post('/api/schema/disposition', async (ctx) => {
+    const { positions } = await ctx.json()
+    if (!positions || typeof positions !== 'object') throw new ErreurHttp(400, 'Positions attendues.')
+    ecrireInfo('disposition_schema', { positions })
   })
 
   // ---- dictionnaire (gardé dans le fichier .birtec)

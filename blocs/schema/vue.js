@@ -5,7 +5,10 @@
 //   clic sur une bulle : la décrire (nom clair, description, prise en compte par l'IA) — c'est la source
 //   Ctrl + clic sur une autre bulle : chemin de jointure le plus court entre les deux (tables et clés)
 //   clic sur un lien : le nommer et le décrire
+//   curseurs : force des liens (attraction) et écartement des bulles (répulsion)
+//   « Figer en lâchant » : une bulle déplacée reste où on la lâche ; double-clic sur une bulle figée : la libérer
 //   « Imprimer / PDF » : page A3 paysage mise en forme, à enregistrer en PDF
+// La disposition (positions, bulles figées) est gardée dans le fichier .birtec.
 //
 // Tout ce qui est saisi est gardé dans le fichier .birtec (dictionnaire) et sert à l'IA.
 
@@ -14,7 +17,32 @@ import { api } from '/socle/api.js'
 import { etat } from '/socle/etat.js'
 
 let voirEcartees = false
-const positions = new Map() // gardées d'une visite à l'autre : le graphe ne se réorganise pas à chaque fois
+// Positions des bulles { x, y, fige } : chargées du .birtec, gardées d'une visite à l'autre.
+const positions = new Map()
+let dispositionChargee = false
+
+// Réglages de la simulation (gardés sur ce poste).
+const reglages = { attraction: 1, ecartement: 1, figer: true }
+try {
+  Object.assign(reglages, JSON.parse(localStorage.getItem('birtec-schema-reglages') || '{}'))
+} catch {
+  // stockage indisponible : réglages par défaut
+}
+function garderReglages() {
+  try {
+    localStorage.setItem('birtec-schema-reglages', JSON.stringify(reglages))
+  } catch {}
+}
+
+// Enregistre la disposition dans le .birtec (un peu après le dernier changement, pour ne pas écrire sans arrêt).
+let minuterieDisposition = null
+function enregistrerDisposition() {
+  clearTimeout(minuterieDisposition)
+  minuterieDisposition = setTimeout(() => {
+    const donnees = Object.fromEntries([...positions].map(([nom, p]) => [nom, { x: Math.round(p.x), y: Math.round(p.y), ...(p.fige ? { fige: true } : {}) }]))
+    api('/api/schema/disposition', { methode: 'POST', corps: { positions: donnees } }).catch(() => {})
+  }, 1500)
+}
 
 export default {
   chemin: 'schema',
@@ -27,6 +55,11 @@ export default {
 
   async afficher(zone, { id }) {
     const schema = await api('/api/schema')
+    if (!dispositionChargee) {
+      const disposition = await api('/api/schema/disposition').catch(() => ({ positions: {} }))
+      for (const [nom, p] of Object.entries(disposition.positions || {})) positions.set(nom, p)
+      dispositionChargee = true
+    }
     if (!schema.tables.length) return vider(zone, h('div', { class: 'carte vide' }, 'Structure de la base inconnue : connectez-vous à MySQL ou importez un export de structure.'))
 
     const graphe = construireGraphe(schema)
@@ -62,7 +95,7 @@ export default {
       h('div', { class: 'schema-grille' },
         h('div', { class: 'carte', style: { padding: '0', overflow: 'hidden', position: 'relative' } },
           toile,
-          h('label', { class: 'option-schema' }, caseEcartees, 'Tables écartées de l’IA'),
+          reglagesSchema(vue, caseEcartees),
         ),
         panneau,
       ),
@@ -80,7 +113,7 @@ function construireGraphe(schema) {
   const parNom = new Map()
   const noeuds = tables.map((table, i) => {
     const p = positions.get(table.nom) || depart(table.nom, i, tables.length)
-    const n = { table, x: p.x, y: p.y, vx: 0, vy: 0, degre: 0, voisins: new Set() }
+    const n = { table, x: p.x, y: p.y, vx: 0, vy: 0, degre: 0, voisins: new Set(), fige: Boolean(p.fige) }
     parNom.set(table.nom.toLowerCase(), n)
     return n
   })
@@ -210,9 +243,9 @@ class VueGraphe {
         let dx = b.x - a.x
         let dy = b.y - a.y
         let d2 = dx * dx + dy * dy
-        if (d2 > 160000) continue // trop loin pour compter
+        if (d2 > 160000 * reglages.ecartement) continue // trop loin pour compter
         if (d2 < 1) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; d2 = 1 }
-        const force = (900 * alpha) / d2
+        const force = (900 * reglages.ecartement * alpha) / d2
         a.vx -= dx * force
         a.vy -= dy * force
         b.vx += dx * force
@@ -223,8 +256,8 @@ class VueGraphe {
       const dx = l.b.x - l.a.x
       const dy = l.b.y - l.a.y
       const d = Math.sqrt(dx * dx + dy * dy) || 1
-      const ideal = 30 + l.a.rayon + l.b.rayon
-      const force = ((d - ideal) / d) * 0.06 * alpha
+      const ideal = (30 + l.a.rayon + l.b.rayon) / Math.sqrt(reglages.attraction)
+      const force = ((d - ideal) / d) * 0.06 * reglages.attraction * alpha
       l.a.vx += dx * force
       l.a.vy += dy * force
       l.b.vx -= dx * force
@@ -233,17 +266,20 @@ class VueGraphe {
     for (const n of noeuds) {
       n.vx -= n.x * 0.004 * alpha
       n.vy -= n.y * 0.004 * alpha
-      if (n === this.tenu) {
+      if (n === this.tenu || n.fige) {
         n.vx = n.vy = 0
+        positions.set(n.table.nom, { x: n.x, y: n.y, fige: n.fige })
         continue
       }
       n.vx *= 0.6
       n.vy *= 0.6
       n.x += Math.max(-20, Math.min(20, n.vx))
       n.y += Math.max(-20, Math.min(20, n.vy))
-      positions.set(n.table.nom, { x: n.x, y: n.y })
+      positions.set(n.table.nom, { x: n.x, y: n.y, fige: false })
     }
     this.chaleur *= 0.985
+    // La disposition est enregistrée quand le graphe s'est posé.
+    if (this.chaleur <= 0.004) enregistrerDisposition()
   }
 
   versEcran(x, y) {
@@ -330,6 +366,14 @@ class VueGraphe {
       }
       t.style.cursor = n || this.lienSous(p.x, p.y) ? 'pointer' : 'grab'
     })
+    t.addEventListener('dblclick', (e) => {
+      const p = position(e)
+      const n = this.noeudSous(p.x, p.y)
+      if (n?.fige) {
+        this.liberer(n)
+        notifier(`${n.table.nom} libérée`)
+      }
+    })
     t.addEventListener('pointerleave', () => {
       if (this.survol) {
         this.survol = null
@@ -341,6 +385,13 @@ class VueGraphe {
       const g = glisse
       glisse = null
       this.tenu = null
+      if (g?.bouge && g.type === 'noeud') {
+        // Lâchée : elle reste là si « figer » est coché, sinon elle repart avec les autres.
+        g.noeud.fige = reglages.figer
+        positions.set(g.noeud.table.nom, { x: g.noeud.x, y: g.noeud.y, fige: g.noeud.fige })
+        enregistrerDisposition()
+        this.dessiner()
+      }
       if (!g || g.bouge) return
       if (g.type === 'noeud') {
         if ((e.ctrlKey || e.metaKey) && this.source && this.source !== g.noeud) {
@@ -361,6 +412,25 @@ class VueGraphe {
       }
       this.dessiner()
     })
+  }
+
+  // Double-clic sur une bulle figée : elle est libérée et reprend sa place dans la simulation.
+  liberer(n) {
+    n.fige = false
+    positions.set(n.table.nom, { x: n.x, y: n.y, fige: false })
+    this.relancer(0.3)
+    enregistrerDisposition()
+  }
+
+  libererTout() {
+    for (const n of this.graphe.noeuds) n.fige = false
+    this.relancer(0.6)
+    enregistrerDisposition()
+  }
+
+  // Remet de l'énergie : le graphe se réorganise selon les réglages.
+  relancer(chaleur = 0.5) {
+    this.chaleur = Math.max(this.chaleur, chaleur)
   }
 
   toutVoir() {
@@ -443,6 +513,13 @@ class VueGraphe {
         c.lineWidth = 1.5
         c.stroke()
       }
+      // Bulle figée : un petit point sombre au centre (comme une punaise).
+      if (n.fige && !pale) {
+        c.fillStyle = '#0b1210'
+        c.beginPath()
+        c.arc(p.x, p.y, Math.max(1.5, rayon * 0.32), 0, Math.PI * 2)
+        c.fill()
+      }
       // Noms : en zoomant, ou pour les tables importantes, survolées, choisies, sur le chemin.
       const visible = k > 1.1 || n === focus || n === this.source || surChemin.has(n) || (focus && focus.voisins.has(n)) || (k > 0.45 && grands.has(n))
       if (visible && !pale) {
@@ -476,13 +553,38 @@ function couleursDuTheme() {
   }
 }
 
+// ---------------------------------------------------------------- réglages sous le graphe
+
+function reglagesSchema(vue, caseEcartees) {
+  const curseur = (cle, libelle, aide) => {
+    const entree = h('input', { type: 'range', min: '0.2', max: '3', step: '0.1', value: String(reglages[cle]), title: aide })
+    const valeur = h('span', { class: 'valeur-curseur' }, `×${Number(reglages[cle]).toFixed(1)}`)
+    entree.addEventListener('input', () => {
+      reglages[cle] = Number(entree.value)
+      valeur.textContent = `×${reglages[cle].toFixed(1)}`
+      garderReglages()
+      vue.relancer(0.5)
+    })
+    return h('label', { class: 'curseur-schema', title: aide }, h('span', {}, libelle), entree, valeur)
+  }
+  const figer = h('input', { type: 'checkbox', checked: reglages.figer, onchange: () => { reglages.figer = figer.checked; garderReglages() } })
+  return h('div', { class: 'reglages-schema' },
+    curseur('attraction', 'Force des liens', 'Plus fort : les tables liées se rapprochent'),
+    curseur('ecartement', 'Écartement', 'Plus fort : les bulles se repoussent davantage'),
+    h('label', { class: 'case-schema', title: 'Une bulle déplacée reste où on la lâche (double-clic dessus pour la libérer)' }, figer, 'Figer en lâchant'),
+    h('button', { class: 'petit discret', title: 'Toutes les bulles reprennent leur place dans la simulation', onclick: () => vue.libererTout() }, 'Tout libérer'),
+    h('label', { class: 'case-schema' }, caseEcartees, 'Tables écartées'),
+  )
+}
+
 // ---------------------------------------------------------------- panneau de droite
 
 function aideSchema() {
   return [
     h('h2', { style: { marginBottom: '8px' } }, 'Mode d’emploi'),
     h('ul', { class: 'texte-2', style: { paddingLeft: '18px', fontSize: '14px', margin: 0 } },
-      h('li', {}, 'Molette : zoomer. Glisser le fond : se déplacer. Glisser une bulle : la déplacer.'),
+      h('li', {}, 'Molette : zoomer. Glisser le fond : se déplacer. Glisser une bulle : la déplacer (elle reste là si « Figer en lâchant » est coché ; double-clic pour la libérer).'),
+      h('li', {}, 'Curseurs sous le graphe : force des liens et écartement des bulles.'),
       h('li', {}, 'Clic sur une bulle : la décrire (c’est la source).'),
       h('li', {}, 'Ctrl + clic sur une autre bulle : chemin le plus court, avec les clés de jointure.'),
       h('li', {}, 'Clic sur un lien : le nommer et le décrire.'),
