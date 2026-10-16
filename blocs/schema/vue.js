@@ -4,6 +4,7 @@
 //   molette : zoom          glisser le fond : se déplacer          glisser une bulle : la déplacer
 //   clic sur une bulle : la décrire (nom clair, description, prise en compte par l'IA) — c'est la source
 //   Ctrl + clic sur une autre bulle : chemin de jointure le plus court entre les deux (tables et clés)
+//   Ctrl + Maj + clic : construire le chemin soi-même, table par table
 //   clic sur un lien : le nommer et le décrire
 //   curseurs : force des liens (attraction) et écartement des bulles (répulsion)
 //   « Figer en lâchant » : une bulle déplacée reste où on la lâche ; double-clic sur une bulle figée : la libérer
@@ -23,7 +24,7 @@ const positions = new Map()
 let dispositionChargee = false
 
 // Réglages de la simulation (gardés sur ce poste).
-const reglages = { attraction: 1, ecartement: 1, figer: true, cles: false }
+const reglages = { attraction: 1, ecartement: 1, figer: true, cles: false, raccourcis: true }
 try {
   Object.assign(reglages, JSON.parse(localStorage.getItem('birtec-schema-reglages') || '{}'))
 } catch {
@@ -104,6 +105,7 @@ export default {
       h('div', { class: 'schema-grille' },
         h('div', { class: 'carte', style: { padding: '0', overflow: 'hidden', position: 'relative' } },
           toile,
+          cadreRaccourcis(),
           reglagesSchema(vue, caseEcartees),
         ),
         panneau,
@@ -409,7 +411,9 @@ class VueGraphe {
       }
       if (!g || g.bouge) return
       if (g.type === 'noeud') {
-        if ((e.ctrlKey || e.metaKey) && this.source && this.source !== g.noeud) {
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey) {
+          this.ajouterAuChemin(g.noeud)
+        } else if ((e.ctrlKey || e.metaKey) && this.source && this.source !== g.noeud) {
           this.chemin = cheminLePlusCourt(this.graphe, this.source, g.noeud)
           this.rappels.surChemin(this.chemin || { depart: this.source, arrivee: g.noeud, etapes: null })
         } else {
@@ -427,6 +431,37 @@ class VueGraphe {
       }
       this.dessiner()
     })
+  }
+
+  // Chemin construit à la main (Ctrl + Maj + clic) : chaque table cliquée prolonge le chemin. Si elle n'est pas
+  // directement liée à la précédente, le plus court passage entre les deux est ajouté.
+  ajouterAuChemin(n) {
+    const actuel = this.chemin?.manuel ? this.chemin : null
+    const derniere = actuel ? actuel.arrivee : this.source
+    if (!derniere || derniere === n) {
+      this.source = n
+      this.chemin = { depart: n, arrivee: n, etapes: [], manuel: true }
+    } else {
+      const direct = this.graphe.liens.find((l) => (l.a === derniere && l.b === n) || (l.b === derniere && l.a === n))
+      let morceau = direct ? [{ de: derniere, vers: n, lien: direct }] : cheminLePlusCourt(this.graphe, derniere, n)?.etapes
+      if (!morceau) {
+        notifier(`Aucun lien connu entre ${derniere.table.nom} et ${n.table.nom}.`, 'erreur')
+        return
+      }
+      if (!direct) notifier(`${derniere.table.nom} et ${n.table.nom} ne sont pas liées directement : passage par ${morceau.slice(0, -1).map((e) => e.vers.table.nom).join(', ')}.`)
+      this.chemin = { depart: actuel ? actuel.depart : derniere, arrivee: n, etapes: [...(actuel?.etapes || []), ...morceau], manuel: true }
+    }
+    this.rappels.surChemin(this.chemin)
+    this.dessiner()
+  }
+
+  // Retire la dernière table du chemin construit.
+  retirerDernier() {
+    if (!this.chemin?.manuel) return
+    const etapes = this.chemin.etapes.slice(0, -1)
+    this.chemin = { ...this.chemin, etapes, arrivee: etapes.at(-1)?.vers || this.chemin.depart }
+    this.rappels.surChemin(this.chemin)
+    this.dessiner()
   }
 
   // Double-clic sur une bulle figée : elle est libérée et reprend sa place dans la simulation.
@@ -594,6 +629,31 @@ function couleursDuTheme() {
   }
 }
 
+// ---------------------------------------------------------------- cadre des raccourcis (repliable)
+
+function cadreRaccourcis() {
+  const RACCOURCIS = [
+    ['Molette', 'zoomer, dézoomer'],
+    ['Glisser le fond', 'se déplacer'],
+    ['Glisser une bulle', 'la déplacer (figée si coché)'],
+    ['Double-clic', 'libérer une bulle figée'],
+    ['Clic', 'choisir une table (source)'],
+    ['Ctrl + clic', 'chemin le plus court jusqu’à cette table'],
+    ['Ctrl + Maj + clic', 'construire le chemin, table par table'],
+    ['Clic sur un lien', 'le nommer, le décrire'],
+  ]
+  const cadre = h('div', { class: `cadre-raccourcis ${reglages.raccourcis ? '' : 'replie'}` })
+  const dessiner = () => {
+    cadre.classList.toggle('replie', !reglages.raccourcis)
+    vider(cadre,
+      h('button', { class: 'titre-raccourcis', title: reglages.raccourcis ? 'Replier' : 'Afficher les raccourcis', onclick: () => { reglages.raccourcis = !reglages.raccourcis; garderReglages(); dessiner() } },
+        ic('aide', 13), 'Raccourcis', h('span', { class: 'discret' }, reglages.raccourcis ? ' ▾' : ' ▸')),
+      reglages.raccourcis ? h('dl', {}, RACCOURCIS.map(([touche, effet]) => [h('dt', {}, touche), h('dd', {}, effet)])) : null)
+  }
+  dessiner()
+  return cadre
+}
+
 // ---------------------------------------------------------------- réglages sous le graphe
 
 function reglagesSchema(vue, caseEcartees) {
@@ -630,6 +690,7 @@ function aideSchema() {
       h('li', {}, 'Curseurs sous le graphe : force des liens et écartement des bulles. « Clés de liaison » : la clé écrite le long de chaque ligne.'),
       h('li', {}, 'Clic sur une bulle : la décrire (c’est la source).'),
       h('li', {}, 'Ctrl + clic sur une autre bulle : chemin le plus court, avec les clés de jointure.'),
+      h('li', {}, 'Ctrl + Maj + clic : construire le chemin soi-même, table par table.'),
       h('li', {}, 'Clic sur un lien : le nommer et le décrire.'),
     ),
     h('p', { class: 'discret', style: { fontSize: '13px', marginTop: '12px' } },
@@ -679,6 +740,10 @@ function panneauTable(n, vue) {
 }
 
 function panneauChemin(chemin, vue, panneau) {
+  if (chemin.manuel && !chemin.etapes.length) {
+    return [h('h2', {}, 'Chemin construit'), h('p', { class: 'texte-2' }, `Départ : ${chemin.depart.table.nom}. Ctrl + Maj + clic sur la table suivante pour prolonger le chemin.`),
+      h('div', { class: 'actions' }, h('button', { class: 'petit discret', onclick: () => { vue.effacerChemin(); vider(panneau, panneauTable(chemin.depart, vue)) } }, ic('x', 14), 'Effacer'))]
+  }
   if (!chemin.etapes) {
     return [h('h2', {}, 'Chemin'), h('p', { class: 'texte-2' }, `Aucun lien connu ne relie ${chemin.depart.table.nom} à ${chemin.arrivee.table.nom}. Ajoutez le lien manquant depuis l’une des deux tables.`)]
   }
@@ -689,7 +754,8 @@ function panneauChemin(chemin, vue, panneau) {
     return `JOIN ${e.vers.table.nom} ON ${j.de}.${j.colonne} = ${j.vers}.${j.versColonne}`
   }).join('\n')}`
   return [
-    h('h2', { style: { marginBottom: '4px' } }, 'Chemin le plus court'),
+    h('h2', { style: { marginBottom: '4px' } }, chemin.manuel ? 'Chemin construit' : 'Chemin le plus court'),
+    chemin.manuel ? h('p', { class: 'discret', style: { fontSize: '12px', margin: '0 0 4px' } }, 'Ctrl + Maj + clic sur une table pour prolonger.') : null,
     h('p', { class: 'discret', style: { fontSize: '13px', marginTop: 0 } }, `${chemin.etapes.length} jointure(s), ${tables.length} tables`),
     h('ol', { class: 'chemin-tables' }, tables.map((n) => h('li', {}, h('span', { class: 'mono' }, n.table.nom), n.table.libelle ? h('span', { class: 'discret' }, ` — ${n.table.libelle}`) : null))),
     h('h3', { style: { margin: '12px 0 6px' } }, 'Clés'),
@@ -698,6 +764,7 @@ function panneauChemin(chemin, vue, panneau) {
     h('div', { class: 'actions' },
       h('button', { class: 'petit', onclick: () => navigator.clipboard.writeText(sql).then(() => notifier('Jointures copiées')) }, ic('copier', 14), 'Copier'),
       h('button', { class: 'petit', title: 'Les données de toutes les tables du chemin', onclick: () => extraireTables(tables.map((n) => n.table.nom)) }, ic('telecharger', 14), `Télécharger les ${tables.length} tables`),
+      chemin.manuel ? h('button', { class: 'petit discret', title: 'Retirer la dernière table du chemin', onclick: () => vue.retirerDernier() }, ic('retour', 14), 'Retirer la dernière') : null,
       h('button', { class: 'petit discret', onclick: () => { vue.effacerChemin(); vider(panneau, panneauTable(chemin.depart, vue)) } }, ic('x', 14), 'Effacer'),
     ),
   ]
