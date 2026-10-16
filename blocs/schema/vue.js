@@ -94,7 +94,7 @@ export default {
           h('button', {
             title: 'Les données de la table choisie, ou de toutes les tables du chemin en surbrillance (Ctrl + clic)',
             onclick: () => {
-              const tables = vue.chemin?.etapes ? [vue.chemin.depart, ...vue.chemin.etapes.map((e) => e.vers)].map((n) => n.table.nom) : vue.source ? [vue.source.table.nom] : []
+              const tables = vue.chemin?.etapes ? [...new Set([vue.chemin.depart, ...vue.chemin.etapes.map((e) => e.vers)].map((n) => n.table.nom))] : vue.source ? [vue.source.table.nom] : []
               if (!tables.length) return notifier('Cliquez d’abord une table (ou Ctrl + clic pour un chemin).', 'erreur')
               extraireTables(tables)
             },
@@ -443,12 +443,21 @@ class VueGraphe {
       this.chemin = { depart: n, arrivee: n, etapes: [], manuel: true }
     } else {
       const direct = this.graphe.liens.find((l) => (l.a === derniere && l.b === n) || (l.b === derniere && l.a === n))
-      let morceau = direct ? [{ de: derniere, vers: n, lien: direct }] : cheminLePlusCourt(this.graphe, derniere, n)?.etapes
+      let morceau = direct ? [{ de: derniere, vers: n, lien: direct }] : null
+      if (!morceau) {
+        // Pas de lien direct : on part de la table du chemin la plus proche, pas forcément la dernière,
+        // pour ne pas repasser par des tables déjà prises (aller-retour ri → riperso → ri…).
+        const presentes = actuel ? [actuel.depart, ...actuel.etapes.map((e) => e.vers)] : [derniere]
+        for (const depart of new Set(presentes)) {
+          const essai = cheminLePlusCourt(this.graphe, depart, n)?.etapes
+          if (essai && (!morceau || essai.length < morceau.length)) morceau = essai
+        }
+      }
       if (!morceau) {
         notifier(`Aucun lien connu entre ${derniere.table.nom} et ${n.table.nom}.`, 'erreur')
         return
       }
-      if (!direct) notifier(`${derniere.table.nom} et ${n.table.nom} ne sont pas liées directement : passage par ${morceau.slice(0, -1).map((e) => e.vers.table.nom).join(', ')}.`)
+      if (!direct) notifier(`${n.table.nom} n’est pas liée directement à ${derniere.table.nom} : rattachée par ${[morceau[0].de, ...morceau.slice(0, -1).map((e) => e.vers)].map((t) => t.table.nom).join(', ')}.`)
       this.chemin = { depart: actuel ? actuel.depart : derniere, arrivee: n, etapes: [...(actuel?.etapes || []), ...morceau], manuel: true }
     }
     this.rappels.surChemin(this.chemin)
@@ -748,22 +757,30 @@ function panneauChemin(chemin, vue, panneau) {
     return [h('h2', {}, 'Chemin'), h('p', { class: 'texte-2' }, `Aucun lien connu ne relie ${chemin.depart.table.nom} à ${chemin.arrivee.table.nom}. Ajoutez le lien manquant depuis l’une des deux tables.`)]
   }
   const tables = [chemin.depart, ...chemin.etapes.map((e) => e.vers)]
-  const jointures = chemin.etapes.map((e) => e.lien.jointures[0])
-  const sql = `FROM ${chemin.depart.table.nom}\n${chemin.etapes.map((e) => {
+  // Un chemin construit à la main peut repasser par une table (aller-retour) : elle n'est jointe
+  // et téléchargée qu'une fois, sinon le SQL joindrait deux fois la même table sans alias.
+  const vues = new Set([chemin.depart.table.nom])
+  const utiles = chemin.etapes.filter((e) => !vues.has(e.vers.table.nom) && vues.add(e.vers.table.nom))
+  const distinctes = [...vues]
+  const jointures = utiles.map((e) => e.lien.jointures[0])
+  const sql = `FROM ${chemin.depart.table.nom}\n${utiles.map((e) => {
     const j = e.lien.jointures[0]
     return `JOIN ${e.vers.table.nom} ON ${j.de}.${j.colonne} = ${j.vers}.${j.versColonne}`
   }).join('\n')}`
+  const dejaVue = (n, i) => tables.findIndex((t) => t.table.nom === n.table.nom) < i
   return [
     h('h2', { style: { marginBottom: '4px' } }, chemin.manuel ? 'Chemin construit' : 'Chemin le plus court'),
     chemin.manuel ? h('p', { class: 'discret', style: { fontSize: '12px', margin: '0 0 4px' } }, 'Ctrl + Maj + clic sur une table pour prolonger.') : null,
-    h('p', { class: 'discret', style: { fontSize: '13px', marginTop: 0 } }, `${chemin.etapes.length} jointure(s), ${tables.length} tables`),
-    h('ol', { class: 'chemin-tables' }, tables.map((n) => h('li', {}, h('span', { class: 'mono' }, n.table.nom), n.table.libelle ? h('span', { class: 'discret' }, ` — ${n.table.libelle}`) : null))),
+    h('p', { class: 'discret', style: { fontSize: '13px', marginTop: 0 } }, `${jointures.length} jointure(s), ${distinctes.length} tables${distinctes.length < tables.length ? ` (${tables.length - distinctes.length} passage(s) en double, ignoré(s))` : ''}`),
+    h('ol', { class: 'chemin-tables' }, tables.map((n, i) => h('li', { style: dejaVue(n, i) ? { opacity: 0.5 } : {} },
+      h('span', { class: 'mono' }, n.table.nom),
+      dejaVue(n, i) ? h('span', { class: 'discret' }, ' — déjà dans le chemin') : n.table.libelle ? h('span', { class: 'discret' }, ` — ${n.table.libelle}`) : null))),
     h('h3', { style: { margin: '12px 0 6px' } }, 'Clés'),
     h('ul', { class: 'chemin-cles' }, jointures.map((j) => h('li', {}, h('span', { class: 'mono' }, `${j.de}.${j.colonne} = ${j.vers}.${j.versColonne}`), j.libelle ? h('div', { class: 'discret', style: { fontSize: '12px' } }, j.libelle) : null))),
     h('pre', { class: 'code', 'data-langue': 'sql', style: { marginTop: '10px' } }, h('code', {}, sql)),
     h('div', { class: 'actions' },
       h('button', { class: 'petit', onclick: () => navigator.clipboard.writeText(sql).then(() => notifier('Jointures copiées')) }, ic('copier', 14), 'Copier'),
-      h('button', { class: 'petit', title: 'Les données de toutes les tables du chemin', onclick: () => extraireTables(tables.map((n) => n.table.nom)) }, ic('telecharger', 14), `Télécharger les ${tables.length} tables`),
+      h('button', { class: 'petit', title: 'Les données de toutes les tables du chemin', onclick: () => extraireTables(distinctes) }, ic('telecharger', 14), `Télécharger les ${distinctes.length} tables`),
       chemin.manuel ? h('button', { class: 'petit discret', title: 'Retirer la dernière table du chemin', onclick: () => vue.retirerDernier() }, ic('retour', 14), 'Retirer la dernière') : null,
       h('button', { class: 'petit discret', onclick: () => { vue.effacerChemin(); vider(panneau, panneauTable(chemin.depart, vue)) } }, ic('x', 14), 'Effacer'),
     ),
@@ -845,10 +862,10 @@ function imprimer(graphe, vue, schema) {
       + '</g>'
   }).join('')
   const legendeChemin = vue.chemin?.etapes
-    ? `<div class="chemin-legende"><b>Chemin ${x(vue.chemin.depart.table.nom)} → ${x(vue.chemin.arrivee.table.nom)}</b><br>${vue.chemin.etapes.map((e) => {
+    ? `<div class="chemin-legende"><b>Chemin ${x(vue.chemin.depart.table.nom)} → ${x(vue.chemin.arrivee.table.nom)}</b><br>${[...new Set(vue.chemin.etapes.map((e) => {
         const j = e.lien.jointures[0]
         return `${x(j.de)}.${x(j.colonne)} = ${x(j.vers)}.${x(j.versColonne)}`
-      }).join('<br>')}</div>`
+      }))].join('<br>')}</div>`
     : ''
   const base = etat.connexion?.base || schema.base
   const date = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
