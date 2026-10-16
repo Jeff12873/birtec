@@ -28,6 +28,7 @@ export default {
   titre: 'Nouveau rapport',
   icone: 'plus',
   menu: true,
+  groupe: 'Créer',
   aide: 'constructeur',
   rafraichir: false,
 

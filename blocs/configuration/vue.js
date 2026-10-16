@@ -9,6 +9,7 @@ export default {
   titre: 'Configuration',
   icone: 'reglages',
   menu: true,
+  groupe: 'Réglages',
   aide: 'configuration',
 
   async afficher(zone) {

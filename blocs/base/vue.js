@@ -12,6 +12,7 @@ export default {
   titre: 'Base de données',
   icone: 'base',
   menu: true,
+  groupe: 'Ma base',
   aide: 'base',
 
   async afficher(zone, { id, query }) {

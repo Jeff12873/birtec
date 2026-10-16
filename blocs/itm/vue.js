@@ -13,6 +13,7 @@ export default {
   titre: 'Indicateurs ITM',
   icone: 'graphique',
   menu: true,
+  groupe: 'Mes créations',
   aide: 'itm',
 
   async afficher(zone, { id }) {

@@ -21,6 +21,7 @@ export default {
   titre: 'Schéma',
   icone: 'reseau',
   menu: true,
+  groupe: 'Ma base',
   aide: 'schema',
   rafraichir: false,
 

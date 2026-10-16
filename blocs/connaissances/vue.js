@@ -11,6 +11,7 @@ export default {
   titre: 'Connaissances',
   icone: 'livre',
   menu: true,
+  groupe: 'Ma base',
   aide: 'connaissances',
 
   async afficher(zone, { id }) {

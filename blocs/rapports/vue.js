@@ -19,6 +19,7 @@ export default {
   titre: 'Rapports',
   icone: 'document',
   menu: true,
+  groupe: 'Mes créations',
   aide: 'rapports',
 
   async afficher(zone, { id }) {

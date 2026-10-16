@@ -63,7 +63,14 @@ function dessinerMenu() {
   vider(
     menu,
     h('div', { class: 'menu-titre' }, h('img', { src: '/icone.svg', alt: '' }), h('div', {}, h('strong', {}, 'BiRTEC'), h('span', {}, 'Rapports BIRT'))),
-    BLOCS.filter((b) => b.menu).map((b) => h('a', { href: `#/${b.chemin}`, class: b === actuel ? 'actif' : '' }, ic(b.icone, 19), h('span', {}, b.titre))),
+    // Les écrans par groupe (« groupe » de chaque bloc) : un titre discret avant chaque nouveau groupe.
+    // Le groupe « Réglages » est poussé en bas du menu.
+    BLOCS.filter((b) => b.menu).map((b, i, liste) => [
+      b.groupe && b.groupe !== liste[i - 1]?.groupe
+        ? h('div', { class: `menu-groupe ${b.groupe === 'Réglages' ? 'en-bas' : ''}` }, b.groupe)
+        : null,
+      h('a', { href: `#/${b.chemin}`, class: b === actuel ? 'actif' : '' }, ic(b.icone, 19), h('span', {}, b.titre)),
+    ]),
     h('div', { class: 'pied' }, `Version ${etat.version}`),
   )
 }

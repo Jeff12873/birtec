@@ -27,11 +27,19 @@ export default {
   chemin: 'assistant',
   titre: 'Question libre',
   icone: 'etincelle',
-  menu: true,
+  menu: false, // la question libre est sur l'accueil
   aide: 'assistant',
   rafraichir: false, // ne pas recharger l'écran pendant une discussion
 
   async afficher(zone) {
+    return afficherQuestion(zone, { compact: false })
+  },
+}
+
+// La discussion. « compact » : intégrée dans une autre page (l'accueil) — sans panneau latéral,
+// hauteur limitée, boutons au-dessus.
+export async function afficherQuestion(zone, { compact = false } = {}) {
+  {
     const panneauTables = h('div', { class: 'texte-2', style: { fontSize: '14px' } })
     const dessinerTables = () =>
       vider(panneauTables, contexte.tables.length || contexte.notes.length
@@ -64,6 +72,7 @@ export default {
 
     function dessinerMessages() {
       vider(messages)
+      if (!conversation.length && compact) return // accueil : rien tant qu'aucune question n'est posée
       if (!conversation.length) {
         messages.append(
           h(
@@ -146,6 +155,22 @@ export default {
     }
 
     dessinerMessages()
+    if (compact) {
+      vider(
+        zone,
+        h('div', { class: 'question-compacte' },
+          !etat.ia?.installee ? h('div', { class: 'bandeau' }, ic('alerte'), "L'IA n'est pas installée sur ce poste : voir l’aide « Installation ».") : null,
+          messages,
+          h('div', { class: 'saisie-boite' }, saisie, boutonEnvoyer),
+          h('div', { class: 'actions', style: { marginTop: '8px' } },
+            h('button', { class: 'petit discret', onclick: nouvelleConversation }, ic('plus', 14), 'Nouvelle conversation'),
+            h('button', { class: 'petit discret', title: 'Comment l’IA doit répondre', onclick: modifierConsignes }, ic('crayon', 14), 'Consignes'),
+            h('span', { class: 'discret', style: { fontSize: '12px' } }, 'Expliquer une table, écrire un calcul (MTBF…), comprendre une requête. Chaque requête est contrôlée sur la base.'),
+          ),
+        ),
+      )
+      return
+    }
     vider(
       zone,
       h(
@@ -185,7 +210,7 @@ export default {
       sessionStorage.removeItem('birtec-question')
       envoyer(transmise)
     }
-  },
+  }
 }
 
 // L'assistant peut finir par « CHOIX : réponse 1 | réponse 2 » (boutons, une réponse)

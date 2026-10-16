@@ -6,6 +6,7 @@ import { h, vider, ic } from '/socle/ui.js'
 import { api } from '/socle/api.js'
 import { etat } from '/socle/etat.js'
 import { demanderMotDePasse } from '/blocs/configuration/vue.js'
+import { afficherQuestion } from '/blocs/assistant/vue.js'
 
 let organiser = false
 
@@ -15,6 +16,7 @@ export default {
   icone: 'accueil',
   menu: true,
   aide: 'premiers-pas',
+  rafraichir: false, // ne pas recharger l'écran pendant une question
 
   async afficher(zone) {
     const donnees = await api('/api/accueil')
@@ -77,6 +79,8 @@ export default {
       return h('div', { style: { marginTop: '12px', maxWidth: '420px' } }, choix)
     }
 
+    // Question libre à l'IA, directement sur l'accueil.
+    const question = h('div')
     vider(
       zone,
       h('div', { class: 'entete-page' },
@@ -86,6 +90,9 @@ export default {
           h('button', { class: organiser ? 'principal' : 'discret', onclick: () => { organiser = !organiser; redessiner() } }, ic(organiser ? 'coche' : 'crayon', 16), organiser ? 'Terminer' : 'Organiser'),
         ),
       ),
+      h('div', { class: 'carte', style: { marginBottom: '16px' } },
+        h('div', { class: 'carte-entete' }, h('h2', {}, ic('etincelle', 18), 'Une question ?'), h('a', { class: 'bouton petit', href: '#/constructeur' }, ic('plus', 14), 'Nouveau rapport ou indicateur')),
+        question),
       h('div', { class: 'carte', style: { marginBottom: '16px' } },
         h('div', { class: 'carte-entete' }, h('h2', {}, ic('graphique', 18), 'Indicateurs')),
         indicateurs.length
@@ -101,5 +108,6 @@ export default {
         ajout(donnees.tousRapports.filter((r) => !rapports.some((x) => x.nom === r.nom)).map((r) => [r.nom, r.titre]), 'Ajouter un rapport…', (nom) => rapports.push(donnees.tousRapports.find((r) => r.nom === nom))),
       ),
     )
+    await afficherQuestion(question, { compact: true })
   },
 }
