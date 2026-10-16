@@ -207,7 +207,8 @@ export default {
         vider(resultat,
           (r.erreurs || []).map((x) => h('div', { class: 'bandeau' }, ic('alerte'), x)),
           r.valeur !== undefined && r.valeur !== null ? h('p', {}, h('strong', {}, String(r.valeur)), ` fiche(s) aujourd’hui — fenêtre à ouvrir dans la GMAO : ${r.fenetre}.`) : null,
-          r.requeteIndicateur ? h('details', {}, h('summary', { class: 'discret' }, 'Les deux requêtes'), h('pre', { class: 'code' }, h('code', {}, `${r.requeteIndicateur}\n\n${r.requeteListe}`))) : null)
+          r.requeteIndicateur ? caseRequete('Requête indicateur', r.requeteIndicateur) : null,
+          r.requeteListe ? caseRequete('Requête liste', r.requeteListe) : null)
         return r
       }
       const ok = await fenetre({
@@ -261,6 +262,15 @@ export default {
 }
 
 // ---------------------------------------------------------------- morceaux du formulaire
+
+// Une requête dans sa propre case, avec son bouton « Copier » (à coller tel quel dans la GMAO).
+function caseRequete(titre, sql) {
+  return h('div', { class: 'case-requete' },
+    h('div', { class: 'carte-entete' },
+      h('h3', {}, titre),
+      h('button', { class: 'petit discret', onclick: () => navigator.clipboard.writeText(sql).then(() => notifier(`${titre} copiée`)) }, ic('copier', 14), 'Copier')),
+    h('pre', { class: 'code' }, h('code', {}, sql)))
+}
 
 function section(numero, titre, contenu) {
   return h('div', { class: 'carte section-constructeur' }, h('h2', {}, h('span', { class: 'numero-etape' }, numero), titre), h('div', { class: 'grille' }, contenu))

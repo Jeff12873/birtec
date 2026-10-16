@@ -432,3 +432,8 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 .deux-panneaux textarea.sql, .deux-panneaux pre.code { max-width: 100%; }
 .deux-panneaux .grille > *, .deux-panneaux .carte > * { min-width: 0; }
 .deux-panneaux .grille { grid-template-columns: minmax(0, 1fr); }
+
+/* Requête dans sa propre case (indicateur ITM) */
+.case-requete { margin-top: 12px; border: 1px solid var(--bord); border-radius: var(--rayon); padding: 10px 12px; background: var(--carte-2); }
+.case-requete h3 { margin: 0; font-size: 15px; }
+.case-requete pre.code { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; }

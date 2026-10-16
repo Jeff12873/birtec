@@ -228,23 +228,27 @@ function cleJusqua(cle, i) {
 
 function conditionPeriode(e, periode, nature) {
   // Dates AAAAMMJJ : comparaisons de textes ; vraies dates : comparaisons de dates.
-  const f = nature === 'date' ? (x) => x : (x) => `DATE_FORMAT(${x}, '%Y%m%d')`
-  const fin = f('CURDATE()')
+  // date(expression SQL d'une date, format aaaa-mm-jj) → la même date au format de la colonne.
+  const date = (expression) => (nature === 'date' ? expression : `DATE_FORMAT(${expression}, '%Y%m%d')`)
+  // Premier jour du mois ou de l'année, écrit directement au format de la colonne.
+  const debutMois = (decalage = '') => (nature === 'date' ? `DATE_FORMAT(CURDATE()${decalage}, '%Y-%m-01')` : `DATE_FORMAT(CURDATE()${decalage}, '%Y%m01')`)
+  const debutAnnee = nature === 'date' ? "DATE_FORMAT(CURDATE(), '%Y-01-01')" : "DATE_FORMAT(CURDATE(), '%Y0101')"
+  const aujourdhui = date('CURDATE()')
   switch (periode) {
     case 'mois_precedent':
-      return `${e} >= ${f("DATE_FORMAT(CURDATE() - INTERVAL 1 MONTH, '%Y-%m-01')")} AND ${e} < ${f("DATE_FORMAT(CURDATE(), '%Y-%m-01')")}`
+      return `${e} >= ${debutMois(' - INTERVAL 1 MONTH')} AND ${e} < ${debutMois()}`
     case 'annee_en_cours':
-      return `${e} >= ${f("DATE_FORMAT(CURDATE(), '%Y-01-01')")} AND ${e} <= ${fin}`
+      return `${e} >= ${debutAnnee} AND ${e} <= ${aujourdhui}`
     case '12_mois':
-      return `${e} >= ${f('CURDATE() - INTERVAL 12 MONTH')} AND ${e} <= ${fin}`
+      return `${e} >= ${date('CURDATE() - INTERVAL 12 MONTH')} AND ${e} <= ${aujourdhui}`
     case '30_jours':
-      return `${e} >= ${f('CURDATE() - INTERVAL 30 DAY')} AND ${e} <= ${fin}`
+      return `${e} >= ${date('CURDATE() - INTERVAL 30 DAY')} AND ${e} <= ${aujourdhui}`
     case 'depassee': // date passée (ex. date limite dépassée = en retard)
-      return `${e} IS NOT NULL ${nature === 'date' ? '' : `AND ${e} <> '' `}AND ${e} < ${fin}`
+      return `${e} IS NOT NULL ${nature === 'date' ? '' : `AND ${e} <> '' `}AND ${e} < ${aujourdhui}`
     case 'a_venir':
-      return `${e} >= ${fin}`
+      return `${e} >= ${aujourdhui}`
     default: // mois en cours
-      return `${e} >= ${f("DATE_FORMAT(CURDATE(), '%Y-%m-01')")} AND ${e} <= ${fin}`
+      return `${e} >= ${debutMois()} AND ${e} <= ${aujourdhui}`
   }
 }
 
