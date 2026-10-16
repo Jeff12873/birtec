@@ -18,7 +18,7 @@ import configuration, { demanderMotDePasse } from '/blocs/configuration/vue.js'
 import aide from '/blocs/aide/vue.js'
 
 // L'ordre est celui du menu.
-const BLOCS = [accueil, constructeur, rapports, itm, assistant, base, schema, connaissances, configuration, aide]
+const BLOCS = [accueil, constructeur, rapports, itm, base, schema, connaissances, assistant, configuration, aide]
 
 const racine = document.getElementById('appli')
 const menu = h('nav', { class: 'menu' })

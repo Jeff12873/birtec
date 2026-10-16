@@ -12,10 +12,10 @@ import { tableauResultats } from '/blocs/base/vue.js'
 import { creerRapport } from '/blocs/rapports/vue.js'
 
 const SUGGESTIONS = [
-  'Je veux un rapport BIRT des interventions de dépannage sur une période, par équipement',
-  'Je veux un indicateur ITM des fiches préventives en retard',
   'Quelles tables contiennent les interventions et comment sont-elles liées ?',
-  'Comment faire un total par groupe dans un tableau BIRT ?',
+  'Calcule le MTBF par équipement sur 12 mois',
+  'Explique-moi à quoi sert la table des mouvements de stock',
+  'Les pièces dont le stock réel est sous le stock minimum, avec leur valeur',
 ]
 
 // Conversation en cours : [{ role: 'agent' | 'assistant', contenu }]
@@ -25,7 +25,7 @@ let enCours = null // AbortController de la réponse en cours
 
 export default {
   chemin: 'assistant',
-  titre: 'Assistant IA',
+  titre: 'Question libre',
   icone: 'etincelle',
   menu: true,
   aide: 'assistant',
@@ -70,8 +70,9 @@ export default {
             'div',
             { class: 'vide', style: { paddingTop: '60px' } },
             ic('oiseau', 44),
-            h('h2', { style: { color: 'var(--texte)', marginBottom: '6px' } }, 'Quel rapport ou quel indicateur voulez-vous construire ?'),
-            h('p', {}, 'L’assistant connaît la structure de votre base et votre GMAO : il écrit les requêtes, les vérifie, et crée les rapports BIRT et les indicateurs ITM.'),
+            h('h2', { style: { color: 'var(--texte)', marginBottom: '6px' } }, 'Une question sur la base ou une requête inhabituelle ?'),
+            h('p', {}, 'Pour un rapport ou un indicateur courant, le formulaire « Nouveau rapport » est plus simple et plus sûr. Ici : expliquer une table, écrire un calcul (MTBF…), comprendre une requête.'),
+            h('p', {}, h('a', { class: 'bouton', href: '#/constructeur' }, ic('plus', 16), 'Nouveau rapport ou indicateur')),
             h('div', { class: 'suggestions', style: { justifyContent: 'center', marginTop: '18px' } }, SUGGESTIONS.map((s) => h('button', { onclick: () => envoyer(s) }, s))),
           ),
         )

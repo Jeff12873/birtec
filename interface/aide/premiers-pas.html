@@ -1,12 +1,12 @@
 <h1>Premiers pas</h1>
-<p>BiRTEC aide à écrire les requêtes SQL et à créer les rapports BIRT de la GMAO, avec une IA qui tourne sur ce poste et qui connaît la structure de votre base MySQL et les habitudes de votre site.</p>
+<p>BiRTEC crée les rapports BIRT et les indicateurs ITM de la GMAO, à partir de la vraie structure de votre base MySQL et de ce qu'il sait de votre site (fichier .birtec).</p>
 <h2>1. Connexion à la base</h2>
-<p>Dans <b>Configuration</b>, renseignez le serveur, le port, la base et l'utilisateur MySQL (de préférence un compte en <b>lecture seule</b>). Le mot de passe est demandé à chaque ouverture de BiRTEC et n'est jamais enregistré.</p>
+<p>Dans <b>Configuration</b>, renseignez le serveur, le port, la base et l'utilisateur MySQL (de préférence un compte en <b>lecture seule</b>). Le mot de passe est demandé à chaque ouverture et n'est jamais enregistré.</p>
 <h2>2. Connaissances du site</h2>
-<p>Dans <b>Connaissances</b>, « Importer un dossier » range dans le fichier <code>.birtec</code> vos documents : export de structure de la base, requêtes .sql, notes, rapports modèles, bibliothèques… Écrivez aussi une note « toujours » avec les conventions de votre GMAO (format des dates, statuts…) : l'IA la lit à chaque question.</p>
-<h2>3. Questions et rapports</h2>
-<p>Dans l'<b>Assistant</b>, décrivez ce que vous voulez : « nombre d'interventions par équipement sur une période, avec le total ». L'IA écrit la requête (<b>Exécuter</b> montre le résultat) puis la description du rapport : <b>Créer le rapport</b> fabrique le fichier .rptdesign, le vérifie dans le moteur BIRT et l'ouvre dans <b>Rapports</b> pour l'aperçu et l'export.</p>
-<h2>4. Indicateurs</h2>
-<p>L'onglet <b>Indicateurs ITM</b> écrit les requêtes indicateur et liste des indicateurs de la GMAO, vérifiées sur la base.</p>
-<h2>5. Accueil</h2>
-<p>L'<b>Accueil</b> montre les indicateurs choisis (chiffre du jour) et des raccourcis vers vos rapports : « Organiser » pour en ajouter, en retirer et les ranger par glisser-déposer.</p>
+<p>Le fichier <code>.birtec</code> contient le dictionnaire de la base (noms clairs, descriptions, liens), les conventions, les rapports modèles et les indicateurs. Copiez-le d'un poste à l'autre. Complétez le dictionnaire dans <b>Base de données</b> et <b>Schéma</b> : plus il est riche, plus les champs proposés sont clairs.</p>
+<h2>3. Créer un rapport ou un indicateur</h2>
+<p><b>Nouveau rapport</b> : décrivez-le en une phrase (« Remplir avec l'IA ») ou choisissez directement le sujet, les colonnes, les filtres et la présentation. L'aperçu suit chaque choix. Puis <b>Créer le rapport</b>, ou <b>Créer un indicateur ITM</b> avec les mêmes filtres.</p>
+<h2>4. Retrouver, exporter, copier</h2>
+<p><b>Rapports</b> : aperçu, export (PDF, Excel, Word…), fichier .rptdesign pour la GMAO. <b>Indicateurs ITM</b> : les deux requêtes à copier dans la GMAO. <b>Accueil</b> : vos indicateurs du jour et vos raccourcis, à organiser.</p>
+<h2>5. Une question ?</h2>
+<p><b>Question libre</b> : l'IA explique la base ou écrit une requête inhabituelle (calcul, sous-requête), contrôlée par BiRTEC.</p>

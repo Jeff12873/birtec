@@ -1,13 +1,10 @@
-<h1>L'assistant</h1>
-<p>C'est le point d'entrée pour tout : requêtes SQL, <b>rapports BIRT</b> et <b>indicateurs ITM</b>. À chaque question, BiRTEC lui donne les tables utiles (avec les noms clairs du dictionnaire), les chemins de jointure entre ces tables, les conventions de votre site et les requêtes ou indicateurs déjà écrits qui ressemblent à la demande. Le panneau « Donné à l'IA » montre lesquels.</p>
-<h2>Comment il mène la discussion</h2>
-<p>Il suit les <b>Consignes</b> (bouton dans le panneau de droite, modifiables, gardées dans le fichier .birtec). Par défaut : il pose les questions utiles pour cerner le périmètre, propose des compléments à cocher (oui / non), demande les paramètres à choisir au lancement, le logo et la description du rapport, et demande s'il s'agit d'un rapport ou d'un indicateur quand ce n'est pas dit.</p>
+<h1>Question libre</h1>
+<p>Pour les rapports et indicateurs courants, utilisez le formulaire <a href="#/aide/constructeur">Nouveau rapport</a> : plus simple, et BiRTEC y écrit lui-même les requêtes. « Question libre » sert au reste :</p>
 <ul>
-<li>Les réponses toutes prêtes s'affichent en boutons ; les compléments en cases à cocher, puis <b>Valider</b>.</li>
-<li>Sous chaque requête : <b>Exécuter</b>, <b>Console</b>, <b>Copier</b>.</li>
-<li>Sous une description de rapport : <b>Créer le rapport</b> (le rapport est rangé dans l'onglet Rapports).</li>
-<li>Sous une définition d'indicateur : <b>Créer l'indicateur</b> : BiRTEC assemble la requête indicateur et la requête liste, les essaie sur la base, fait corriger l'IA en cas d'écart, puis range l'indicateur dans l'onglet Indicateurs ITM.</li>
+<li><b>Comprendre la base</b> : « à quoi sert telle table ? », « comment relier les pièces sorties aux équipements ? ».</li>
+<li><b>Les requêtes inhabituelles</b> : calculs (MTBF, taux…), sous-requêtes, cas que le formulaire ne couvre pas.</li>
+<li><b>Comprendre une requête existante</b> : collez-la et demandez une explication.</li>
 </ul>
-<h2>Contrôle des réponses</h2>
-<p>L'IA réfléchit avant d'écrire une requête (« L'IA réfléchit… »), puis BiRTEC contrôle chaque requête sur la vraie structure : table inexistante, colonne absente de sa table (avec les tables qui l'ont), alias non défini. En cas d'erreur, la réponse est réécrite automatiquement (deux fois au plus) ; la mention « Réponse vérifiée et corrigée » l'indique.</p>
-<div class="conseil">Le contrôle garantit que les tables et colonnes existent, pas que la requête répond exactement à la question : vérifiez le résultat (bouton Exécuter). Plus le dictionnaire (noms clairs, descriptions, liens nommés) est complet, plus l'IA est juste.</div>
+<p>L'IA réfléchit avant d'écrire une requête, puis BiRTEC la contrôle sur la vraie structure (tables, colonnes, alias) et la fait réécrire en cas d'erreur. Sous chaque requête : <b>Exécuter</b>, <b>Console</b>, <b>Copier</b>. Une description de rapport ou une définition d'indicateur proposée par l'IA peut encore être créée d'un clic.</p>
+<p><b>Consignes</b> (panneau de droite) : comment l'IA répond. Par défaut, elle répond directement, sans questionnaire.</p>
+<div class="conseil">Le contrôle garantit que les tables et colonnes existent, pas que la requête répond exactement à la question : vérifiez avec Exécuter.</div>

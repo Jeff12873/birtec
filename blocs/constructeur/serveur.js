@@ -10,6 +10,9 @@ import { obtenirSchema } from '../base/schema.js'
 import { sujets, champsDuSujet } from './catalogue.js'
 import { construire } from './requete.js'
 import { genererRapport, sqlAvecValeurs, extraireJson } from '../rapports/serveur.js'
+import { reglagesITM, tester } from '../itm/serveur.js'
+import { trouverFenetre, formaterNom } from '../itm/indicateur.js'
+import { enregistrerIndicateur } from '../../serveur/socle/birtec.js'
 
 // Le champ du catalogue qui correspond le mieux à quelques mots (« ligne », « temps d'arrêt »…).
 // Un mot qui désigne une table liée (« ligne », « type de maintenance ») donne son code ou sa désignation.
@@ -130,6 +133,39 @@ export function routes(r) {
     return genererRapport(d, nom)
   })
 
+  // POST /api/constructeur/indicateur { etat, nom, dateIndicateur?, arborescence?, enregistrer? }
+  // Le même formulaire donne un indicateur ITM : le sujet est la table comptée, les filtres font le WHERE.
+  // BiRTEC écrit la requête indicateur et la requête liste, les essaie, et les range dans le .birtec.
+  r.post('/api/constructeur/indicateur', async (ctx) => {
+    const { etat, nom, dateIndicateur = null, arborescence = true, enregistrer = false } = await ctx.json()
+    const cat = await catalogue(etat.sujet)
+    const reglages = await reglagesITM()
+    const fenetre = trouverFenetre(reglages, cat.sujet.table)
+    if (!fenetre) throw new ErreurHttp(400, `« ${cat.sujet.libelle} » ne peut pas être compté par un indicateur : la table doit avoir un identifiant, un code, une désignation et un état (ACTIF).`)
+    if ((etat.filtres || []).some((f) => f.operateur === 'periode' && f.valeurs?.[0] === 'demandee')) {
+      throw new ErreurHttp(400, 'Un indicateur n’a pas de paramètre : remplacez la période « choisie au lancement » par une période fixe (mois en cours, 12 derniers mois…).')
+    }
+    // Le sujet garde son nom de table : les variables de la GMAO ({{ARBO_FILTRE_…}}) s'écrivent avec lui.
+    const t = cat.sujet.table
+    const r = construire({ ...etat, mode: 'synthese', regroupements: [], mesures: [{ fonction: 'nombre' }], tri: null }, cat, { aliasSujet: t })
+    const de = r.sql.slice(r.sql.indexOf('\nFROM ') + 1).replace(/\nGROUP BY[\s\S]*$/, '').replace(/\nORDER BY[\s\S]*$/, '')
+    const [jointures, conditions = ''] = de.split('\nWHERE ')
+    const filtres = [arborescence && fenetre.variableArbo ? fenetre.variableArbo : null, conditions.trim() || null].filter(Boolean)
+    const ou = filtres.length ? `\nWHERE ${filtres.join('\n  AND ')}` : ''
+    const nomFinal = formaterNom(nom || cat.sujet.libelle)
+    const date = dateIndicateur && cat.champs.find((c) => c.id === dateIndicateur)
+    const colonnes = [`${t}.${fenetre.id} AS ID`, `${t}.${fenetre.code} AS CODE`, `${t}.${fenetre.desi} AS DESI1`, `${t}.${fenetre.actif} AS ACTIF`]
+    if (date && date.niveau === 0) colonnes.push(`${t}.${date.colonne} AS DATE_INDICATEUR`)
+    const requeteIndicateur = `-- ${nomFinal}\nSELECT COUNT(DISTINCT ${t}.${fenetre.id}) AS VAL\n${jointures}${ou}`
+    const requeteListe = `-- ${nomFinal}\nSELECT DISTINCT\n  ${colonnes.join(',\n  ')}\n${jointures}${ou}\nORDER BY ${date && date.niveau === 0 ? 'DATE_INDICATEUR' : 'CODE'}`
+    const essai = etatConnexion().ouverte ? await tester(requeteIndicateur, requeteListe) : { erreurs: [], avertissements: ['Connexion MySQL fermée : requêtes non essayées.'] }
+    let id = null
+    if (enregistrer && !essai.erreurs.length) {
+      id = enregistrerIndicateur({ nom: nomFinal, fenetre: fenetre.libelle, demande: `Créé avec le formulaire « Nouveau rapport »`, definition: { constructeur: etat, dateIndicateur, arborescence }, requeteIndicateur, requeteListe, source: 'formulaire' })
+    }
+    return { id, nom: nomFinal, fenetre: fenetre.libelle, variableArbo: fenetre.variableArbo || null, requeteIndicateur, requeteListe, ...essai }
+  })
+
   // POST /api/constructeur/proposer { phrase, sujet? } : l'IA remplit le formulaire d'après une phrase.
   r.post('/api/constructeur/proposer', async (ctx) => {
     const { phrase, sujet } = await ctx.json()
@@ -161,11 +197,13 @@ export function routes(r) {
  "regrouper_par": [{"quoi": "…", "par": "valeur|mois|annee"}],
  "mesures": [{"fonction": "nombre|somme|moyenne|max|min", "de": "… (vide pour un nombre)"}],
  "filtres": [{"sur": "…", "valeur": "…"}],
+ "comparaisons": [{"colonne": "…", "operateur": "<|<=|>|>=|=|<>", "autre": "…"}],
  "periode": {"sur": "… (date concernée, vide si non précisé)", "valeur": "mois_en_cours|mois_precedent|30_jours|annee_en_cours|12_mois|depassee|a_venir|demandee"} ou null}
 « synthese » dès qu'il est question de nombre, de total, de « par » quelque chose ; sinon « liste ».
 Un type ou une catégorie cité (dépannage, préventif, entretien…) est un filtre : {"sur": "type de maintenance", "valeur": "dépannage"}.
 Une période choisie au lancement du rapport : "demandee".
-« En retard » : {"sur": "date limite", "valeur": "depassee"}. « À venir », « à faire bientôt » : "a_venir".`,
+« En retard » : {"sur": "date limite", "valeur": "depassee"}. « À venir », « à faire bientôt » : "a_venir".
+Une comparaison entre deux valeurs de la même fiche est une « comparaison » : « sous le stock minimum » = {"colonne": "stock réel", "operateur": "<", "autre": "stock minimum"}.`,
       },
       { role: 'user', content: `SUJET : ${cat.sujet.libelle}\nDEMANDE : ${phrase}` },
     ], { temperature: 0, maxMots: 500 })
@@ -193,7 +231,10 @@ Une période choisie au lancement du rapport : "demandee".
     }
     if (!etat.mesures.length) etat.mesures = [{ fonction: 'nombre', champ: null }]
     const nonTrouves = []
+    // Une comparaison répétée par l'IA comme filtre (« stock réel : stock minimum ») n'est pas un filtre de plus.
+    const compares = (p.comparaisons || []).flatMap((c) => [c.colonne, c.autre]).map(normaliser).filter(Boolean)
     for (const f of p.filtres || []) {
+      if (compares.some((x) => normaliser(`${f.sur} ${f.valeur}`).includes(x))) continue
       const champ = trouverChamp(cat, f.sur, (c) => c.nature === 'texte')
       if (!champ || !f.valeur) continue
       // La valeur exacte telle qu'elle est dans la base (« dépannage » → « Intervention de dépannage »).
@@ -202,6 +243,13 @@ Une période choisie au lancement du rapport : "demandee".
       const trouvees = valeurs.filter((v) => normaliser(v.valeur).includes(cherche)).map((v) => String(v.valeur))
       if (trouvees.length) etat.filtres.push({ champ, operateur: 'egal', valeurs: trouvees.slice(0, 10) })
       else nonTrouves.push(`${f.sur} : ${f.valeur}`)
+    }
+    for (const c of p.comparaisons || []) {
+      const comparables = (x) => x.nature !== 'texte'
+      const gauche = trouverChamp(cat, c.colonne, comparables)
+      const droite = trouverChamp(cat, c.autre, comparables)
+      if (gauche && droite && gauche !== droite) etat.filtres.push({ champ: gauche, operateur: 'compare', valeurs: [c.operateur || '<', droite] })
+      else nonTrouves.push(`${c.colonne} ${c.operateur} ${c.autre}`)
     }
     // « En retard » : date limite dépassée, sur les fiches courantes (même si l'IA ne l'a pas relevé).
     const phraseN = normaliser(phrase)

@@ -11,9 +11,9 @@ import { tableauResultats } from '/blocs/base/vue.js'
 const PERIODES = { mois_en_cours: 'Mois en cours', mois_precedent: 'Mois précédent', '30_jours': '30 derniers jours', annee_en_cours: 'Année en cours', '12_mois': '12 derniers mois', depassee: 'Dépassée (avant aujourd’hui)', a_venir: 'À venir (à partir d’aujourd’hui)', demandee: 'Choisie au lancement du rapport' }
 const OPERATEURS = {
   texte: { egal: 'est', different: 'n’est pas', contient: 'contient', commence: 'commence par', vide: 'est vide', non_vide: 'n’est pas vide' },
-  nombre: { egal: '=', '>=': '≥', '<=': '≤', vide: 'est vide', non_vide: 'n’est pas vide' },
-  date8: { periode: 'période', '>=': 'à partir du', '<=': 'jusqu’au', entre: 'entre', vide: 'est vide' },
-  date: { periode: 'période', '>=': 'à partir du', '<=': 'jusqu’au', entre: 'entre', vide: 'est vide' },
+  nombre: { egal: '=', '>=': '≥', '<=': '≤', compare: 'comparé à une autre colonne', vide: 'est vide', non_vide: 'n’est pas vide' },
+  date8: { periode: 'période', '>=': 'à partir du', '<=': 'jusqu’au', entre: 'entre', compare: 'comparée à une autre date', vide: 'est vide' },
+  date: { periode: 'période', '>=': 'à partir du', '<=': 'jusqu’au', entre: 'entre', compare: 'comparée à une autre date', vide: 'est vide' },
 }
 const THEMES = { charte: 'Charte du site', sobre: 'Sobre', bleu: 'Bleu', vert: 'Vert', orange: 'Orange', impression: 'Noir et blanc' }
 
@@ -143,7 +143,7 @@ export default {
         // 3. Filtres
         const aActif = catalogue.champs.some((c) => c.chemin === '' && c.colonne.toUpperCase() === 'ACTIF')
         etapes.push(section('3', 'Quelles lignes ?', [
-          e.filtres.map((f, i) => ligneFiltre(f, champs.get(f.champ), nomChamp(f.champ), e.sujet, () => { e.filtres.splice(i, 1); changer() }, changer)),
+          e.filtres.map((f, i) => ligneFiltre(f, champs.get(f.champ), nomChamp(f.champ), e.sujet, () => { e.filtres.splice(i, 1); changer() }, changer, catalogue, nomChamp)),
           h('div', { class: 'actions' },
             h('button', { class: 'petit', onclick: async () => { const id = await choisirChamp(catalogue, 'Filtrer sur'); if (id) { const c = champs.get(id); e.filtres.push({ champ: id, operateur: c.nature.startsWith('date') ? 'periode' : 'egal', valeurs: c.nature.startsWith('date') ? ['mois_en_cours'] : [] }); changer() } } }, ic('plus', 14), 'Filtre'),
             aActif ? h('select', { title: 'Fiches prises en compte', onchange: (ev) => { e.etat = ev.target.value; changer() } },
@@ -182,13 +182,53 @@ export default {
       vider(apercu,
         h('div', { class: 'carte-entete' },
           h('h2', {}, ic('oeil', 18), 'Aperçu'),
-          h('button', { class: 'principal', disabled: Boolean(r.erreurs?.length), onclick: creer }, ic('document', 16), brouillon.nom ? 'Mettre à jour le rapport' : 'Créer le rapport')),
+          h('div', { class: 'actions' },
+            h('button', { title: 'Compter les fiches qui passent les filtres : requête indicateur et requête liste pour la GMAO', onclick: creerIndicateur }, ic('graphique', 16), 'Créer un indicateur ITM'),
+            h('button', { class: 'principal', disabled: Boolean(r.erreurs?.length), onclick: creer }, ic('document', 16), brouillon.nom ? 'Mettre à jour le rapport' : 'Créer le rapport'))),
         (r.erreurs || []).map((x) => h('div', { class: 'bandeau' }, ic('alerte'), x)),
         (r.avertissements || []).map((x) => h('p', { class: 'discret', style: { fontSize: '13px' } }, '• ', x)),
         r.total !== undefined ? h('p', { class: r.total ? 'texte-2' : 'bandeau' }, r.total ? `${r.total} ligne(s) dans le rapport${r.total > 50 ? ' (50 premières affichées)' : ''}.` : 'Aucune ligne : le rapport serait vide. Élargissez les filtres.') : null,
         r.resultat ? tableauResultats({ ...r.resultat, colonnes: r.resultat.colonnes.map((c, i) => ({ ...c, nom: r.colonnes?.[i]?.libelle || c.nom })) }) : null,
         r.sql ? h('details', { style: { marginTop: '10px' } }, h('summary', { class: 'discret' }, 'Requête SQL écrite par BiRTEC'), h('pre', { class: 'code', 'data-langue': 'sql' }, h('code', {}, r.sql))) : null,
       )
+    }
+
+    // Indicateur ITM : le sujet est la table comptée, les filtres de l'étape 3 font la condition.
+    async function creerIndicateur() {
+      const dates = (catalogue?.champs || []).filter((c) => c.niveau === 0 && (c.nature === 'date' || c.nature === 'date8'))
+      const nom = h('input', { type: 'text', value: brouillon.aspect.titre ? `[Maintenance] - ${brouillon.aspect.titre}` : '', placeholder: '[Catégorie] - Nom court' })
+      const date = h('select', {}, h('option', { value: '' }, '— Aucune —'), dates.map((c) => h('option', { value: c.id }, c.libelle)))
+      const arbo = h('input', { type: 'checkbox', checked: true })
+      const resultat = h('div')
+      const essayer = async (enregistrer) => {
+        vider(resultat, h('p', { class: 'discret curseur' }, 'Essai sur la base'))
+        const r = await api('/api/constructeur/indicateur', { methode: 'POST', corps: { etat: brouillon.etat, nom: nom.value, dateIndicateur: date.value || null, arborescence: arbo.checked, enregistrer } })
+          .catch((erreur) => ({ erreurs: [erreur.message] }))
+        vider(resultat,
+          (r.erreurs || []).map((x) => h('div', { class: 'bandeau' }, ic('alerte'), x)),
+          r.valeur !== undefined && r.valeur !== null ? h('p', {}, h('strong', {}, String(r.valeur)), ` fiche(s) aujourd’hui — fenêtre à ouvrir dans la GMAO : ${r.fenetre}.`) : null,
+          r.requeteIndicateur ? h('details', {}, h('summary', { class: 'discret' }, 'Les deux requêtes'), h('pre', { class: 'code' }, h('code', {}, `${r.requeteIndicateur}\n\n${r.requeteListe}`))) : null)
+        return r
+      }
+      const ok = await fenetre({
+        titre: 'Créer un indicateur ITM',
+        large: true,
+        contenu: h('div', { class: 'grille' },
+          h('p', { class: 'texte-2' }, `Compte les fiches « ${catalogue?.sujet.libelle} » qui passent les filtres de l’étape 3. Les colonnes et regroupements ne servent pas à l’indicateur.`),
+          h('label', { class: 'champ' }, h('span', {}, 'Nom de l’indicateur'), nom),
+          h('label', { class: 'champ' }, h('span', {}, 'Date affichée dans la liste (facultatif)'), date),
+          h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, arbo, 'Limiter à l’arborescence de la personne connectée (si la GMAO a une variable pour cette fenêtre)'),
+          h('div', { class: 'actions' }, h('button', { class: 'petit', onclick: () => essayer(false) }, ic('lecture', 14), 'Essayer')),
+          resultat),
+        boutons: [
+          { texte: 'Annuler', classe: 'discret', valeur: null },
+          { texte: 'Enregistrer l’indicateur', classe: 'principal', action: async () => { const r = await essayer(true); return r.id ? r.id : false } },
+        ],
+      })
+      if (ok) {
+        notifier('Indicateur enregistré : ses requêtes sont prêtes à copier')
+        location.hash = `#/itm/${ok}`
+      }
     }
 
     async function creer() {
@@ -243,13 +283,21 @@ function triListe(e, catalogue, nomChamp, changer) {
       h('option', { value: 'desc', selected: e.tri.sens === 'desc' }, 'décroissant')) : null)
 }
 
-function ligneFiltre(f, c, nom, sujet, retirer, changer) {
+function ligneFiltre(f, c, nom, sujet, retirer, changer, catalogue, nomChamp) {
   if (!c) return null
   const operateurs = OPERATEURS[c.nature] || OPERATEURS.texte
-  const operateur = h('select', { onchange: (ev) => { f.operateur = ev.target.value; f.valeurs = f.operateur === 'periode' ? ['mois_en_cours'] : []; changer() } },
+  const operateur = h('select', { onchange: (ev) => { f.operateur = ev.target.value; f.valeurs = f.operateur === 'periode' ? ['mois_en_cours'] : f.operateur === 'compare' ? ['<', ''] : []; changer() } },
     Object.entries(operateurs).map(([v, t]) => h('option', { value: v, selected: f.operateur === v }, t)))
   let valeur = null
-  if (f.operateur === 'periode') {
+  if (f.operateur === 'compare') {
+    // Comparaison avec une autre colonne de même nature (nombre avec nombre, date avec date).
+    const memeNature = (x) => (c.nature === 'nombre' ? x.nature === 'nombre' : x.nature === 'date' || x.nature === 'date8') && x.id !== c.id
+    valeur = h('span', { style: { display: 'flex', gap: '6px', alignItems: 'center' } },
+      h('select', { onchange: (ev) => { f.valeurs[0] = ev.target.value; changer() } },
+        [['<', '<'], ['<=', '≤'], ['>', '>'], ['>=', '≥'], ['=', '='], ['<>', '≠']].map(([v, t]) => h('option', { value: v, selected: (f.valeurs[0] || '<') === v }, t))),
+      h('button', { class: 'petit', onclick: async () => { const id = await choisirChamp(catalogue, 'Comparer à', memeNature); if (id) { f.valeurs[1] = id; changer() } } },
+        f.valeurs[1] ? nomChamp(f.valeurs[1]) : 'Choisir la colonne…'))
+  } else if (f.operateur === 'periode') {
     valeur = h('select', { onchange: (ev) => { f.valeurs = [ev.target.value]; changer() } }, Object.entries(PERIODES).map(([v, t]) => h('option', { value: v, selected: f.valeurs[0] === v }, t)))
   } else if (['vide', 'non_vide'].includes(f.operateur)) {
     valeur = null

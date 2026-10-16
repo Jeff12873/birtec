@@ -15,16 +15,20 @@
 //   tri: { champ, sens: 'asc'|'desc' },
 //   totaux: true,
 // }
+// Filtre « compare » : valeurs = [opérateur (<, <=, >, >=, =, <>), id de l'autre champ] — ex. stock réel < stock mini.
+//
+// options.aliasSujet : alias de la table du sujet (par défaut t0). Pour un indicateur ITM, c'est le nom de la
+// table lui-même, car les variables de la GMAO ({{ARBO_FILTRE_…}}) s'écrivent avec ce nom.
 
 const FORMAT_PAR_NATURE = { nombre: 'decimal', date: 'date', date8: 'date', texte: 'texte' }
 
-export function construire(etat, catalogue) {
+export function construire(etat, catalogue, { aliasSujet = 't0' } = {}) {
   const champs = new Map(catalogue.champs.map((c) => [c.id, c]))
   const erreurs = []
   const sujet = catalogue.sujet.table
 
-  // Alias de table : t0 pour le sujet, puis un alias par chemin utilisé.
-  const alias = new Map([['', 't0']])
+  // Alias de table : t0 (ou le nom de la table) pour le sujet, puis un alias par chemin utilisé.
+  const alias = new Map([['', aliasSujet]])
   const jointures = []
   const joindre = (cle) => {
     if (alias.has(cle)) return alias.get(cle)
@@ -34,7 +38,7 @@ export function construire(etat, catalogue) {
       const e = etapes[i]
       const cleEtape = cleJusqua(cle, i)
       if (!alias.has(cleEtape)) {
-        const a = `t${alias.size}`
+        const a = `t${alias.size}`  // t1, t2… (le sujet occupe la première place)
         const aPrec = alias.get(precedent)
         const sur = e.sens === 'parent' ? `${a}.${e.versColonne} = ${aPrec}.${e.colonne}` : `${a}.${e.colonne} = ${aPrec}.${e.versColonne}`
         jointures.push(`LEFT JOIN ${e.table} ${a} ON ${sur}`)
@@ -64,7 +68,7 @@ export function construire(etat, catalogue) {
   const parametres = []
   const liaisons = []
   const colSujet = catalogue.champs.find((c) => c.chemin === '' && c.colonne.toUpperCase() === 'ACTIF')
-  if (colSujet && etat.etat !== 'toutes') conditions.push(etat.etat === 'courantes' ? `t0.${colSujet.colonne} = 1` : `t0.${colSujet.colonne} <> 0`)
+  if (colSujet && etat.etat !== 'toutes') conditions.push(etat.etat === 'courantes' ? `${aliasSujet}.${colSujet.colonne} = 1` : `${aliasSujet}.${colSujet.colonne} <> 0`)
 
   for (const f of etat.filtres || []) {
     const c = champs.get(f.champ)
@@ -85,6 +89,12 @@ export function construire(etat, catalogue) {
       case 'commence':
         if (v.length) conditions.push(`${e} LIKE ${litteral(`${v[0]}%`)}`)
         break
+      case 'compare': {
+        // Comparaison avec une autre colonne (ex. stock réel < stock minimum, date de fin > date limite).
+        const op = ['<', '<=', '>', '>=', '=', '<>'].includes(f.valeurs?.[0]) ? f.valeurs[0] : '<'
+        if (f.valeurs?.[1] && champs.has(f.valeurs[1])) conditions.push(`${e} ${op} ${expression(f.valeurs[1])}`)
+        break
+      }
       case 'vide':
         conditions.push(`(${e} IS NULL OR ${e} = '')`)
         break
@@ -159,7 +169,7 @@ export function construire(etat, catalogue) {
       let sql
       let libelle
       if (m.fonction === 'nombre' || !c) {
-        sql = `COUNT(DISTINCT t0.${catalogue.champs.find((x) => x.chemin === '' && x.colonne.toUpperCase() === `ID_${sujet.toUpperCase()}`)?.colonne || 'ID'})`
+        sql = `COUNT(DISTINCT ${aliasSujet}.${catalogue.champs.find((x) => x.chemin === '' && x.colonne.toUpperCase() === `ID_${sujet.toUpperCase()}`)?.colonne || 'ID'})`
         // « Rapport d’intervention (intervention réalisée) » → « Nombre de rapports d’intervention »
         const court = catalogue.sujet.libelle.replace(/\s*\(.*\)\s*$/, '').toLowerCase()
         libelle = `Nombre de ${court.replace(/^(\S+?)(?<![sx])(\s|$)/, '$1s$2')}`.slice(0, 60)
@@ -194,7 +204,7 @@ export function construire(etat, catalogue) {
     if (etat.tri?.champ && champs.has(etat.tri.champ)) orderBy.push(`${affichage(etat.tri.champ)} ${etat.tri.sens === 'desc' ? 'DESC' : 'ASC'}`)
   }
 
-  const de = `FROM ${sujet} t0${jointures.length ? `\n${jointures.join('\n')}` : ''}`
+  const de = `FROM ${sujet}${aliasSujet === sujet ? '' : ` ${aliasSujet}`}${jointures.length ? `\n${jointures.join('\n')}` : ''}`
   const ou = conditions.length ? `\nWHERE ${conditions.join('\n  AND ')}` : ''
   const sql = `SELECT\n  ${select.join(',\n  ')}\n${de}${ou}${groupBy ? `\n${groupBy}` : ''}${orderBy.length ? `\nORDER BY ${orderBy.join(', ')}` : ''}`
   const multiplie = [...alias.keys()].some((cle) => catalogue.chemins[cle]?.some((e) => e.sens === 'fille'))
