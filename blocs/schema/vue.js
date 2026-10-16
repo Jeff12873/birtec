@@ -22,7 +22,7 @@ const positions = new Map()
 let dispositionChargee = false
 
 // Réglages de la simulation (gardés sur ce poste).
-const reglages = { attraction: 1, ecartement: 1, figer: true }
+const reglages = { attraction: 1, ecartement: 1, figer: true, cles: false }
 try {
   Object.assign(reglages, JSON.parse(localStorage.getItem('birtec-schema-reglages') || '{}'))
 } catch {
@@ -139,6 +139,12 @@ function construireGraphe(schema) {
   }
   for (const n of noeuds) n.rayon = 4 + Math.sqrt(n.degre) * 2.6
   return { noeuds, liens, parNom }
+}
+
+// La clé de liaison d'un lien : « ID_DI », ou « ID_M_N1 = ID_MACHI » quand les deux colonnes diffèrent.
+// Plusieurs colonnes entre les deux mêmes tables : séparées par « · ».
+function texteCle(lien) {
+  return lien.jointures.map((j) => (j.colonne === j.versColonne ? j.colonne : `${j.colonne} = ${j.versColonne}`)).join(' · ')
 }
 
 // Position de départ stable (dépend du nom) : le graphe se dessine pareil d'une fois à l'autre.
@@ -496,6 +502,32 @@ class VueGraphe {
     }
     c.globalAlpha = 1
 
+    // Clés de liaison, écrites le long de chaque ligne (dans son axe, jamais à l'envers).
+    if (reglages.cles) {
+      c.font = `${Math.round(10 + Math.min(3, k))}px ui-monospace, monospace`
+      c.textAlign = 'center'
+      c.textBaseline = 'bottom'
+      for (const l of this.graphe.liens) {
+        const pale = focus ? !(l.a === focus || l.b === focus) : surChemin.size > 0 && !liensChemin.has(l)
+        if (pale) continue
+        const a = this.versEcran(l.a.x, l.a.y)
+        const b = this.versEcran(l.b.x, l.b.y)
+        const longueur = Math.hypot(b.x - a.x, b.y - a.y)
+        const texte = texteCle(l)
+        const place = longueur - (l.a.rayon + l.b.rayon) * Math.sqrt(k) - 8
+        if (place < c.measureText(texte).width) continue // ligne trop courte à cet écran : on zoome pour la voir
+        let angle = Math.atan2(b.y - a.y, b.x - a.x)
+        if (angle > Math.PI / 2 || angle < -Math.PI / 2) angle += Math.PI // toujours lisible de gauche à droite
+        c.save()
+        c.translate((a.x + b.x) / 2, (a.y + b.y) / 2)
+        c.rotate(angle)
+        c.fillStyle = liensChemin.has(l) ? couleurs.chemin : l.jointures.some((j) => j.libelle) ? couleurs.decrite : couleurs.texte2
+        c.fillText(texte, 0, -3)
+        c.restore()
+      }
+      c.textBaseline = 'alphabetic'
+    }
+
     // Bulles et noms
     const grands = new Set([...this.graphe.noeuds].sort((x, y) => y.degre - x.degre).slice(0, 12))
     for (const n of this.graphe.noeuds) {
@@ -572,6 +604,8 @@ function reglagesSchema(vue, caseEcartees) {
     curseur('attraction', 'Force des liens', 'Plus fort : les tables liées se rapprochent'),
     curseur('ecartement', 'Écartement', 'Plus fort : les bulles se repoussent davantage'),
     h('label', { class: 'case-schema', title: 'Une bulle déplacée reste où on la lâche (double-clic dessus pour la libérer)' }, figer, 'Figer en lâchant'),
+    h('label', { class: 'case-schema', title: 'Écrire la clé de liaison le long de chaque ligne (zoomez si une ligne est trop courte)' },
+      h('input', { type: 'checkbox', checked: reglages.cles, onchange: (e) => { reglages.cles = e.target.checked; garderReglages(); vue.dessiner() } }), 'Clés de liaison'),
     h('button', { class: 'petit discret', title: 'Toutes les bulles reprennent leur place dans la simulation', onclick: () => vue.libererTout() }, 'Tout libérer'),
     h('label', { class: 'case-schema' }, caseEcartees, 'Tables écartées'),
   )
@@ -584,7 +618,7 @@ function aideSchema() {
     h('h2', { style: { marginBottom: '8px' } }, 'Mode d’emploi'),
     h('ul', { class: 'texte-2', style: { paddingLeft: '18px', fontSize: '14px', margin: 0 } },
       h('li', {}, 'Molette : zoomer. Glisser le fond : se déplacer. Glisser une bulle : la déplacer (elle reste là si « Figer en lâchant » est coché ; double-clic pour la libérer).'),
-      h('li', {}, 'Curseurs sous le graphe : force des liens et écartement des bulles.'),
+      h('li', {}, 'Curseurs sous le graphe : force des liens et écartement des bulles. « Clés de liaison » : la clé écrite le long de chaque ligne.'),
       h('li', {}, 'Clic sur une bulle : la décrire (c’est la source).'),
       h('li', {}, 'Ctrl + clic sur une autre bulle : chemin le plus court, avec les clés de jointure.'),
       h('li', {}, 'Clic sur un lien : le nommer et le décrire.'),
@@ -715,6 +749,14 @@ function imprimer(graphe, vue, schema) {
   const liensChemin = new Set(vue.chemin?.etapes?.map((e) => e.lien) || [])
   const surChemin = new Set(vue.chemin?.etapes?.flatMap((e) => [e.de, e.vers]) || [])
   const traits = graphe.liens.map((l) => `<line x1="${l.a.x}" y1="${l.a.y}" x2="${l.b.x}" y2="${l.b.y}" class="${liensChemin.has(l) ? 'chemin' : l.jointures.some((j) => j.libelle) ? 'nomme' : ''}"/>`).join('')
+  // Clés de liaison le long des lignes, si elles sont affichées à l'écran.
+  const cles = !reglages.cles ? '' : graphe.liens.map((l) => {
+    let angle = (Math.atan2(l.b.y - l.a.y, l.b.x - l.a.x) * 180) / Math.PI
+    if (angle > 90 || angle < -90) angle += 180
+    const mx = (l.a.x + l.b.x) / 2
+    const my = (l.a.y + l.b.y) / 2
+    return `<text class="cle" x="${mx}" y="${my - taille * 0.25}" font-size="${taille * 0.6}" transform="rotate(${angle.toFixed(1)} ${mx} ${my})">${x(texteCle(l))}</text>`
+  }).join('')
   const bulles = noeuds.map((n) => {
     const classe = surChemin.has(n) ? 'chemin' : n.table.exclue ? 'ecartee' : n.table.libelle ? 'decrite' : ''
     const grand = n.degre > 8 ? 1.25 : 1
@@ -752,13 +794,14 @@ function imprimer(graphe, vue, schema) {
   g.chemin circle { fill: #f59e0b; stroke: #92400e; stroke-width: ${taille * 0.15}; }
   text { text-anchor: middle; fill: #111827; font-family: "Segoe UI", system-ui, sans-serif; }
   text.libelle { fill: #4b5563; font-style: italic; }
+  text.cle { fill: #6b7280; font-family: ui-monospace, monospace; }
   footer { display: flex; gap: 8mm; align-items: flex-start; font-size: 9pt; color: #374151; border-top: 1px solid #e5e7eb; padding-top: 2mm; margin-top: 2mm; }
   .pastille { display: inline-block; width: 9pt; height: 9pt; border-radius: 50%; vertical-align: -1pt; margin-right: 3pt; }
   .chemin-legende { margin-left: auto; font-family: ui-monospace, monospace; font-size: 8.5pt; }
   @media screen { body { padding: 10mm; background: #e5e7eb; } .page { background: #fff; padding: 10mm; box-shadow: 0 2px 12px rgba(0,0,0,.15); height: auto; min-height: 277mm; } }
 </style></head><body><div class="page">
 <header><h1>Schéma des liens</h1><div class="sous-titre">Base « ${x(base)} » — ${noeuds.length} tables, ${graphe.liens.length} liens — ${date} — BiRTEC</div></header>
-<svg viewBox="${minX} ${minY} ${largeur} ${hauteur}" preserveAspectRatio="xMidYMid meet">${traits}${bulles}</svg>
+<svg viewBox="${minX} ${minY} ${largeur} ${hauteur}" preserveAspectRatio="xMidYMid meet">${traits}${cles}${bulles}</svg>
 <footer>
   <span><span class="pastille" style="background:#0d9488"></span>Table décrite dans le dictionnaire</span>
   <span><span class="pastille" style="background:#7c86c4"></span>Table non décrite</span>
