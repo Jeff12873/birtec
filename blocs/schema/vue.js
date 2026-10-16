@@ -1,17 +1,20 @@
-// Schéma des liens (« araignée ») : une table au centre, les tables qui lui sont liées autour.
-// Un clic sur une table la décrit (nom clair, description, prise en compte par l'IA) ou la met au centre ;
-// un clic sur un lien permet de le nommer et de le décrire. Tout est gardé dans le fichier .birtec
-// (dictionnaire) et donné à l'IA pour choisir ses jointures.
+// Schéma des liens : toutes les tables en bulles, reliées par leurs liens, disposées par une petite
+// simulation physique (les bulles se repoussent, les liens les rapprochent), à la manière du graphe d'Obsidian.
+//
+//   molette : zoom          glisser le fond : se déplacer          glisser une bulle : la déplacer
+//   clic sur une bulle : la décrire (nom clair, description, prise en compte par l'IA) — c'est la source
+//   Ctrl + clic sur une autre bulle : chemin de jointure le plus court entre les deux (tables et clés)
+//   clic sur un lien : le nommer et le décrire
+//   « Imprimer / PDF » : page A3 paysage mise en forme, à enregistrer en PDF
+//
+// Tout ce qui est saisi est gardé dans le fichier .birtec (dictionnaire) et sert à l'IA.
 
 import { h, vider, ic, notifier } from '/socle/ui.js'
 import { api } from '/socle/api.js'
+import { etat } from '/socle/etat.js'
 
-const SVG = 'http://www.w3.org/2000/svg'
-const LARGEUR = 1000
-const HAUTEUR = 720
-const VOISINS_MAX = 22
-
-let deuxiemeCercle = false
+let voirEcartees = false
+const positions = new Map() // gardées d'une visite à l'autre : le graphe ne se réorganise pas à chaque fois
 
 export default {
   chemin: 'schema',
@@ -19,147 +22,474 @@ export default {
   icone: 'reseau',
   menu: true,
   aide: 'schema',
+  rafraichir: false,
 
   async afficher(zone, { id }) {
     const schema = await api('/api/schema')
-    const parNom = new Map(schema.tables.map((t) => [t.nom.toLowerCase(), t]))
-    const centre = parNom.get(String(id || '').toLowerCase())
-      || schema.tables.find((t) => t.libelle && !t.exclue)
-      || schema.tables[0]
-    if (!centre) return vider(zone, h('div', { class: 'carte vide' }, 'Structure de la base inconnue : connectez-vous à MySQL ou importez un export de structure.'))
+    if (!schema.tables.length) return vider(zone, h('div', { class: 'carte vide' }, 'Structure de la base inconnue : connectez-vous à MySQL ou importez un export de structure.'))
 
-    const panneau = h('div', { class: 'carte', style: { position: 'sticky', top: '86px' } })
-    const recherche = h('input', { type: 'search', placeholder: 'Mettre une table au centre…', list: 'birtec-tables' })
-    recherche.addEventListener('change', () => {
-      const t = parNom.get(recherche.value.trim().toLowerCase())
-      if (t) location.hash = `#/schema/${encodeURIComponent(t.nom)}`
-    })
-    const caseCercle = h('input', { type: 'checkbox', checked: deuxiemeCercle, onchange: () => { deuxiemeCercle = caseCercle.checked; window.birtec.recharger() } })
-
-    const graphe = construireGraphe(centre, schema, parNom)
-    const dessin = dessiner(graphe, {
-      surTable: (t) => vider(panneau, panneauTable(t, centre)),
+    const graphe = construireGraphe(schema)
+    const panneau = h('div', { class: 'carte panneau-schema' })
+    const toile = h('canvas', { class: 'toile-schema' })
+    const vue = new VueGraphe(toile, graphe, {
+      surSelection: (n) => vider(panneau, panneauTable(n, vue)),
+      surChemin: (chemin) => vider(panneau, panneauChemin(chemin, vue, panneau)),
       surLien: (l) => vider(panneau, panneauLien(l)),
     })
-    vider(panneau, panneauTable(centre, centre))
 
+    const recherche = h('input', { type: 'search', placeholder: 'Chercher une table…', list: 'birtec-tables' })
+    const chercher = () => {
+      const n = graphe.parNom.get(recherche.value.trim().toLowerCase())
+      if (n) vue.centrerSur(n, true)
+    }
+    recherche.addEventListener('change', chercher)
+    recherche.addEventListener('keydown', (e) => e.key === 'Enter' && chercher())
+    const caseEcartees = h('input', { type: 'checkbox', checked: voirEcartees, onchange: () => { voirEcartees = caseEcartees.checked; window.birtec.recharger() } })
+
+    vider(panneau, aideSchema())
     vider(
       zone,
       h('div', { class: 'entete-page' },
-        h('div', {}, h('h1', {}, 'Schéma des liens'), h('p', { class: 'sous-titre' }, 'Cliquez une table pour la décrire ou la mettre au centre, un lien pour le nommer. L’IA se sert de ces noms pour choisir ses jointures.')),
-        h('div', { class: 'actions' }, recherche, h('datalist', { id: 'birtec-tables' }, schema.tables.map((t) => h('option', { value: t.nom }, t.libelle || '')))),
+        h('div', {}, h('h1', {}, 'Schéma des liens'), h('p', { class: 'sous-titre' }, `${graphe.noeuds.length} tables, ${graphe.liens.length} liens. Clic : une table ; Ctrl + clic : chemin le plus court jusqu’à une autre.`)),
+        h('div', { class: 'actions' },
+          recherche,
+          h('datalist', { id: 'birtec-tables' }, graphe.noeuds.map((n) => h('option', { value: n.table.nom }, n.table.libelle || ''))),
+          h('button', { class: 'discret', title: 'Voir tout le graphe', onclick: () => vue.toutVoir() }, ic('rafraichir', 16), 'Tout voir'),
+          h('button', { onclick: () => imprimer(graphe, vue, schema) }, ic('document', 16), 'Imprimer / PDF'),
+        ),
       ),
       h('div', { class: 'schema-grille' },
-        h('div', { class: 'carte', style: { padding: '8px' } },
-          dessin,
-          h('div', { class: 'discret', style: { fontSize: '12px', display: 'flex', gap: '16px', flexWrap: 'wrap', padding: '6px 8px' } },
-            h('label', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, caseCercle, 'Afficher le 2e cercle (tables liées aux voisines)'),
-            graphe.caches ? h('span', {}, `${graphe.caches} autre(s) table(s) liée(s) non affichée(s) (les tables décrites passent en premier)`) : null,
-            h('span', {}, 'Tables grisées : écartées de l’IA.'),
-          ),
+        h('div', { class: 'carte', style: { padding: '0', overflow: 'hidden', position: 'relative' } },
+          toile,
+          h('label', { class: 'option-schema' }, caseEcartees, 'Tables écartées de l’IA'),
         ),
         panneau,
       ),
     )
+    vue.demarrer()
+    const choisi = graphe.parNom.get(String(id || '').toLowerCase())
+    if (choisi) setTimeout(() => vue.centrerSur(choisi, true), 400)
   },
 }
 
-// ---------------------------------------------------------------- graphe
+// ---------------------------------------------------------------- données du graphe
 
-function construireGraphe(centre, schema, parNom) {
-  const voisinsDe = (table) => {
-    const liens = []
-    for (const l of table.liens) {
-      const autre = parNom.get(l.versTable.toLowerCase())
-      if (autre && autre !== table) liens.push({ de: table, vers: autre, lien: l })
-    }
-    for (const t of schema.tables) {
-      if (t === table) continue
-      for (const l of t.liens) if (l.versTable.toLowerCase() === table.nom.toLowerCase()) liens.push({ de: t, vers: table, lien: l })
-    }
-    return liens
-  }
-  const rang = (t) => (t.exclue ? 2 : t.libelle ? 0 : 1)
-
-  const liensCentre = voisinsDe(centre)
-  const voisins = [...new Set(liensCentre.map((l) => (l.de === centre ? l.vers : l.de)))].sort((a, b) => rang(a) - rang(b) || a.nom.localeCompare(b.nom))
-  const affiches = voisins.slice(0, VOISINS_MAX)
-  const noeuds = [{ table: centre, x: LARGEUR / 2, y: HAUTEUR / 2, niveau: 0 }]
-  affiches.forEach((t, i) => {
-    const angle = (2 * Math.PI * i) / affiches.length - Math.PI / 2
-    noeuds.push({ table: t, x: LARGEUR / 2 + Math.cos(angle) * 250, y: HAUTEUR / 2 + Math.sin(angle) * 230, niveau: 1, angle })
+function construireGraphe(schema) {
+  const tables = schema.tables.filter((t) => voirEcartees || !t.exclue)
+  const parNom = new Map()
+  const noeuds = tables.map((table, i) => {
+    const p = positions.get(table.nom) || depart(table.nom, i, tables.length)
+    const n = { table, x: p.x, y: p.y, vx: 0, vy: 0, degre: 0, voisins: new Set() }
+    parNom.set(table.nom.toLowerCase(), n)
+    return n
   })
-  const aretes = liensCentre.filter((l) => affiches.includes(l.de) || affiches.includes(l.vers))
-
-  if (deuxiemeCercle) {
-    const deja = new Set(noeuds.map((n) => n.table))
-    for (const n of noeuds.filter((x) => x.niveau === 1)) {
-      if (n.table.exclue) continue
-      const suivants = voisinsDe(n.table).filter((l) => !deja.has(l.de === n.table ? l.vers : l.de) && !(l.de === n.table ? l.vers : l.de).exclue).slice(0, 3)
-      suivants.forEach((l, j) => {
-        const t = l.de === n.table ? l.vers : l.de
-        deja.add(t)
-        const angle = n.angle + (j - (suivants.length - 1) / 2) * 0.12
-        noeuds.push({ table: t, x: LARGEUR / 2 + Math.cos(angle) * 420, y: HAUTEUR / 2 + Math.sin(angle) * 330, niveau: 2 })
-        aretes.push(l)
-      })
+  // Un lien par paire de tables (avec toutes les colonnes qui les relient).
+  const parPaire = new Map()
+  for (const n of noeuds) {
+    for (const l of n.table.liens) {
+      const m = parNom.get(l.versTable.toLowerCase())
+      if (!m || m === n) continue
+      const cle = [n.table.nom, m.table.nom].sort().join('|')
+      if (!parPaire.has(cle)) parPaire.set(cle, { a: n, b: m, jointures: [] })
+      parPaire.get(cle).jointures.push({ de: n.table.nom, colonne: l.colonne, vers: m.table.nom, versColonne: l.versColonne, libelle: l.libelle || '', description: l.description || '' })
     }
   }
-  return { noeuds, aretes, caches: voisins.length - affiches.length }
+  const liens = [...parPaire.values()]
+  for (const l of liens) {
+    // Le lien nommé passe en premier : c'est lui que montrent le chemin et l'impression.
+    l.jointures.sort((x, y) => Boolean(y.libelle) - Boolean(x.libelle))
+    l.a.degre++
+    l.b.degre++
+    l.a.voisins.add(l.b)
+    l.b.voisins.add(l.a)
+  }
+  for (const n of noeuds) n.rayon = 4 + Math.sqrt(n.degre) * 2.6
+  return { noeuds, liens, parNom }
 }
 
-function el(nom, attributs = {}, ...enfants) {
-  const e = document.createElementNS(SVG, nom)
-  for (const [cle, valeur] of Object.entries(attributs)) {
-    if (cle.startsWith('on')) e.addEventListener(cle.slice(2), valeur)
-    else e.setAttribute(cle, valeur)
-  }
-  for (const enfant of enfants.flat()) if (enfant) e.append(enfant instanceof Node ? enfant : document.createTextNode(enfant))
-  return e
+// Position de départ stable (dépend du nom) : le graphe se dessine pareil d'une fois à l'autre.
+function depart(nom, i, total) {
+  let graine = 0
+  for (const c of nom) graine = (graine * 31 + c.charCodeAt(0)) >>> 0
+  const angle = (i / total) * Math.PI * 2 + (graine % 100) / 100
+  const rayon = 150 + (graine % 300)
+  return { x: Math.cos(angle) * rayon, y: Math.sin(angle) * rayon }
 }
 
-function dessiner(graphe, { surTable, surLien }) {
-  const position = new Map(graphe.noeuds.map((n) => [n.table, n]))
-  const svg = el('svg', { viewBox: `0 0 ${LARGEUR} ${HAUTEUR}`, class: 'schema-liens', role: 'img' })
+// Chemin le plus court : un lien nommé dans le dictionnaire, ou vers une table « fille », coûte moins
+// (mêmes règles que les chemins donnés à l'IA).
+function cheminLePlusCourt(graphe, depart, arrivee) {
+  const cout = (lien) => {
+    const nomme = lien.jointures.some((j) => j.libelle)
+    const a = lien.a.table.nom.toLowerCase()
+    const b = lien.b.table.nom.toLowerCase()
+    return nomme ? 0.6 : a.startsWith(b) || b.startsWith(a) ? 0.8 : 1
+  }
+  const parNoeud = new Map(graphe.noeuds.map((n) => [n, []]))
+  for (const l of graphe.liens) {
+    parNoeud.get(l.a).push({ vers: l.b, lien: l })
+    parNoeud.get(l.b).push({ vers: l.a, lien: l })
+  }
+  const meilleurs = new Map([[depart, { cout: 0, precedent: null, lien: null }]])
+  const aTraiter = new Set([depart])
+  const faits = new Set()
+  while (aTraiter.size) {
+    let courant = null
+    for (const n of aTraiter) if (!courant || meilleurs.get(n).cout < meilleurs.get(courant).cout) courant = n
+    aTraiter.delete(courant)
+    faits.add(courant)
+    if (courant === arrivee) break
+    for (const { vers, lien } of parNoeud.get(courant)) {
+      if (faits.has(vers)) continue
+      const c = meilleurs.get(courant).cout + cout(lien)
+      if (!meilleurs.has(vers) || meilleurs.get(vers).cout > c) {
+        meilleurs.set(vers, { cout: c, precedent: courant, lien })
+        aTraiter.add(vers)
+      }
+    }
+  }
+  if (!meilleurs.has(arrivee)) return null
+  const etapes = []
+  for (let n = arrivee; meilleurs.get(n).precedent; n = meilleurs.get(n).precedent) etapes.unshift({ de: meilleurs.get(n).precedent, vers: n, lien: meilleurs.get(n).lien })
+  return { depart, arrivee, etapes }
+}
 
-  for (const a of graphe.aretes) {
-    const p1 = position.get(a.de)
-    const p2 = position.get(a.vers)
-    if (!p1 || !p2) continue
-    const etiquette = a.lien.libelle || a.lien.colonne
-    // Le nom du lien est placé plus près de la table la plus éloignée du centre (moins de chevauchements).
-    const t = p1.niveau < p2.niveau ? 0.62 : p1.niveau > p2.niveau ? 0.38 : 0.5
-    const mx = p1.x + (p2.x - p1.x) * t
-    const my = p1.y + (p2.y - p1.y) * t
-    svg.append(el('g', { class: `arete ${a.lien.libelle ? 'nommee' : ''}`, onclick: () => surLien(a) },
-      el('line', { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, class: 'trait' }),
-      el('line', { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, class: 'zone-clic' }),
-      el('text', { x: mx, y: my - 4, 'text-anchor': 'middle', class: 'etiquette-lien' }, etiquette.length > 26 ? etiquette.slice(0, 25) + '…' : etiquette),
-      el('title', {}, `${a.de.nom}.${a.lien.colonne} → ${a.vers.nom}.${a.lien.versColonne}${a.lien.description ? ` — ${a.lien.description}` : ''}`),
-    ))
+// ---------------------------------------------------------------- dessin interactif
+
+class VueGraphe {
+  constructor(toile, graphe, rappels) {
+    this.toile = toile
+    this.graphe = graphe
+    this.rappels = rappels
+    this.vue = { x: 0, y: 0, k: 0.8 }
+    this.chaleur = positions.size ? 0.3 : 1 // énergie de la simulation : elle s'arrête quand tout est en place
+    this.survol = null
+    this.source = null
+    this.chemin = null
+    this.lienChoisi = null
+    this.tenu = null
+    this.couleurs = couleursDuTheme()
+    this.ecouter()
   }
 
-  for (const n of graphe.noeuds) {
-    const t = n.table
-    const largeur = n.niveau === 2 ? 110 : 150
-    const hauteur = t.libelle && n.niveau < 2 ? 42 : 28
-    const libelle = t.libelle ? (t.libelle.length > 24 ? t.libelle.slice(0, 23) + '…' : t.libelle) : ''
-    svg.append(el('g', {
-      class: `noeud niveau-${n.niveau} ${t.exclue ? 'ecartee' : ''} ${t.libelle ? 'decrite' : ''}`,
-      transform: `translate(${n.x - largeur / 2}, ${n.y - hauteur / 2})`,
-      onclick: () => surTable(t),
-      ondblclick: () => (location.hash = `#/schema/${encodeURIComponent(t.nom)}`),
-    },
-      el('rect', { width: largeur, height: hauteur, rx: 8 }),
-      el('text', { x: largeur / 2, y: libelle && n.niveau < 2 ? 17 : 18, 'text-anchor': 'middle', class: 'nom-table' }, t.nom),
-      libelle && n.niveau < 2 ? el('text', { x: largeur / 2, y: 33, 'text-anchor': 'middle', class: 'libelle-table' }, libelle) : null,
-      el('title', {}, [t.libelle, t.description].filter(Boolean).join(' — ') || t.nom),
-    ))
+  demarrer() {
+    const ajuster = () => {
+      const r = this.toile.getBoundingClientRect()
+      const ratio = window.devicePixelRatio || 1
+      this.toile.width = r.width * ratio
+      this.toile.height = r.height * ratio
+      this.ratio = ratio
+      this.dessiner()
+    }
+    new ResizeObserver(ajuster).observe(this.toile)
+    ajuster()
+    // Premier affichage : on laisse la disposition se faire un peu avant de cadrer.
+    const premiere = !positions.size
+    if (premiere) for (let i = 0; i < 120; i++) this.simuler()
+    this.toutVoir()
+    const boucle = () => {
+      if (!this.toile.isConnected) return // écran quitté
+      if (this.chaleur > 0.004) {
+        this.simuler()
+        this.dessiner()
+      }
+      requestAnimationFrame(boucle)
+    }
+    requestAnimationFrame(boucle)
   }
-  return svg
+
+  // Un pas de simulation : répulsion entre bulles, attraction le long des liens, légère gravité vers le centre.
+  simuler() {
+    const noeuds = this.graphe.noeuds
+    const alpha = this.chaleur
+    for (let i = 0; i < noeuds.length; i++) {
+      const a = noeuds[i]
+      for (let j = i + 1; j < noeuds.length; j++) {
+        const b = noeuds[j]
+        let dx = b.x - a.x
+        let dy = b.y - a.y
+        let d2 = dx * dx + dy * dy
+        if (d2 > 160000) continue // trop loin pour compter
+        if (d2 < 1) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; d2 = 1 }
+        const force = (900 * alpha) / d2
+        a.vx -= dx * force
+        a.vy -= dy * force
+        b.vx += dx * force
+        b.vy += dy * force
+      }
+    }
+    for (const l of this.graphe.liens) {
+      const dx = l.b.x - l.a.x
+      const dy = l.b.y - l.a.y
+      const d = Math.sqrt(dx * dx + dy * dy) || 1
+      const ideal = 30 + l.a.rayon + l.b.rayon
+      const force = ((d - ideal) / d) * 0.06 * alpha
+      l.a.vx += dx * force
+      l.a.vy += dy * force
+      l.b.vx -= dx * force
+      l.b.vy -= dy * force
+    }
+    for (const n of noeuds) {
+      n.vx -= n.x * 0.004 * alpha
+      n.vy -= n.y * 0.004 * alpha
+      if (n === this.tenu) {
+        n.vx = n.vy = 0
+        continue
+      }
+      n.vx *= 0.6
+      n.vy *= 0.6
+      n.x += Math.max(-20, Math.min(20, n.vx))
+      n.y += Math.max(-20, Math.min(20, n.vy))
+      positions.set(n.table.nom, { x: n.x, y: n.y })
+    }
+    this.chaleur *= 0.985
+  }
+
+  versEcran(x, y) {
+    const r = this.toile.getBoundingClientRect()
+    return { x: (x - this.vue.x) * this.vue.k + r.width / 2, y: (y - this.vue.y) * this.vue.k + r.height / 2 }
+  }
+
+  versMonde(ex, ey) {
+    const r = this.toile.getBoundingClientRect()
+    return { x: (ex - r.width / 2) / this.vue.k + this.vue.x, y: (ey - r.height / 2) / this.vue.k + this.vue.y }
+  }
+
+  noeudSous(ex, ey) {
+    const p = this.versMonde(ex, ey)
+    let meilleur = null
+    let distance = Infinity
+    for (const n of this.graphe.noeuds) {
+      const d = Math.hypot(n.x - p.x, n.y - p.y)
+      if (d < n.rayon + 4 / this.vue.k && d < distance) {
+        meilleur = n
+        distance = d
+      }
+    }
+    return meilleur
+  }
+
+  lienSous(ex, ey) {
+    const p = this.versMonde(ex, ey)
+    const tolerance = 5 / this.vue.k
+    for (const l of this.graphe.liens) {
+      const dx = l.b.x - l.a.x
+      const dy = l.b.y - l.a.y
+      const t = Math.max(0, Math.min(1, ((p.x - l.a.x) * dx + (p.y - l.a.y) * dy) / (dx * dx + dy * dy || 1)))
+      if (Math.hypot(l.a.x + t * dx - p.x, l.a.y + t * dy - p.y) < tolerance) return l
+    }
+    return null
+  }
+
+  ecouter() {
+    const t = this.toile
+    let glisse = null // { type: 'fond' | 'noeud', … }
+    const position = (e) => {
+      const r = t.getBoundingClientRect()
+      return { x: e.clientX - r.left, y: e.clientY - r.top }
+    }
+    t.addEventListener('wheel', (e) => {
+      e.preventDefault()
+      const p = position(e)
+      const avant = this.versMonde(p.x, p.y)
+      this.vue.k = Math.max(0.08, Math.min(8, this.vue.k * (e.deltaY < 0 ? 1.15 : 1 / 1.15)))
+      const apres = this.versMonde(p.x, p.y)
+      this.vue.x += avant.x - apres.x
+      this.vue.y += avant.y - apres.y
+      this.dessiner()
+    }, { passive: false })
+    t.addEventListener('pointerdown', (e) => {
+      const p = position(e)
+      const n = this.noeudSous(p.x, p.y)
+      glisse = n ? { type: 'noeud', noeud: n, depart: p, bouge: false } : { type: 'fond', depart: p, vue: { ...this.vue }, bouge: false }
+      t.setPointerCapture(e.pointerId)
+    })
+    t.addEventListener('pointermove', (e) => {
+      const p = position(e)
+      if (glisse) {
+        if (Math.hypot(p.x - glisse.depart.x, p.y - glisse.depart.y) > 3) glisse.bouge = true
+        if (!glisse.bouge) return
+        if (glisse.type === 'fond') {
+          this.vue.x = glisse.vue.x - (p.x - glisse.depart.x) / this.vue.k
+          this.vue.y = glisse.vue.y - (p.y - glisse.depart.y) / this.vue.k
+        } else {
+          const m = this.versMonde(p.x, p.y)
+          glisse.noeud.x = m.x
+          glisse.noeud.y = m.y
+          this.tenu = glisse.noeud
+          this.chaleur = Math.max(this.chaleur, 0.25)
+        }
+        this.dessiner()
+        return
+      }
+      const n = this.noeudSous(p.x, p.y)
+      if (n !== this.survol) {
+        this.survol = n
+        this.dessiner()
+      }
+      t.style.cursor = n || this.lienSous(p.x, p.y) ? 'pointer' : 'grab'
+    })
+    t.addEventListener('pointerleave', () => {
+      if (this.survol) {
+        this.survol = null
+        this.dessiner()
+      }
+    })
+    t.addEventListener('pointerup', (e) => {
+      const p = position(e)
+      const g = glisse
+      glisse = null
+      this.tenu = null
+      if (!g || g.bouge) return
+      if (g.type === 'noeud') {
+        if ((e.ctrlKey || e.metaKey) && this.source && this.source !== g.noeud) {
+          this.chemin = cheminLePlusCourt(this.graphe, this.source, g.noeud)
+          this.rappels.surChemin(this.chemin || { depart: this.source, arrivee: g.noeud, etapes: null })
+        } else {
+          this.source = g.noeud
+          this.chemin = null
+          this.lienChoisi = null
+          this.rappels.surSelection(g.noeud)
+        }
+      } else {
+        const l = this.lienSous(p.x, p.y)
+        if (l) {
+          this.lienChoisi = l
+          this.rappels.surLien(l)
+        }
+      }
+      this.dessiner()
+    })
+  }
+
+  toutVoir() {
+    const noeuds = this.graphe.noeuds
+    if (!noeuds.length) return
+    const xs = noeuds.map((n) => n.x)
+    const ys = noeuds.map((n) => n.y)
+    const r = this.toile.getBoundingClientRect()
+    const largeur = Math.max(...xs) - Math.min(...xs) + 80
+    const hauteur = Math.max(...ys) - Math.min(...ys) + 80
+    this.vue = { x: (Math.max(...xs) + Math.min(...xs)) / 2, y: (Math.max(...ys) + Math.min(...ys)) / 2, k: Math.min(2, Math.max(0.08, Math.min(r.width / largeur, r.height / hauteur))) }
+    this.dessiner()
+  }
+
+  centrerSur(n, choisir = false) {
+    this.vue = { x: n.x, y: n.y, k: Math.max(this.vue.k, 1.8) }
+    if (choisir) {
+      this.source = n
+      this.chemin = null
+      this.rappels.surSelection(n)
+    }
+    this.dessiner()
+  }
+
+  effacerChemin() {
+    this.chemin = null
+    this.dessiner()
+  }
+
+  dessiner() {
+    const c = this.toile.getContext('2d')
+    const r = this.toile.getBoundingClientRect()
+    const { k } = this.vue
+    const couleurs = this.couleurs
+    c.setTransform(this.ratio || 1, 0, 0, this.ratio || 1, 0, 0)
+    c.clearRect(0, 0, r.width, r.height)
+
+    const surChemin = new Set()
+    const liensChemin = new Set()
+    if (this.chemin?.etapes) {
+      for (const e of this.chemin.etapes) {
+        surChemin.add(e.de)
+        surChemin.add(e.vers)
+        liensChemin.add(e.lien)
+      }
+    }
+    const focus = this.survol
+    const attenue = (n) => (focus ? n !== focus && !focus.voisins.has(n) : surChemin.size > 0 && !surChemin.has(n))
+
+    // Liens
+    for (const l of this.graphe.liens) {
+      const a = this.versEcran(l.a.x, l.a.y)
+      const b = this.versEcran(l.b.x, l.b.y)
+      const surLeChemin = liensChemin.has(l)
+      const actif = surLeChemin || l === this.lienChoisi || (focus && (l.a === focus || l.b === focus))
+      c.strokeStyle = surLeChemin ? couleurs.chemin : actif ? couleurs.accent : couleurs.lien
+      c.globalAlpha = actif ? 1 : focus || surChemin.size ? 0.1 : l.jointures.some((j) => j.libelle) ? 0.7 : 0.4
+      c.lineWidth = surLeChemin ? 3 : actif ? 1.6 : 0.8
+      c.beginPath()
+      c.moveTo(a.x, a.y)
+      c.lineTo(b.x, b.y)
+      c.stroke()
+    }
+    c.globalAlpha = 1
+
+    // Bulles et noms
+    const grands = new Set([...this.graphe.noeuds].sort((x, y) => y.degre - x.degre).slice(0, 12))
+    for (const n of this.graphe.noeuds) {
+      const p = this.versEcran(n.x, n.y)
+      const rayon = Math.max(2.5, n.rayon * Math.sqrt(k))
+      if (p.x < -rayon - 80 || p.y < -rayon - 40 || p.x > r.width + rayon + 80 || p.y > r.height + rayon + 40) continue
+      const pale = attenue(n)
+      c.globalAlpha = pale ? 0.15 : n.table.exclue ? 0.4 : 1
+      c.fillStyle = n === this.source ? couleurs.accent : surChemin.has(n) ? couleurs.chemin : n.table.libelle ? couleurs.decrite : couleurs.bulle
+      c.beginPath()
+      c.arc(p.x, p.y, rayon, 0, Math.PI * 2)
+      c.fill()
+      if (n === focus || n === this.source || surChemin.has(n)) {
+        c.strokeStyle = couleurs.texte
+        c.lineWidth = 1.5
+        c.stroke()
+      }
+      // Noms : en zoomant, ou pour les tables importantes, survolées, choisies, sur le chemin.
+      const visible = k > 1.1 || n === focus || n === this.source || surChemin.has(n) || (focus && focus.voisins.has(n)) || (k > 0.45 && grands.has(n))
+      if (visible && !pale) {
+        c.globalAlpha = n.table.exclue ? 0.5 : 1
+        c.fillStyle = couleurs.texte
+        c.font = `${n === focus || surChemin.has(n) ? '600 ' : ''}${Math.round(11 + Math.min(4, k))}px system-ui, sans-serif`
+        c.textAlign = 'center'
+        c.fillText(n.table.nom, p.x, p.y + rayon + 12)
+        if (n.table.libelle && (k > 1.8 || n === focus || surChemin.has(n))) {
+          c.fillStyle = couleurs.texte2
+          c.font = `${Math.round(10 + Math.min(3, k / 2))}px system-ui, sans-serif`
+          c.fillText(n.table.libelle.length > 34 ? n.table.libelle.slice(0, 33) + '…' : n.table.libelle, p.x, p.y + rayon + 25)
+        }
+      }
+    }
+    c.globalAlpha = 1
+  }
+}
+
+function couleursDuTheme() {
+  const css = getComputedStyle(document.documentElement)
+  const v = (nom, defaut) => css.getPropertyValue(nom).trim() || defaut
+  return {
+    bulle: '#9aa4d6',
+    decrite: v('--violet', '#2dd4bf'),
+    accent: v('--accent', '#4ade80'),
+    chemin: '#f59e0b',
+    lien: v('--texte-3', '#6f8c79'),
+    texte: v('--texte', '#e6f2ea'),
+    texte2: v('--texte-2', '#a3c2ad'),
+  }
 }
 
 // ---------------------------------------------------------------- panneau de droite
+
+function aideSchema() {
+  return [
+    h('h2', { style: { marginBottom: '8px' } }, 'Mode d’emploi'),
+    h('ul', { class: 'texte-2', style: { paddingLeft: '18px', fontSize: '14px', margin: 0 } },
+      h('li', {}, 'Molette : zoomer. Glisser le fond : se déplacer. Glisser une bulle : la déplacer.'),
+      h('li', {}, 'Clic sur une bulle : la décrire (c’est la source).'),
+      h('li', {}, 'Ctrl + clic sur une autre bulle : chemin le plus court, avec les clés de jointure.'),
+      h('li', {}, 'Clic sur un lien : le nommer et le décrire.'),
+    ),
+    h('p', { class: 'discret', style: { fontSize: '13px', marginTop: '12px' } },
+      'Taille d’une bulle : nombre de liens. Couleur : ', h('span', { style: { color: 'var(--violet)' } }, 'décrite dans le dictionnaire'), ', ', h('span', { style: { color: '#9aa4d6' } }, 'pas encore décrite'), '.'),
+  ]
+}
 
 function enregistreur(entree, action) {
   entree.addEventListener('change', async () => {
@@ -170,31 +500,74 @@ function enregistreur(entree, action) {
   return entree
 }
 
-function panneauTable(t, centre) {
-  const dico = (cle) => (valeur) => api('/api/dictionnaire', { methode: 'POST', corps: { table: t.nom, [cle]: valeur } })
-  const coche = h('input', { type: 'checkbox', checked: !t.exclue, onchange: async () => { await api('/api/dictionnaire', { methode: 'POST', corps: { table: t.nom, exclue: !coche.checked } }); notifier(coche.checked ? 'Table prise en compte par l’IA' : 'Table écartée de l’IA'); window.birtec.recharger() } })
+function panneauTable(n, vue) {
+  const t = n.table
+  const dico = (cle) => (valeur) => api('/api/dictionnaire', { methode: 'POST', corps: { table: t.nom, [cle]: valeur } }).then(() => {
+    t[cle] = valeur
+    vue.dessiner()
+  })
+  const coche = h('input', {
+    type: 'checkbox',
+    checked: !t.exclue,
+    onchange: async () => {
+      await api('/api/dictionnaire', { methode: 'POST', corps: { table: t.nom, exclue: !coche.checked } })
+      t.exclue = !coche.checked
+      notifier(coche.checked ? 'Table prise en compte par l’IA' : 'Table écartée de l’IA')
+      vue.dessiner()
+    },
+  })
   return [
-    h('h2', { class: 'mono', style: { marginBottom: '10px' } }, t.nom),
+    h('div', { class: 'discret', style: { fontSize: '12px' } }, 'Source — Ctrl + clic sur une autre table pour le chemin'),
+    h('h2', { class: 'mono', style: { margin: '4px 0 10px' } }, t.nom),
     h('label', { class: 'champ' }, h('span', {}, 'Nom clair'), enregistreur(h('input', { type: 'text', value: t.libelle || '', placeholder: 'ex. Rapport d’intervention' }), dico('libelle'))),
     h('label', { class: 'champ', style: { marginTop: '10px' } }, h('span', {}, 'Description (pour l’IA)'), enregistreur(h('textarea', { rows: 4 }, t.description || ''), dico('description'))),
     h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', marginTop: '10px' } }, coche, 'Prise en compte par l’IA'),
-    h('p', { class: 'discret', style: { fontSize: '13px' } }, `${t.colonnes.length} colonnes, ${t.liens.length} lien(s) vers d’autres tables.`),
-    h('div', { class: 'actions', style: { marginTop: '10px' } },
-      t !== centre ? h('a', { class: 'bouton petit', href: `#/schema/${encodeURIComponent(t.nom)}` }, ic('reseau', 14), 'Mettre au centre') : null,
-      h('a', { class: 'bouton petit discret', href: `#/base/${encodeURIComponent(t.nom)}` }, ic('table', 14), 'Colonnes'),
-    ),
-    t === centre ? ajoutLien(t) : null,
+    h('p', { class: 'discret', style: { fontSize: '13px' } }, `${t.colonnes.length} colonnes, ${n.degre} table(s) liée(s) :`),
+    h('div', { class: 'liste-voisins' }, [...n.voisins].sort((a, b) => a.table.nom.localeCompare(b.table.nom)).map((v) =>
+      h('a', { href: '#', class: 'mono', title: v.table.libelle || '', onclick: (e) => { e.preventDefault(); vue.centrerSur(v, true) } }, v.table.nom))),
+    h('div', { class: 'actions', style: { marginTop: '10px' } }, h('a', { class: 'bouton petit discret', href: `#/base/${encodeURIComponent(t.nom)}` }, ic('table', 14), 'Colonnes')),
+    ajoutLien(t),
   ]
 }
 
-function panneauLien(a) {
-  const lien = (cle) => (valeur) => api('/api/dictionnaire/lien', { methode: 'POST', corps: { deTable: a.de.nom, deColonne: a.lien.colonne, versTable: a.vers.nom, libelle: cle === 'libelle' ? valeur : a.lien.libelle || '', description: cle === 'description' ? valeur : a.lien.description || '' } }).then(() => { a.lien[cle] = valeur })
+function panneauChemin(chemin, vue, panneau) {
+  if (!chemin.etapes) {
+    return [h('h2', {}, 'Chemin'), h('p', { class: 'texte-2' }, `Aucun lien connu ne relie ${chemin.depart.table.nom} à ${chemin.arrivee.table.nom}. Ajoutez le lien manquant depuis l’une des deux tables.`)]
+  }
+  const tables = [chemin.depart, ...chemin.etapes.map((e) => e.vers)]
+  const jointures = chemin.etapes.map((e) => e.lien.jointures[0])
+  const sql = `FROM ${chemin.depart.table.nom}\n${chemin.etapes.map((e) => {
+    const j = e.lien.jointures[0]
+    return `JOIN ${e.vers.table.nom} ON ${j.de}.${j.colonne} = ${j.vers}.${j.versColonne}`
+  }).join('\n')}`
   return [
-    h('h2', { style: { marginBottom: '6px' } }, 'Lien'),
-    h('p', { class: 'mono', style: { fontSize: '13px' } }, `${a.de.nom}.${a.lien.colonne}`, h('br'), `→ ${a.vers.nom}.${a.lien.versColonne}`),
-    h('label', { class: 'champ' }, h('span', {}, 'Nom du lien'), enregistreur(h('input', { type: 'text', value: a.lien.libelle || '', placeholder: 'ex. équipement de la demande' }), lien('libelle'))),
-    h('label', { class: 'champ', style: { marginTop: '10px' } }, h('span', {}, 'Description (pour l’IA)'), enregistreur(h('textarea', { rows: 4 }, a.lien.description || ''), lien('description'))),
-    h('p', { class: 'discret', style: { fontSize: '12px' } }, 'Jointure : ', h('span', { class: 'mono' }, `${a.de.nom}.${a.lien.colonne} = ${a.vers.nom}.${a.lien.versColonne}`)),
+    h('h2', { style: { marginBottom: '4px' } }, 'Chemin le plus court'),
+    h('p', { class: 'discret', style: { fontSize: '13px', marginTop: 0 } }, `${chemin.etapes.length} jointure(s), ${tables.length} tables`),
+    h('ol', { class: 'chemin-tables' }, tables.map((n) => h('li', {}, h('span', { class: 'mono' }, n.table.nom), n.table.libelle ? h('span', { class: 'discret' }, ` — ${n.table.libelle}`) : null))),
+    h('h3', { style: { margin: '12px 0 6px' } }, 'Clés'),
+    h('ul', { class: 'chemin-cles' }, jointures.map((j) => h('li', {}, h('span', { class: 'mono' }, `${j.de}.${j.colonne} = ${j.vers}.${j.versColonne}`), j.libelle ? h('div', { class: 'discret', style: { fontSize: '12px' } }, j.libelle) : null))),
+    h('pre', { class: 'code', 'data-langue': 'sql', style: { marginTop: '10px' } }, h('code', {}, sql)),
+    h('div', { class: 'actions' },
+      h('button', { class: 'petit', onclick: () => navigator.clipboard.writeText(sql).then(() => notifier('Jointures copiées')) }, ic('copier', 14), 'Copier'),
+      h('button', { class: 'petit discret', onclick: () => { vue.effacerChemin(); vider(panneau, panneauTable(chemin.depart, vue)) } }, ic('x', 14), 'Effacer'),
+    ),
+  ]
+}
+
+function panneauLien(l) {
+  return [
+    h('h2', { style: { marginBottom: '6px' } }, l.jointures.length > 1 ? 'Liens' : 'Lien'),
+    l.jointures.map((j) => {
+      const enregistrer = (cle) => (valeur) => api('/api/dictionnaire/lien', {
+        methode: 'POST',
+        corps: { deTable: j.de, deColonne: j.colonne, versTable: j.vers, libelle: cle === 'libelle' ? valeur : j.libelle, description: cle === 'description' ? valeur : j.description },
+      }).then(() => { j[cle] = valeur })
+      return h('div', { style: { marginBottom: '14px' } },
+        h('p', { class: 'mono', style: { fontSize: '13px' } }, `${j.de}.${j.colonne}`, h('br'), `→ ${j.vers}.${j.versColonne}`),
+        h('label', { class: 'champ' }, h('span', {}, 'Nom du lien'), enregistreur(h('input', { type: 'text', value: j.libelle, placeholder: 'ex. équipement de la demande' }), enregistrer('libelle'))),
+        h('label', { class: 'champ', style: { marginTop: '8px' } }, h('span', {}, 'Description (pour l’IA)'), enregistreur(h('textarea', { rows: 3 }, j.description), enregistrer('description'))),
+      )
+    }),
   ]
 }
 
@@ -213,10 +586,86 @@ function ajoutLien(t) {
           if (!cible.value.trim()) return notifier('Indiquez la table visée.', 'erreur')
           await api('/api/dictionnaire/lien', { methode: 'POST', corps: { nouveau: true, deTable: t.nom, deColonne: colonne.value, versTable: cible.value.trim(), versColonne: colonneCible.value.trim() || colonne.value } })
           notifier('Lien ajouté')
-          await api('/api/schema?rafraichir=1').catch(() => {})
           window.birtec.recharger()
         },
       }, ic('plus', 14), 'Ajouter'),
     ),
   )
+}
+
+// ---------------------------------------------------------------- impression (PDF)
+
+// Une page A3 paysage, fond blanc : tout le graphe avec le nom de chaque table, le chemin en surbrillance
+// s'il y en a un, une légende. Le navigateur propose ensuite « Enregistrer au format PDF ».
+function imprimer(graphe, vue, schema) {
+  const noeuds = graphe.noeuds
+  const xs = noeuds.map((n) => n.x)
+  const ys = noeuds.map((n) => n.y)
+  const marge = 50
+  const minX = Math.min(...xs) - marge
+  const minY = Math.min(...ys) - marge
+  const largeur = Math.max(...xs) - minX + marge
+  const hauteur = Math.max(...ys) - minY + marge
+  const taille = Math.max(largeur, hauteur) / 170 // taille du texte proportionnelle au graphe
+  const x = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+
+  const liensChemin = new Set(vue.chemin?.etapes?.map((e) => e.lien) || [])
+  const surChemin = new Set(vue.chemin?.etapes?.flatMap((e) => [e.de, e.vers]) || [])
+  const traits = graphe.liens.map((l) => `<line x1="${l.a.x}" y1="${l.a.y}" x2="${l.b.x}" y2="${l.b.y}" class="${liensChemin.has(l) ? 'chemin' : l.jointures.some((j) => j.libelle) ? 'nomme' : ''}"/>`).join('')
+  const bulles = noeuds.map((n) => {
+    const classe = surChemin.has(n) ? 'chemin' : n.table.exclue ? 'ecartee' : n.table.libelle ? 'decrite' : ''
+    const grand = n.degre > 8 ? 1.25 : 1
+    return `<g class="${classe}"><circle cx="${n.x}" cy="${n.y}" r="${n.rayon}"/>`
+      + `<text x="${n.x}" y="${n.y + n.rayon + taille * 1.1}" font-size="${grand * taille}">${x(n.table.nom)}</text>`
+      + (n.table.libelle && n.degre > 3 ? `<text class="libelle" x="${n.x}" y="${n.y + n.rayon + taille * 2.1}" font-size="${taille * 0.8}">${x(n.table.libelle)}</text>` : '')
+      + '</g>'
+  }).join('')
+  const legendeChemin = vue.chemin?.etapes
+    ? `<div class="chemin-legende"><b>Chemin ${x(vue.chemin.depart.table.nom)} → ${x(vue.chemin.arrivee.table.nom)}</b><br>${vue.chemin.etapes.map((e) => {
+        const j = e.lien.jointures[0]
+        return `${x(j.de)}.${x(j.colonne)} = ${x(j.vers)}.${x(j.versColonne)}`
+      }).join('<br>')}</div>`
+    : ''
+  const base = etat.connexion?.base || schema.base
+  const date = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+
+  const page = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Schéma des liens — ${x(base)}</title>
+<style>
+  @page { size: A3 landscape; margin: 10mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #fff; }
+  body { font-family: "Segoe UI", system-ui, sans-serif; color: #1f2937; }
+  .page { display: flex; flex-direction: column; height: 277mm; width: 400mm; }
+  header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #1e3a8a; padding-bottom: 3mm; margin-bottom: 3mm; }
+  h1 { margin: 0; font-size: 20pt; color: #1e3a8a; }
+  .sous-titre { color: #6b7280; font-size: 10pt; }
+  svg { flex: 1; width: 100%; min-height: 0; }
+  line { stroke: #c7cbe0; stroke-width: ${taille * 0.12}; }
+  line.nomme { stroke: #0d9488; }
+  line.chemin { stroke: #f59e0b; stroke-width: ${taille * 0.45}; }
+  circle { fill: #7c86c4; }
+  g.decrite circle { fill: #0d9488; }
+  g.ecartee circle { fill: #d1d5db; }
+  g.chemin circle { fill: #f59e0b; stroke: #92400e; stroke-width: ${taille * 0.15}; }
+  text { text-anchor: middle; fill: #111827; font-family: "Segoe UI", system-ui, sans-serif; }
+  text.libelle { fill: #4b5563; font-style: italic; }
+  footer { display: flex; gap: 8mm; align-items: flex-start; font-size: 9pt; color: #374151; border-top: 1px solid #e5e7eb; padding-top: 2mm; margin-top: 2mm; }
+  .pastille { display: inline-block; width: 9pt; height: 9pt; border-radius: 50%; vertical-align: -1pt; margin-right: 3pt; }
+  .chemin-legende { margin-left: auto; font-family: ui-monospace, monospace; font-size: 8.5pt; }
+  @media screen { body { padding: 10mm; background: #e5e7eb; } .page { background: #fff; padding: 10mm; box-shadow: 0 2px 12px rgba(0,0,0,.15); height: auto; min-height: 277mm; } }
+</style></head><body><div class="page">
+<header><h1>Schéma des liens</h1><div class="sous-titre">Base « ${x(base)} » — ${noeuds.length} tables, ${graphe.liens.length} liens — ${date} — BiRTEC</div></header>
+<svg viewBox="${minX} ${minY} ${largeur} ${hauteur}" preserveAspectRatio="xMidYMid meet">${traits}${bulles}</svg>
+<footer>
+  <span><span class="pastille" style="background:#0d9488"></span>Table décrite dans le dictionnaire</span>
+  <span><span class="pastille" style="background:#7c86c4"></span>Table non décrite</span>
+  <span><span class="pastille" style="background:#d1d5db"></span>Écartée de l’IA</span>
+  <span>Taille d’une bulle : nombre de liens. Trait vert : lien nommé.</span>
+  ${legendeChemin}
+</footer></div>
+<script>window.onload = () => setTimeout(() => window.print(), 300)</script></body></html>`
+  const fenetre = window.open('', '_blank')
+  if (!fenetre) return notifier('Le navigateur a bloqué la fenêtre d’impression : autorisez les fenêtres de BiRTEC.', 'erreur')
+  fenetre.document.write(page)
+  fenetre.document.close()
 }

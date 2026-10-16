@@ -1,8 +1,14 @@
 <h1>Schéma des liens</h1>
-<p>Une table au centre, les tables qui lui sont liées tout autour (les tables décrites dans le dictionnaire d'abord). « Afficher le 2e cercle » ajoute les tables liées aux voisines.</p>
+<p>Toutes les tables en bulles, reliées par leurs liens, qui se placent toutes seules (les bulles se repoussent, les liens les rapprochent). Plus une bulle est grosse, plus la table a de liens. Couleur : turquoise = décrite dans le dictionnaire, bleu-gris = pas encore décrite.</p>
 <ul>
-<li><b>Clic sur une table</b> : son nom clair, sa description, sa prise en compte par l'IA ; « Mettre au centre » (ou double-clic) pour explorer à partir d'elle.</li>
-<li><b>Clic sur un lien</b> : lui donner un nom (« équipement de la demande ») et une description. Un lien nommé est préféré par BiRTEC quand il calcule les chemins de jointure donnés à l'IA.</li>
-<li><b>Ajouter un lien manquant</b> (table au centre) : quand une colonne pointe vers une autre table sans suivre la convention ID_XXX.</li>
+<li><b>Molette</b> : zoomer et dézoomer. <b>Glisser le fond</b> : se déplacer. <b>Glisser une bulle</b> : la déplacer. <b>Tout voir</b> : recadrer.</li>
+<li><b>Survol</b> d'une bulle : ses tables liées s'éclairent. Les noms apparaissent en zoomant.</li>
+<li><b>Clic sur une bulle</b> : c'est la source ; son nom clair, sa description, sa prise en compte par l'IA, ses tables liées.</li>
+<li><b>Ctrl + clic</b> sur une autre bulle : le <b>chemin le plus court</b> entre les deux, tracé en orange, avec les tables traversées, les clés de chaque jointure et le SQL à copier.</li>
+<li><b>Clic sur un lien</b> : le nommer et le décrire. Un lien nommé est préféré pour les chemins (ceux du schéma comme ceux donnés à l'IA).</li>
+<li><b>Ajouter un lien manquant</b> (dans le panneau d'une table) : quand une colonne pointe vers une autre table sans suivre la convention ID_XXX.</li>
+<li><b>Chercher une table</b> : le graphe se centre dessus. « Tables écartées de l'IA » les montre en grisé.</li>
 </ul>
-<p>Tout est gardé dans le fichier .birtec. Liens en couleur : nommés ; tables grisées : écartées de l'IA.</p>
+<h2>Imprimer en PDF</h2>
+<p><b>Imprimer / PDF</b> ouvre une page A3 paysage sur fond blanc : tout le graphe tel qu'il est disposé, le nom de chaque table, le chemin choisi en surbrillance et une légende. Dans la fenêtre d'impression, choisissez « Enregistrer au format PDF » (ou « Microsoft Print to PDF »). Disposez d'abord le graphe à votre goût : l'impression reprend la disposition à l'écran.</p>
+<p>Tout ce qui est saisi est gardé dans le fichier .birtec.</p>

@@ -364,23 +364,15 @@ input.champ-dico { width: 100%; min-width: 120px; padding: 5px 8px; font-size: 1
 input.champ-dico:hover, input.champ-dico:focus { background: var(--carte-2); border-color: var(--bord-fort); }
 input.champ-dico.enregistre { border-color: var(--accent); }
 
-/* Schéma des liens */
-svg.schema-liens { width: 100%; height: auto; display: block; user-select: none; }
-svg.schema-liens .arete .trait { stroke: var(--bord-fort); stroke-width: 1.5; }
-svg.schema-liens .arete.nommee .trait { stroke: var(--violet); }
-svg.schema-liens .arete .zone-clic { stroke: transparent; stroke-width: 14; cursor: pointer; }
-svg.schema-liens .arete:hover .trait { stroke: var(--accent); stroke-width: 2.5; }
-svg.schema-liens .etiquette-lien { font-size: 11px; fill: var(--texte-3); pointer-events: none; }
-svg.schema-liens .arete.nommee .etiquette-lien { fill: var(--violet); }
-svg.schema-liens .noeud { cursor: pointer; }
-svg.schema-liens .noeud rect { fill: var(--carte-2); stroke: var(--bord-fort); stroke-width: 1.5; }
-svg.schema-liens .noeud.decrite rect { stroke: var(--violet); }
-svg.schema-liens .noeud.niveau-0 rect { fill: var(--accent-doux); stroke: var(--accent); stroke-width: 2.5; }
-svg.schema-liens .noeud:hover rect { stroke: var(--accent); }
-svg.schema-liens .noeud.ecartee { opacity: 0.4; }
-svg.schema-liens .nom-table { font-family: ui-monospace, monospace; font-size: 13px; font-weight: 600; fill: var(--texte); }
-svg.schema-liens .niveau-2 .nom-table { font-size: 11px; font-weight: 400; }
-svg.schema-liens .libelle-table { font-size: 11px; fill: var(--texte-2); }
+/* Schéma des liens (graphe en bulles) */
+canvas.toile-schema { display: block; width: 100%; height: calc(100vh - 210px); min-height: 480px; cursor: grab; touch-action: none; }
+.option-schema { position: absolute; left: 12px; bottom: 10px; display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--texte-3); background: var(--carte); padding: 4px 8px; border-radius: 8px; }
+.panneau-schema { position: sticky; top: 86px; max-height: calc(100vh - 110px); overflow: auto; }
+.liste-voisins { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; }
+ol.chemin-tables { margin: 6px 0; padding-left: 20px; font-size: 14px; }
+ol.chemin-tables li { margin: 3px 0; }
+ul.chemin-cles { margin: 0; padding-left: 18px; font-size: 13px; }
+ul.chemin-cles li { margin: 4px 0; }
 
 /* Accueil */
 .tuiles-indicateurs { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
@@ -397,7 +389,7 @@ a.raccourci-rapport:hover { border-color: var(--accent); text-decoration: none; 
 .tuile-indicateur .retirer, .raccourci-rapport .retirer { position: absolute; top: 6px; right: 6px; }
 
 .schema-grille { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
-@media (max-width: 1100px) { .schema-grille { grid-template-columns: 1fr; } .schema-grille > .carte[style*="sticky"] { position: static !important; } }
+@media (max-width: 1100px) { .schema-grille { grid-template-columns: 1fr; } .panneau-schema { position: static; max-height: none; } }
 
 /* Les cases à cocher gardent leur taille (le style des champs les étirerait) */
 input[type=checkbox] { width: auto; flex: none; padding: 0; }
