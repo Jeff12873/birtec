@@ -1,4 +1,4 @@
-// Schéma des liens : toutes les tables en bulles, reliées par leurs liens, disposées par une petite
+// Constellation (schéma des liens) : toutes les tables en bulles, reliées par leurs liens, disposées par une petite
 // simulation physique (les bulles se repoussent, les liens les rapprochent), à la manière du graphe d'Obsidian.
 //
 //   molette : zoom          glisser le fond : se déplacer          glisser une bulle : la déplacer
@@ -15,6 +15,7 @@
 import { h, vider, ic, notifier } from '/socle/ui.js'
 import { api } from '/socle/api.js'
 import { etat } from '/socle/etat.js'
+import { extraireTables } from '/blocs/base/vue.js'
 
 let voirEcartees = false
 // Positions des bulles { x, y, fige } : chargées du .birtec, gardées d'une visite à l'autre.
@@ -46,7 +47,7 @@ function enregistrerDisposition() {
 
 export default {
   chemin: 'schema',
-  titre: 'Schéma',
+  titre: 'Constellation',
   icone: 'reseau',
   menu: true,
   groupe: 'Ma base',
@@ -84,11 +85,19 @@ export default {
     vider(
       zone,
       h('div', { class: 'entete-page' },
-        h('div', {}, h('h1', {}, 'Schéma des liens'), h('p', { class: 'sous-titre' }, `${graphe.noeuds.length} tables, ${graphe.liens.length} liens. Clic : une table ; Ctrl + clic : chemin le plus court jusqu’à une autre.`)),
+        h('div', {}, h('h1', {}, 'Constellation des tables'), h('p', { class: 'sous-titre' }, `${graphe.noeuds.length} tables, ${graphe.liens.length} liens. Clic : une table ; Ctrl + clic : chemin le plus court jusqu’à une autre.`)),
         h('div', { class: 'actions' },
           recherche,
           h('datalist', { id: 'birtec-tables' }, graphe.noeuds.map((n) => h('option', { value: n.table.nom }, n.table.libelle || ''))),
           h('button', { class: 'discret', title: 'Voir tout le graphe', onclick: () => vue.toutVoir() }, ic('rafraichir', 16), 'Tout voir'),
+          h('button', {
+            title: 'Les données de la table choisie, ou de toutes les tables du chemin en surbrillance (Ctrl + clic)',
+            onclick: () => {
+              const tables = vue.chemin?.etapes ? [vue.chemin.depart, ...vue.chemin.etapes.map((e) => e.vers)].map((n) => n.table.nom) : vue.source ? [vue.source.table.nom] : []
+              if (!tables.length) return notifier('Cliquez d’abord une table (ou Ctrl + clic pour un chemin).', 'erreur')
+              extraireTables(tables)
+            },
+          }, ic('telecharger', 16), 'Télécharger'),
           h('button', { onclick: () => imprimer(graphe, vue, schema) }, ic('document', 16), 'Imprimer / PDF'),
         ),
       ),
@@ -662,7 +671,9 @@ function panneauTable(n, vue) {
     h('p', { class: 'discret', style: { fontSize: '13px' } }, `${t.colonnes.length} colonnes, ${n.degre} table(s) liée(s) :`),
     h('div', { class: 'liste-voisins' }, [...n.voisins].sort((a, b) => a.table.nom.localeCompare(b.table.nom)).map((v) =>
       h('a', { href: '#', class: 'mono', title: v.table.libelle || '', onclick: (e) => { e.preventDefault(); vue.centrerSur(v, true) } }, v.table.nom))),
-    h('div', { class: 'actions', style: { marginTop: '10px' } }, h('a', { class: 'bouton petit discret', href: `#/base/${encodeURIComponent(t.nom)}` }, ic('table', 14), 'Colonnes')),
+    h('div', { class: 'actions', style: { marginTop: '10px' } },
+      h('button', { class: 'petit', onclick: () => extraireTables([t.nom]) }, ic('telecharger', 14), 'Télécharger la table'),
+      h('a', { class: 'bouton petit discret', href: `#/base/${encodeURIComponent(t.nom)}` }, ic('table', 14), 'Colonnes')),
     ajoutLien(t),
   ]
 }
@@ -686,6 +697,7 @@ function panneauChemin(chemin, vue, panneau) {
     h('pre', { class: 'code', 'data-langue': 'sql', style: { marginTop: '10px' } }, h('code', {}, sql)),
     h('div', { class: 'actions' },
       h('button', { class: 'petit', onclick: () => navigator.clipboard.writeText(sql).then(() => notifier('Jointures copiées')) }, ic('copier', 14), 'Copier'),
+      h('button', { class: 'petit', title: 'Les données de toutes les tables du chemin', onclick: () => extraireTables(tables.map((n) => n.table.nom)) }, ic('telecharger', 14), `Télécharger les ${tables.length} tables`),
       h('button', { class: 'petit discret', onclick: () => { vue.effacerChemin(); vider(panneau, panneauTable(chemin.depart, vue)) } }, ic('x', 14), 'Effacer'),
     ),
   ]
@@ -774,7 +786,7 @@ function imprimer(graphe, vue, schema) {
   const base = etat.connexion?.base || schema.base
   const date = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
 
-  const page = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Schéma des liens — ${x(base)}</title>
+  const page = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Constellation des tables — ${x(base)}</title>
 <style>
   @page { size: A3 landscape; margin: 10mm; }
   * { box-sizing: border-box; }
@@ -800,7 +812,7 @@ function imprimer(graphe, vue, schema) {
   .chemin-legende { margin-left: auto; font-family: ui-monospace, monospace; font-size: 8.5pt; }
   @media screen { body { padding: 10mm; background: #e5e7eb; } .page { background: #fff; padding: 10mm; box-shadow: 0 2px 12px rgba(0,0,0,.15); height: auto; min-height: 277mm; } }
 </style></head><body><div class="page">
-<header><h1>Schéma des liens</h1><div class="sous-titre">Base « ${x(base)} » — ${noeuds.length} tables, ${graphe.liens.length} liens — ${date} — BiRTEC</div></header>
+<header><h1>Constellation des tables</h1><div class="sous-titre">Base « ${x(base)} » — ${noeuds.length} tables, ${graphe.liens.length} liens — ${date} — BiRTEC</div></header>
 <svg viewBox="${minX} ${minY} ${largeur} ${hauteur}" preserveAspectRatio="xMidYMid meet">${traits}${cles}${bulles}</svg>
 <footer>
   <span><span class="pastille" style="background:#0d9488"></span>Table décrite dans le dictionnaire</span>

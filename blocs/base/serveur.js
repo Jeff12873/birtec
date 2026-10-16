@@ -1,7 +1,8 @@
 // Base de données : structure des tables, dictionnaire (noms clairs, descriptions, tables écartées),
 // et requêtes de lecture (console SQL).
 
-import { ErreurHttp } from '../../serveur/socle/http.js'
+import { ErreurHttp, envoyerOctets } from '../../serveur/socle/http.js'
+import { creerZip } from '../../serveur/socle/zip.js'
 import { executerRequete, etatConnexion } from '../../serveur/socle/mysql.js'
 import { enregistrerDictionnaire, enregistrerLienDictionnaire, ajouterLien, lireInfo, ecrireInfo } from '../../serveur/socle/birtec.js'
 import { obtenirSchema } from './schema.js'
@@ -23,6 +24,42 @@ export function routes(r) {
     const table = schema.tables.find((t) => t.nom === ctx.params.nom)
     if (!table) throw new ErreurHttp(404, 'Table inconnue')
     return executerRequete(`SELECT * FROM \`${table.nom.replaceAll('`', '')}\``, 20)
+  })
+
+  // ---- extraction : les tables choisies, en CSV dans un .zip (avec leur structure et un lisez-moi)
+
+  // POST /api/extraction { tables: [noms], limite? } → fichier .zip
+  r.post('/api/extraction', async (ctx) => {
+    const { tables: demandees = [], limite = LIGNES_MAX_EXTRACTION } = await ctx.json()
+    if (!demandees.length) throw new ErreurHttp(400, 'Choisissez au moins une table.')
+    if (!etatConnexion().ouverte) throw new ErreurHttp(409, 'Connexion MySQL fermée : saisissez le mot de passe pour extraire les données.')
+    const schema = await obtenirSchema()
+    const fichiers = []
+    const bilan = []
+    const structure = [['table', 'nom clair de la table', 'colonne', 'type', 'clé', 'nom clair', 'description']]
+    for (const nom of demandees) {
+      const table = schema.tables.find((t) => t.nom.toLowerCase() === String(nom).toLowerCase())
+      if (!table) continue
+      const max = Math.min(Number(limite) || LIGNES_MAX_EXTRACTION, LIGNES_MAX_EXTRACTION)
+      const r = await executerRequete(`SELECT * FROM \`${table.nom.replaceAll('`', '')}\``, max)
+      fichiers.push({ nom: `${table.nom}.csv`, octets: csv([r.colonnes.map((c) => c.nom), ...r.lignes]) })
+      bilan.push(`${table.nom}${table.libelle ? ` (${table.libelle})` : ''} : ${r.lignes.length} ligne(s)${r.tronque ? ` — LIMITÉE aux ${max} premières` : ''}`)
+      for (const c of table.colonnes) structure.push([table.nom, table.libelle || '', c.nom, c.type + (c.taille ? `(${c.taille})` : ''), c.cle ? 'oui' : '', c.libelle || '', c.description || c.commentaire || ''])
+    }
+    const base = schema.base
+    const date = new Date().toLocaleString('fr-FR')
+    fichiers.push({ nom: '_structure.csv', octets: csv(structure) })
+    fichiers.push({ nom: '_LISEZ-MOI.txt', octets: Buffer.from([
+      `Extraction BiRTEC — base « ${base} » — ${date}`,
+      '',
+      ...bilan,
+      '',
+      'Un fichier .csv par table (séparateur « ; », encodage UTF-8 : s’ouvre directement dans Excel).',
+      '_structure.csv : les colonnes de chaque table, avec les noms clairs et descriptions du dictionnaire.',
+      `Au plus ${LIGNES_MAX_EXTRACTION} lignes par table.`,
+    ].join('\r\n'), 'utf8') })
+    const horodatage = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
+    envoyerOctets(ctx.res, creerZip(fichiers), { type: 'application/zip', nom: `extraction-${base.replace(/[^\w.-]+/g, '_')}-${horodatage}.zip`, telecharger: true })
   })
 
   // ---- disposition du schéma des liens (positions des bulles, bulles figées), gardée dans le .birtec
@@ -68,4 +105,16 @@ export function routes(r) {
     }
     return { ecartees }
   })
+}
+
+const LIGNES_MAX_EXTRACTION = 200_000
+
+// Un CSV lisible par Excel en français : séparateur « ; », guillemets si besoin, UTF-8 avec BOM, fins de ligne CRLF.
+function csv(lignes) {
+  const cellule = (v) => {
+    if (v === null || v === undefined) return ''
+    const texte = String(v)
+    return /[;"\r\n]/.test(texte) ? `"${texte.replaceAll('"', '""')}"` : texte
+  }
+  return Buffer.from('\uFEFF' + lignes.map((l) => l.map(cellule).join(';')).join('\r\n') + '\r\n', 'utf8')
 }

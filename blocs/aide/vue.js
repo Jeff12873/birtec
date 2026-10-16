@@ -10,7 +10,7 @@ const PAGES = [
   ['rapports', 'Rapports : voir, exporter'],
   ['itm', 'Indicateurs ITM'],
   ['base', 'Base de données et dictionnaire'],
-  ['schema', 'Schéma des liens'],
+  ['schema', 'Constellation des tables'],
   ['connaissances', 'Connaissances (fichier .birtec)'],
   ['configuration', 'Configuration'],
   ['installation', 'Installation et version hors ligne'],

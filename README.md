@@ -22,8 +22,11 @@ rien ne sort de l'entreprise.
 - **Connaissances** : tout ce que BiRTEC sait du site (conventions, structure de la base, liens, requêtes, rapports
   modèles, bibliothèques) est rangé dans **un fichier `.birtec`**, hors du programme. Ce dépôt ne contient aucune donnée
   de site : c'est une coquille vide.
-- **Base de données** : tables à donner ou non à l'IA, dictionnaire (noms clairs, descriptions), console SQL.
-- **Schéma** : « araignée » des liens entre tables, liens nommés et décrits, liens manquants à ajouter.
+- **Base de données** : tables à donner ou non à l'IA, dictionnaire (noms clairs, descriptions), console SQL, extraction.
+- **Constellation** : toutes les tables en bulles et leurs liens (zoom, bulles figées, clés de liaison), chemin le
+  plus court entre deux tables, impression PDF.
+- **Extraction** : les tables choisies (ou celles d'un chemin de la Constellation) téléchargées en CSV dans un .zip,
+  avec leur structure et les noms clairs du dictionnaire.
 - Windows et Linux, installé dans le profil de l'utilisateur, **version hors ligne** sur clé USB.
 
 Aspect des rapports : charte du fichier `.birtec` (couleurs, feuille de style, logo, conventions de connexion),

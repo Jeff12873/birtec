@@ -1,6 +1,6 @@
 // Base de données : liste des tables, détail d'une table, console SQL (lecture seule).
 
-import { h, vider, ic, essayer, notifier, deuxPanneaux } from '/socle/ui.js'
+import { h, vider, ic, essayer, notifier, deuxPanneaux, fenetre } from '/socle/ui.js'
 import { api } from '/socle/api.js'
 import { etat } from '/socle/etat.js'
 import { demanderMotDePasse } from '/blocs/configuration/vue.js'
@@ -61,7 +61,8 @@ export default {
       ferme,
       h('div', { class: 'entete-page' },
         h('div', {}, h('h1', {}, 'Base de données'), h('p', { class: 'sous-titre' }, `${schema.base} — ${schema.tables.length} tables. Cochez les tables à donner à l’IA, nommez et décrivez-les : tout est gardé dans le fichier .birtec.`)),
-        h('a', { class: 'bouton discret', href: `#/schema${id ? `/${encodeURIComponent(id)}` : ''}` }, ic('reseau', 16), 'Schéma des liens'),
+        h('button', { onclick: () => choisirTablesAExtraire(schema.tables, id) }, ic('telecharger', 16), 'Extraire des tables…'),
+        h('a', { class: 'bouton discret', href: `#/schema${id ? `/${encodeURIComponent(id)}` : ''}` }, ic('reseau', 16), 'Constellation'),
         h('button', { onclick: async () => { await essayer(() => api('/api/schema?rafraichir=1'), 'Structure relue'); window.birtec.recharger() } }, ic('rafraichir', 16), 'Relire la structure'),
       ),
       deuxPanneaux(
@@ -114,11 +115,76 @@ function afficherTable(zone, table, console_) {
       table.liens.length ? h('p', { class: 'texte-2', style: { marginTop: '12px' } }, 'Liens : ', table.liens.map((l) => [h('a', { href: `#/base/${encodeURIComponent(l.versTable)}`, class: 'mono' }, `${l.colonne} → ${l.versTable}.${l.versColonne}`), l.libelle ? ` (${l.libelle})` : '', ' '])) : null,
       h('div', { class: 'actions', style: { marginTop: '12px' } },
         h('button', { onclick: () => console_.executer(`SELECT * FROM ${table.nom}`, 20) }, ic('lecture', 15), 'Voir les 20 premières lignes'),
-        h('a', { class: 'bouton', href: `#/schema/${encodeURIComponent(table.nom)}` }, ic('reseau', 15), 'Schéma des liens'),
+        h('button', { onclick: () => extraireTables([table.nom]) }, ic('telecharger', 15), 'Télécharger cette table'),
+        h('a', { class: 'bouton', href: `#/schema/${encodeURIComponent(table.nom)}` }, ic('reseau', 15), 'Constellation'),
         h('a', { class: 'bouton', href: '#/assistant', onclick: () => sessionStorage.setItem('birtec-question', `Explique à quoi sert la table ${table.nom} et ses principales colonnes.`) }, ic('oiseau', 15), 'Demander à l’IA'),
       ),
     ),
   )
+}
+
+// ---------------------------------------------------------------- extraction des données
+
+// Télécharge les tables (données en CSV, structure et lisez-moi) dans un fichier .zip.
+// Réutilisé par la Constellation.
+export async function extraireTables(tables) {
+  if (!tables.length) return notifier('Aucune table choisie.', 'erreur')
+  if (!etat.connexion.ouverte) await demanderMotDePasse().catch(() => {})
+  notifier(`Extraction de ${tables.length} table(s)…`)
+  try {
+    const reponse = await fetch('/api/extraction', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-BIRTEC': '1' }, body: JSON.stringify({ tables }) })
+    if (!reponse.ok) throw new Error((await reponse.json().catch(() => ({}))).erreur || `Erreur ${reponse.status}`)
+    const nom = decodeURIComponent((reponse.headers.get('Content-Disposition') || '').match(/filename\*=UTF-8''([^;]+)/)?.[1] || 'extraction.zip')
+    const lien = h('a', { href: URL.createObjectURL(await reponse.blob()), download: nom })
+    document.body.append(lien)
+    lien.click()
+    lien.remove()
+    setTimeout(() => URL.revokeObjectURL(lien.href), 10_000)
+    notifier(`Extraction prête : ${nom}`)
+  } catch (erreur) {
+    notifier(erreur.message, 'erreur')
+  }
+}
+
+// Fenêtre de choix des tables à extraire (cases à cocher, filtre, tout cocher).
+async function choisirTablesAExtraire(tables, actuelle) {
+  const choisies = new Set(actuelle ? [actuelle] : [])
+  const filtre = h('input', { type: 'search', placeholder: 'Filtrer les tables…' })
+  const voirEcartees = h('input', { type: 'checkbox' })
+  const liste = h('div', { class: 'liste-champs', style: { columns: '2 220px' } })
+  const compteur = h('span', { class: 'discret' })
+  const visibles = () => {
+    const texte = filtre.value.toLowerCase()
+    return tables.filter((t) => (voirEcartees.checked || !t.exclue) && (!texte || `${t.nom} ${t.libelle || ''}`.toLowerCase().includes(texte)))
+  }
+  const dessiner = () => {
+    vider(liste, visibles().map((t) => {
+      const coche = h('input', { type: 'checkbox', checked: choisies.has(t.nom), onchange: () => { coche.checked ? choisies.add(t.nom) : choisies.delete(t.nom); compter() } })
+      return h('label', { class: 'valeur-filtre', title: t.libelle || '' }, coche, h('span', { class: 'mono' }, t.nom), t.libelle ? h('span', { class: 'discret' }, ` ${t.libelle}`) : null)
+    }))
+    compter()
+  }
+  const compter = () => (compteur.textContent = `${choisies.size} table(s) choisie(s)`)
+  filtre.addEventListener('input', dessiner)
+  voirEcartees.addEventListener('change', dessiner)
+  dessiner()
+  const ok = await fenetre({
+    titre: 'Extraire des tables',
+    large: true,
+    contenu: h('div', {},
+      h('p', { class: 'texte-2' }, 'Les tables cochées sont téléchargées dans un fichier .zip : un fichier CSV par table (s’ouvre dans Excel), leur structure avec les noms clairs du dictionnaire, et un lisez-moi. 200 000 lignes au plus par table.'),
+      h('div', { class: 'actions' }, filtre,
+        h('button', { class: 'petit discret', onclick: () => { for (const t of visibles()) choisies.add(t.nom); dessiner() } }, 'Tout cocher'),
+        h('button', { class: 'petit discret', onclick: () => { choisies.clear(); dessiner() } }, 'Tout décocher'),
+        h('label', { class: 'case-schema' }, voirEcartees, 'Tables écartées')),
+      liste,
+      compteur),
+    boutons: [
+      { texte: 'Annuler', classe: 'discret', valeur: null },
+      { texte: 'Télécharger', classe: 'principal', action: () => (choisies.size ? [...choisies] : false) },
+    ],
+  })
+  if (ok) extraireTables(ok)
 }
 
 // La console SQL : réutilisée aussi par l'assistant (« Exécuter » sous une requête).
