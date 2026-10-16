@@ -17,6 +17,9 @@ navigateur ──► serveur Node (127.0.0.1:47900) ──► llama.cpp (IA)
 - **Fichier .birtec** (`serveur/socle/birtec.js`) : notes, structure des tables, liens, requêtes et fichiers BIRT du site.
   Le programme ne contient aucune donnée du site ; tout est dans ce fichier, hors du dépôt.
   Importation d'un dossier : `blocs/connaissances/importation.js`.
+- **Constructeur** (`blocs/constructeur/`) : `catalogue.js` liste les sujets (tables en forme de fiche) et, pour un
+  sujet, les champs atteignables par les liens (meilleur chemin par table, liens nommés d'abord, tables filles décrites) ;
+  `requete.js` écrit le SQL (jointures, filtres, périodes, synthèse) ; l'IA ne sert qu'à pré-remplir le formulaire.
 - **Contrôle du SQL** (`blocs/base/verification.js`) : tables, colonnes et alias de chaque requête écrite par l'IA,
   avec les tables qui ont la colonne cherchée ; utilisé par l'assistant, les rapports et les indicateurs.
 - **Dictionnaire** (tables `dictionnaire` et `liens_dico` du .birtec) : noms clairs, descriptions, tables écartées ;

@@ -34,7 +34,8 @@ export default {
       h('div', { class: 'entete-page' },
         h('div', {}, h('h1', {}, 'Rapports'), h('p', { class: 'sous-titre' }, 'Rapports BIRT créés par BiRTEC : aperçu, export, fichier .rptdesign')),
         h('div', { class: 'actions' },
-          h('button', { onclick: () => { sessionStorage.setItem('birtec-question', 'Je veux créer un rapport BIRT. Pose-moi les questions utiles (contenu, période, regroupements, totaux), puis donne sa description.'); location.hash = '#/assistant' } }, ic('etincelle', 16), 'Créer avec l’assistant'),
+          h('a', { class: 'bouton principal', href: '#/constructeur' }, ic('plus', 16), 'Nouveau rapport'),
+          h('button', { class: 'discret', onclick: () => { sessionStorage.setItem('birtec-question', 'Je veux créer un rapport BIRT. Pose-moi les questions utiles (contenu, période, regroupements, totaux), puis donne sa description.'); location.hash = '#/assistant' } }, ic('etincelle', 16), 'Avec l’assistant'),
           h('button', { class: 'discret', onclick: () => creerDepuisDescription() }, ic('plus', 16), 'Coller une description'),
         ),
       ),
@@ -46,7 +47,7 @@ export default {
 
     if (id && rapports.some((r) => r.nom === id)) await afficherRapport(detail, id)
     else vider(detail, h('div', { class: 'carte' }, h('p', { class: 'texte-2' },
-      rapports.length ? 'Choisissez un rapport à gauche.' : 'Demandez un rapport à l’assistant (par exemple « rapport des heures par équipement sur une période, groupé par famille ») : il propose sa description, puis le bouton « Créer le rapport » le fabrique et le vérifie.')))
+      rapports.length ? 'Choisissez un rapport à gauche.' : 'Aucun rapport pour l’instant : « Nouveau rapport » pour en créer un en quelques clics.')))
   },
 }
 
@@ -105,7 +106,9 @@ async function afficherRapport(zone, nom) {
         h('h2', {}, ic('document', 18), rapport.titre || nom),
         h('div', { class: 'actions' },
           h('a', { class: 'bouton petit discret', href: `/api/rapports/${encodeURIComponent(nom)}/fichier`, title: 'Le fichier à ouvrir dans BIRT ou à déposer dans la GMAO' }, ic('telecharger', 14), '.rptdesign'),
-          rapport.description ? h('button', { class: 'petit discret', onclick: () => creerDepuisDescription(rapport.description, nom) }, ic('crayon', 14), 'Modifier') : null,
+          rapport.description?.constructeur
+            ? h('button', { class: 'petit discret', onclick: () => { sessionStorage.setItem('birtec-constructeur', JSON.stringify({ etat: rapport.description.constructeur, aspect: { titre: rapport.description.titre, sousTitre: rapport.description.sousTitre, theme: rapport.description.theme, logo: rapport.description.logo, image: rapport.description.image || '', description: rapport.description.description, positionDescription: rapport.description.positionDescription, orientation: rapport.description.orientation }, nom })); location.hash = '#/constructeur' } }, ic('crayon', 14), 'Modifier')
+            : rapport.description ? h('button', { class: 'petit discret', onclick: () => creerDepuisDescription(rapport.description, nom) }, ic('crayon', 14), 'Modifier') : null,
           h('button', { class: 'petit discret danger', onclick: () => supprimer(nom) }, ic('poubelle', 14), 'Supprimer'),
         ),
       ),

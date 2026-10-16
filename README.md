@@ -7,6 +7,10 @@ rien ne sort de l'entreprise.
 - **Connexion MySQL en lecture seule** : le mot de passe est demandé à chaque ouverture, jamais enregistré ;
   seules les requêtes de lecture sont acceptées.
 - **Accueil** : indicateurs du jour et raccourcis de rapports, à organiser par glisser-déposer.
+- **Nouveau rapport** (la façon simple) : un formulaire en 4 étapes (sujet, colonnes ou synthèse, filtres,
+  présentation) avec aperçu en direct ; BiRTEC écrit lui-même le SQL à partir du dictionnaire et des liens.
+  « Remplir avec l'IA » pré-remplit le formulaire d'après une phrase (l'IA comprend, BiRTEC choisit les champs
+  et cherche la valeur exacte des filtres dans la base).
 - **Assistant** (point d'entrée unique) : il mène la discussion selon des consignes modifiables, écrit la requête,
   puis « Créer le rapport » (`.rptdesign`) ou « Créer l'indicateur ». Chaque requête est contrôlée sur la vraie
   structure (tables, colonnes, alias) et réécrite par l'IA en cas d'erreur ; l'IA raisonne avant d'écrire du SQL et
@@ -48,7 +52,7 @@ node serveur/demarrer.js                          # lance BiRTEC (http://127.0.0
 |---|---|
 | `serveur/socle/` | Serveur web, IA (`ia.js`), connexion MySQL (`mysql.js`), fichier .birtec (`birtec.js`), réglages |
 | `moteur-java/Moteur.java` | Le programme Java : connexion, structure de la base, requêtes en lecture seule, moteur BIRT |
-| `blocs/<écran>/` | `serveur.js` (routes), `vue.js` (écran) : accueil, assistant, rapports, itm, base, schema, connaissances, configuration, aide |
+| `blocs/<écran>/` | `serveur.js` (routes), `vue.js` (écran) : accueil, constructeur, rapports, itm, assistant, base, schema, connaissances, configuration, aide |
 | `interface/` | Page, thème vert (`theme.css`), icône, outils d'écran, aide |
 | `outils/` | Préparation d'un poste, catalogue des versions, fabrication du kit hors ligne |
 

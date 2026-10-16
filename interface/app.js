@@ -7,6 +7,7 @@
 import { h, vider, ic, fenetreOuverte, notifier } from './socle/ui.js'
 import { etat, suivreEtat, surChangement } from './socle/etat.js'
 import accueil from '/blocs/accueil/vue.js'
+import constructeur from '/blocs/constructeur/vue.js'
 import assistant from '/blocs/assistant/vue.js'
 import base from '/blocs/base/vue.js'
 import rapports from '/blocs/rapports/vue.js'
@@ -17,7 +18,7 @@ import configuration, { demanderMotDePasse } from '/blocs/configuration/vue.js'
 import aide from '/blocs/aide/vue.js'
 
 // L'ordre est celui du menu.
-const BLOCS = [accueil, assistant, rapports, itm, base, schema, connaissances, configuration, aide]
+const BLOCS = [accueil, constructeur, rapports, itm, assistant, base, schema, connaissances, configuration, aide]
 
 const racine = document.getElementById('appli')
 const menu = h('nav', { class: 'menu' })

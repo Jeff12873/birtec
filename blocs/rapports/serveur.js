@@ -51,28 +51,8 @@ export function routes(r) {
   // POST /api/rapports/generer { description, nom? }
   // Construit le rapport, le vérifie, le fait tourner ; en cas d'erreur, l'IA corrige la description (2 essais).
   r.post('/api/rapports/generer', async (ctx) => {
-    let { description, nom } = await ctx.json()
-    const { mysql } = reglagesPoste()
-    const connexion = { url: `jdbc:mysql://${mysql.serveur}:${mysql.port || 3306}/${mysql.base}`, utilisateur: mysql.utilisateur, charte: lireInfo('charte') }
-    nom = nomDeFichier(nom || description?.titre || 'rapport')
-    const fichier = path.join(dossierTravail(), 'rapports', `${nom}.rptdesign`)
-    const corrections = []
-
-    let avertissements = []
-    for (let essai = 0; ; essai++) {
-      const resultat = await essayer(description, fichier, connexion)
-      avertissements = resultat.avertissements
-      if (!resultat.erreurs.length) break
-      if (essai >= ESSAIS_DE_CORRECTION || !iaInstallee()) {
-        return { nom, ok: false, erreurs: resultat.erreurs, corrections }
-      }
-      journal(`Rapport « ${nom} » : correction par l'IA (${resultat.erreurs[0]})`)
-      description = await corrigerParIA(description, resultat.erreurs)
-      corrections.push(resultat.erreurs[0])
-    }
-    fs.writeFileSync(fichier.replace(/\.rptdesign$/, '.birtec.json'), JSON.stringify(description, null, 2) + '\n')
-    journal(`Rapport créé : ${fichier}`)
-    return { nom, ok: true, erreurs: [], avertissements, corrections }
+    const { description, nom } = await ctx.json()
+    return genererRapport(description, nom)
   })
 
   r.get('/api/rapports-themes', () => Object.keys(THEMES))
@@ -137,6 +117,31 @@ export function routes(r) {
 
 // ---------------------------------------------------------------- génération et correction
 
+// Fabrique le rapport (et sa description à côté), avec correction par l'IA si besoin.
+export async function genererRapport(description, nom) {
+  const { mysql } = reglagesPoste()
+  const connexion = { url: `jdbc:mysql://${mysql.serveur}:${mysql.port || 3306}/${mysql.base}`, utilisateur: mysql.utilisateur, charte: lireInfo('charte') }
+  nom = nomDeFichier(nom || description?.titre || 'rapport')
+  const fichier = path.join(dossierTravail(), 'rapports', `${nom}.rptdesign`)
+  const corrections = []
+  let avertissements = []
+  for (let essai = 0; ; essai++) {
+    const resultat = await essayer(description, fichier, connexion)
+    avertissements = resultat.avertissements
+    if (!resultat.erreurs.length) break
+    if (essai >= ESSAIS_DE_CORRECTION || !iaInstallee() || description.constructeur) {
+      // Un rapport du constructeur n'est pas confié à l'IA : son SQL vient de BiRTEC.
+      return { nom, ok: false, erreurs: resultat.erreurs, corrections }
+    }
+    journal(`Rapport « ${nom} » : correction par l'IA (${resultat.erreurs[0]})`)
+    description = await corrigerParIA(description, resultat.erreurs)
+    corrections.push(resultat.erreurs[0])
+  }
+  fs.writeFileSync(fichier.replace(/\.rptdesign$/, '.birtec.json'), JSON.stringify(description, null, 2) + '\n')
+  journal(`Rapport créé : ${fichier}`)
+  return { nom, ok: true, erreurs: [], avertissements, corrections }
+}
+
 // Génère et vérifie le rapport. Renvoie { erreurs, avertissements } (pas d'erreur = rapport bon).
 async function essayer(description, fichier, connexion) {
   const erreursDescription = verifierDescription(description)
@@ -180,18 +185,22 @@ function imageDu(description) {
   return { nom: path.basename(description.image), type, octets }
 }
 
-// Nombre de lignes de la requête du rapport, les « ? » remplacés par les valeurs des paramètres.
-export async function compterLignes(description, valeurs) {
+// La requête du rapport, les « ? » remplacés par les valeurs des paramètres (pour l'essayer sur la base).
+export function sqlAvecValeurs(description, valeurs = {}) {
   const parametres = description.parametres || []
   const liaisons = description.liaisons || parametres.map((p) => p.nom)
   let i = 0
   const morceaux = String(description.requete).trim().replace(/;+\s*$/, '').split(/('(?:[^'\\]|\\.|'')*')/)
-  const sql = morceaux.map((m, n) => (n % 2 ? m : m.replace(/\?/g, () => {
+  return morceaux.map((m, n) => (n % 2 ? m : m.replace(/\?/g, () => {
     const p = parametres.find((q) => q.nom === liaisons[i++]) || {}
     const v = valeurs[p.nom] ?? p.defaut ?? ''
     return ['entier', 'decimal'].includes(p.type) && v !== '' && !isNaN(Number(v)) ? String(Number(v)) : `'${String(v).replace(/\\/g, '\\\\').replace(/'/g, "''")}'`
   }))).join('')
-  const r = await executerRequete(`SELECT COUNT(*) AS n FROM (${sql}) AS birtec_compte`, 1)
+}
+
+// Nombre de lignes de la requête du rapport avec ces valeurs de paramètres.
+export async function compterLignes(description, valeurs) {
+  const r = await executerRequete(`SELECT COUNT(*) AS n FROM (${sqlAvecValeurs(description, valeurs)}) AS birtec_compte`, 1)
   return Number(r.lignes[0][0])
 }
 

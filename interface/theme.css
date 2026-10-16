@@ -393,3 +393,27 @@ a.raccourci-rapport:hover { border-color: var(--accent); text-decoration: none; 
 
 /* Les cases à cocher gardent leur taille (le style des champs les étirerait) */
 input[type=checkbox] { width: auto; flex: none; padding: 0; }
+
+/* Nouveau rapport (constructeur) */
+.phrase-ia { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; }
+.phrase-ia input { flex: 1; }
+.constructeur-grille { display: grid; grid-template-columns: minmax(380px, 1fr) minmax(0, 1.2fr); gap: 16px; align-items: start; }
+@media (max-width: 1150px) { .constructeur-grille { grid-template-columns: 1fr; } }
+.apercu-constructeur { position: sticky; top: 86px; max-height: calc(100vh - 110px); overflow: auto; }
+@media (max-width: 1150px) { .apercu-constructeur { position: static; max-height: none; } }
+.section-constructeur h2 { display: flex; align-items: center; gap: 10px; font-size: 17px; margin-bottom: 12px; }
+.numero-etape { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-texte); font-size: 14px; font-weight: 700; }
+.puces { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.puce-champ { display: inline-flex; align-items: center; gap: 4px; padding: 4px 4px 4px 10px; border-radius: 999px; background: var(--carte-2); border: 1px solid var(--bord-fort); font-size: 13px; color: var(--texte); }
+.puce-champ button { padding: 2px 6px; min-height: 0; }
+.puce-champ select.mini { padding: 2px 6px; font-size: 12px; width: auto; }
+.ligne-filtre { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--bord); }
+.ligne-filtre .nom-filtre { font-weight: 500; min-width: 140px; }
+.ligne-filtre select, .ligne-filtre input { width: auto; }
+.liste-champs { max-height: 55vh; overflow: auto; margin-top: 10px; }
+.liste-champs details { margin-bottom: 4px; }
+.liste-champs summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+.liste-champs a { display: block; padding: 5px 10px 5px 18px; border-radius: 6px; color: var(--texte-2); }
+.liste-champs a:hover { background: var(--carte-3); color: var(--texte); text-decoration: none; }
+.liste-champs a.decrit { color: var(--texte); }
+.valeur-filtre { display: flex; gap: 8px; align-items: center; padding: 3px 4px; }
