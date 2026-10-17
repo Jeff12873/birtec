@@ -83,7 +83,7 @@ export default {
     recherche.addEventListener('keydown', (e) => e.key === 'Enter' && chercher())
     const caseEcartees = h('input', { type: 'checkbox', checked: voirEcartees, onchange: () => { voirEcartees = caseEcartees.checked; window.birtec.recharger() } })
 
-    vider(panneau, aideSchema())
+    vider(panneau, aideSchema(graphe))
     vider(
       zone,
       h('div', { class: 'entete-page' },
@@ -142,8 +142,12 @@ function construireGraphe(schema) {
     l.a.voisins.add(l.b)
     l.b.voisins.add(l.a)
   }
-  for (const n of noeuds) n.rayon = 4 + Math.sqrt(n.degre) * 2.6
-  return { noeuds, liens, parNom }
+  const niveaux = niveauxDu(noeuds)
+  for (const n of noeuds) {
+    n.rayon = 4 + Math.sqrt(n.degre) * 2.6
+    n.niveau = niveaux.find((v) => n.degre >= v.min)
+  }
+  return { noeuds, liens, parNom, niveaux }
 }
 
 // La clé de liaison d'un lien : « ID_DI », ou « ID_M_N1 = ID_MACHI » quand les deux colonnes diffèrent.
@@ -583,7 +587,7 @@ class VueGraphe {
       if (p.x < -rayon - 80 || p.y < -rayon - 40 || p.x > r.width + rayon + 80 || p.y > r.height + rayon + 40) continue
       const pale = attenue(n)
       c.globalAlpha = pale ? 0.15 : n.table.exclue ? 0.4 : 1
-      c.fillStyle = n === this.source ? couleurs.accent : surChemin.has(n) ? couleurs.chemin : niveau(n).ecran
+      c.fillStyle = n === this.source ? couleurs.accent : surChemin.has(n) ? couleurs.chemin : n.niveau.ecran
       c.beginPath()
       c.arc(p.x, p.y, rayon, 0, Math.PI * 2)
       c.fill()
@@ -618,15 +622,25 @@ class VueGraphe {
   }
 }
 
-// Couleur d'une bulle selon son nombre de liens : les carrefours (tables très reliées) ressortent,
-// les tables de passage (1 ou 2 liens) restent discrètes. « ecran » pour le fond sombre, « papier » pour le PDF.
-const NIVEAUX = [
-  { min: 11, nom: 'carrefour (11 liens et plus)', ecran: '#f472b6', papier: '#be185d' },
-  { min: 6, nom: 'très reliée (6 à 10)', ecran: '#a78bfa', papier: '#6d28d9' },
-  { min: 3, nom: 'reliée (3 à 5)', ecran: '#60a5fa', papier: '#2563eb' },
-  { min: 0, nom: 'passage (1 ou 2)', ecran: '#94a3b8', papier: '#94a3b8' },
-]
-const niveau = (n) => NIVEAUX.find((v) => n.degre >= v.min)
+// Couleur d'une bulle selon son nombre de liens : les carrefours ressortent, les tables de passage
+// (1 ou 2 liens) restent discrètes. Les seuils suivent la base affichée : de 3 liens jusqu'au plus relié,
+// l'écart est coupé en trois. « ecran » pour le fond sombre, « papier » pour le PDF.
+function niveauxDu(noeuds) {
+  const max = Math.max(3, ...noeuds.map((n) => n.degre))
+  const pas = Math.max(1, Math.ceil((max - 2) / 3))
+  const fourchette = (de, a) => (de >= a ? `${de}` : `${de} à ${a}`)
+  const niveaux = [
+    { min: 3 + 2 * pas, nom: 'carrefour', ecran: '#ff4d4d', papier: '#e00000' },
+    { min: 3 + pas, nom: 'très reliée', ecran: '#c45bff', papier: '#9000d8' },
+    { min: 3, nom: 'reliée', ecran: '#3d9bff', papier: '#0066ff' },
+    { min: 0, nom: 'passage', ecran: '#8b95a7', papier: '#a3a9b4' },
+  ].filter((v, i, liste) => i === 0 || v.min < liste[i - 1].min) // petites bases : pas de niveau vide
+  niveaux.forEach((v, i) => {
+    const haut = i ? niveaux[i - 1].min - 1 : max
+    v.nom += ` (${v.min ? fourchette(v.min, haut) : fourchette(1, Math.min(2, haut))} liens)`
+  })
+  return niveaux
+}
 
 function couleursDuTheme() {
   const css = getComputedStyle(document.documentElement)
@@ -695,7 +709,7 @@ function reglagesSchema(vue, caseEcartees) {
 
 // ---------------------------------------------------------------- panneau de droite
 
-function aideSchema() {
+function aideSchema(graphe) {
   return [
     h('h2', { style: { marginBottom: '8px' } }, 'Mode d’emploi'),
     h('ul', { class: 'texte-2', style: { paddingLeft: '18px', fontSize: '14px', margin: 0 } },
@@ -707,7 +721,7 @@ function aideSchema() {
       h('li', {}, 'Clic sur un lien : le nommer et le décrire.'),
     ),
     h('p', { class: 'discret', style: { fontSize: '13px', marginTop: '12px' } },
-      'Taille et couleur d’une bulle : nombre de liens. ', NIVEAUX.map((v, i) => [i ? ', ' : '', h('span', { style: { color: v.ecran } }, '● ', v.nom)]), '.'),
+      'Taille et couleur d’une bulle : nombre de liens. ', graphe.niveaux.map((v, i) => [i ? ', ' : '', h('span', { style: { color: v.ecran, fontWeight: 600 } }, '● ', v.nom)]), '.'),
   ]
 }
 
@@ -864,7 +878,7 @@ function pageConstellation(graphe, vue, schema) {
   const bulles = noeuds.map((n) => {
     const classe = surChemin.has(n) ? 'chemin' : n.table.exclue ? 'ecartee' : ''
     const grand = n.degre > 8 ? 1.25 : 1
-    return `<g class="${classe}"><circle cx="${n.x}" cy="${n.y}" r="${rayon(n)}" fill="${niveau(n).papier}"/>`
+    return `<g class="${classe}"><circle cx="${n.x}" cy="${n.y}" r="${rayon(n)}" fill="${n.niveau.papier}"/>`
       + `<text x="${n.x}" y="${n.y + rayon(n) + taille * 1.1}" font-size="${grand * taille}">${x(n.table.nom)}</text>`
       + (n.table.libelle && n.degre > 3 ? `<text class="libelle" x="${n.x}" y="${n.y + rayon(n) + taille * 2}" font-size="${taille * 0.7}">${x(n.table.libelle)}</text>` : '')
       + '</g>'
@@ -911,7 +925,7 @@ function pageConstellation(graphe, vue, schema) {
   ${legendeChemin}
   <line x1="10" y1="277" x2="410" y2="277" stroke="#e5e7eb" stroke-width="0.3"/>
   <text x="10" y="283.2">Nombre de liens :</text>
-  ${NIVEAUX.map((v, i) => pastille(40 + i * 50, v.papier, v.nom)).join('')}
+  ${graphe.niveaux.map((v, i) => pastille(40 + i * 50, v.papier, v.nom)).join('')}
   ${pastille(244, '#e5e7eb', 'écartée de l’IA')}
   ${pastille(280, '#f59e0b', 'chemin choisi')}
   <text x="318" y="283.2">Trait vert : lien nommé.</text>
