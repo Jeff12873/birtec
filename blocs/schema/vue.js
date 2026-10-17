@@ -583,7 +583,7 @@ class VueGraphe {
       if (p.x < -rayon - 80 || p.y < -rayon - 40 || p.x > r.width + rayon + 80 || p.y > r.height + rayon + 40) continue
       const pale = attenue(n)
       c.globalAlpha = pale ? 0.15 : n.table.exclue ? 0.4 : 1
-      c.fillStyle = n === this.source ? couleurs.accent : surChemin.has(n) ? couleurs.chemin : n.table.libelle ? couleurs.decrite : couleurs.bulle
+      c.fillStyle = n === this.source ? couleurs.accent : surChemin.has(n) ? couleurs.chemin : niveau(n).ecran
       c.beginPath()
       c.arc(p.x, p.y, rayon, 0, Math.PI * 2)
       c.fill()
@@ -617,6 +617,16 @@ class VueGraphe {
     c.globalAlpha = 1
   }
 }
+
+// Couleur d'une bulle selon son nombre de liens : les carrefours (tables très reliées) ressortent,
+// les tables de passage (1 ou 2 liens) restent discrètes. « ecran » pour le fond sombre, « papier » pour le PDF.
+const NIVEAUX = [
+  { min: 11, nom: 'carrefour (11 liens et plus)', ecran: '#f472b6', papier: '#be185d' },
+  { min: 6, nom: 'très reliée (6 à 10)', ecran: '#a78bfa', papier: '#6d28d9' },
+  { min: 3, nom: 'reliée (3 à 5)', ecran: '#60a5fa', papier: '#2563eb' },
+  { min: 0, nom: 'passage (1 ou 2)', ecran: '#94a3b8', papier: '#94a3b8' },
+]
+const niveau = (n) => NIVEAUX.find((v) => n.degre >= v.min)
 
 function couleursDuTheme() {
   const css = getComputedStyle(document.documentElement)
@@ -697,7 +707,7 @@ function aideSchema() {
       h('li', {}, 'Clic sur un lien : le nommer et le décrire.'),
     ),
     h('p', { class: 'discret', style: { fontSize: '13px', marginTop: '12px' } },
-      'Taille d’une bulle : nombre de liens. Couleur : ', h('span', { style: { color: 'var(--violet)' } }, 'décrite dans le dictionnaire'), ', ', h('span', { style: { color: '#9aa4d6' } }, 'pas encore décrite'), '.'),
+      'Taille et couleur d’une bulle : nombre de liens. ', NIVEAUX.map((v, i) => [i ? ', ' : '', h('span', { style: { color: v.ecran } }, '● ', v.nom)]), '.'),
   ]
 }
 
@@ -833,7 +843,11 @@ function pageConstellation(graphe, vue, schema) {
   const minY = Math.min(...ys) - marge
   const largeur = Math.max(...xs) - minX + marge
   const hauteur = Math.max(...ys) - minY + marge
-  const taille = Math.max(largeur, hauteur) / 170 // taille du texte proportionnelle au graphe
+  // Taille du texte fixée sur la feuille : environ 4,5 mm pour un nom de table, quelle que soit l'étendue du graphe
+  // (le graphe tient dans un cadre de 400 × 248 mm).
+  const echelle = Math.min(400 / largeur, 248 / hauteur) // millimètres par unité du graphe
+  const taille = 4.5 / echelle
+  const rayon = (n) => Math.max(n.rayon, 2 / echelle) // une bulle fait au moins 4 mm
   const x = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 
   const liensChemin = new Set(vue.chemin?.etapes?.map((e) => e.lien) || [])
@@ -848,11 +862,11 @@ function pageConstellation(graphe, vue, schema) {
     return `<text class="cle" x="${mx}" y="${my - taille * 0.25}" font-size="${taille * 0.6}" transform="rotate(${angle.toFixed(1)} ${mx} ${my})">${x(texteCle(l))}</text>`
   }).join('')
   const bulles = noeuds.map((n) => {
-    const classe = surChemin.has(n) ? 'chemin' : n.table.exclue ? 'ecartee' : n.table.libelle ? 'decrite' : ''
+    const classe = surChemin.has(n) ? 'chemin' : n.table.exclue ? 'ecartee' : ''
     const grand = n.degre > 8 ? 1.25 : 1
-    return `<g class="${classe}"><circle cx="${n.x}" cy="${n.y}" r="${n.rayon}"/>`
-      + `<text x="${n.x}" y="${n.y + n.rayon + taille * 1.1}" font-size="${grand * taille}">${x(n.table.nom)}</text>`
-      + (n.table.libelle && n.degre > 3 ? `<text class="libelle" x="${n.x}" y="${n.y + n.rayon + taille * 2.1}" font-size="${taille * 0.8}">${x(n.table.libelle)}</text>` : '')
+    return `<g class="${classe}"><circle cx="${n.x}" cy="${n.y}" r="${rayon(n)}" fill="${niveau(n).papier}"/>`
+      + `<text x="${n.x}" y="${n.y + rayon(n) + taille * 1.1}" font-size="${grand * taille}">${x(n.table.nom)}</text>`
+      + (n.table.libelle && n.degre > 3 ? `<text class="libelle" x="${n.x}" y="${n.y + rayon(n) + taille * 2}" font-size="${taille * 0.7}">${x(n.table.libelle)}</text>` : '')
       + '</g>'
   }).join('')
 
@@ -879,16 +893,14 @@ function pageConstellation(graphe, vue, schema) {
   .pied text { font-size: 3.2px; fill: #374151; }
   .pied text.mono { font-family: ui-monospace, "DejaVu Sans Mono", monospace; font-size: 3px; }
   .pied text.gras { font-weight: 600; }
-  .graphe line { stroke: #c7cbe0; stroke-width: ${taille * 0.12}; }
+  .graphe line { stroke: #b4b9d6; stroke-width: ${taille * 0.15}; }
   .graphe line.nomme { stroke: #0d9488; }
   .graphe line.chemin { stroke: #f59e0b; stroke-width: ${taille * 0.45}; }
-  .graphe circle { fill: #7c86c4; }
-  .graphe g.decrite circle { fill: #0d9488; }
-  .graphe g.ecartee circle { fill: #d1d5db; }
-  .graphe g.chemin circle { fill: #f59e0b; stroke: #92400e; stroke-width: ${taille * 0.15}; }
-  .graphe text { text-anchor: middle; fill: #111827; }
-  .graphe text.libelle { fill: #4b5563; font-style: italic; }
-  .graphe text.cle { fill: #6b7280; font-family: ui-monospace, "DejaVu Sans Mono", monospace; }
+  .graphe g.ecartee circle { fill: #e5e7eb; }
+  .graphe g.chemin circle { fill: #f59e0b !important; stroke: #92400e; stroke-width: ${taille * 0.15}; }
+  .graphe text { text-anchor: middle; fill: #111827; font-weight: 600; paint-order: stroke; stroke: #fff; stroke-width: ${taille * 0.25}; stroke-linejoin: round; }
+  .graphe text.libelle { fill: #4b5563; font-style: italic; font-weight: 400; }
+  .graphe text.cle { fill: #4b5563; font-weight: 400; font-family: ui-monospace, "DejaVu Sans Mono", monospace; }
 </style>
 <rect width="420" height="297" fill="#fff"/>
 <text class="titre" x="10" y="19">Constellation des tables</text>
@@ -898,10 +910,11 @@ function pageConstellation(graphe, vue, schema) {
 <g class="pied">
   ${legendeChemin}
   <line x1="10" y1="277" x2="410" y2="277" stroke="#e5e7eb" stroke-width="0.3"/>
-  ${pastille(12, '#0d9488', 'Table décrite dans le dictionnaire')}
-  ${pastille(76, '#7c86c4', 'Table non décrite')}
-  ${pastille(112, '#d1d5db', 'Écartée de l’IA')}
-  <text x="146" y="283.2">Taille d’une bulle : nombre de liens. Trait vert : lien nommé.</text>
+  <text x="10" y="283.2">Nombre de liens :</text>
+  ${NIVEAUX.map((v, i) => pastille(40 + i * 50, v.papier, v.nom)).join('')}
+  ${pastille(244, '#e5e7eb', 'écartée de l’IA')}
+  ${pastille(280, '#f59e0b', 'chemin choisi')}
+  <text x="318" y="283.2">Trait vert : lien nommé.</text>
 </g>
 </svg>`
   return { svg, base }
