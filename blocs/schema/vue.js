@@ -17,6 +17,7 @@ import { h, vider, ic, notifier } from '/socle/ui.js'
 import { api } from '/socle/api.js'
 import { etat } from '/socle/etat.js'
 import { extraireTables } from '/blocs/base/vue.js'
+import { pdfDepuisJpeg } from '/socle/pdf.js'
 
 let voirEcartees = false
 // Positions des bulles { x, y, fige } : chargées du .birtec, gardées d'une visite à l'autre.
@@ -91,15 +92,8 @@ export default {
           recherche,
           h('datalist', { id: 'birtec-tables' }, graphe.noeuds.map((n) => h('option', { value: n.table.nom }, n.table.libelle || ''))),
           h('button', { class: 'discret', title: 'Voir tout le graphe', onclick: () => vue.toutVoir() }, ic('rafraichir', 16), 'Tout voir'),
-          h('button', {
-            title: 'Les données de la table choisie, ou de toutes les tables du chemin en surbrillance (Ctrl + clic)',
-            onclick: () => {
-              const tables = vue.chemin?.etapes ? [...new Set([vue.chemin.depart, ...vue.chemin.etapes.map((e) => e.vers)].map((n) => n.table.nom))] : vue.source ? [vue.source.table.nom] : []
-              if (!tables.length) return notifier('Cliquez d’abord une table (ou Ctrl + clic pour un chemin).', 'erreur')
-              extraireTables(tables)
-            },
-          }, ic('telecharger', 16), 'Télécharger'),
-          h('button', { onclick: () => imprimer(graphe, vue, schema) }, ic('document', 16), 'Imprimer / PDF'),
+          h('button', { title: 'Enregistre toute la constellation, telle qu’elle est disposée, dans un fichier PDF (A3 paysage)', onclick: () => telechargerPdf(graphe, vue, schema).catch((e) => notifier(`PDF impossible : ${e.message}`, 'erreur')) }, ic('document', 16), 'Constellation en PDF'),
+          h('button', { class: 'discret', title: 'La même page, envoyée à l’imprimante', onclick: () => imprimer(graphe, vue, schema) }, ic('document', 16), 'Imprimer'),
         ),
       ),
       h('div', { class: 'schema-grille' },
@@ -826,11 +820,11 @@ function ajoutLien(t) {
   )
 }
 
-// ---------------------------------------------------------------- impression (PDF)
+// ---------------------------------------------------------------- PDF et impression
 
-// Une page A3 paysage, fond blanc : tout le graphe avec le nom de chaque table, le chemin en surbrillance
-// s'il y en a un, une légende. Le navigateur propose ensuite « Enregistrer au format PDF ».
-function imprimer(graphe, vue, schema) {
+// La page A3 paysage (420 × 297, en millimètres), fond blanc, dessinée en SVG : tout le graphe avec le nom
+// de chaque table, le chemin en surbrillance s'il y en a un, une légende. Sert au PDF et à l'impression.
+function pageConstellation(graphe, vue, schema) {
   const noeuds = graphe.noeuds
   const xs = noeuds.map((n) => n.x)
   const ys = noeuds.map((n) => n.y)
@@ -861,51 +855,89 @@ function imprimer(graphe, vue, schema) {
       + (n.table.libelle && n.degre > 3 ? `<text class="libelle" x="${n.x}" y="${n.y + n.rayon + taille * 2.1}" font-size="${taille * 0.8}">${x(n.table.libelle)}</text>` : '')
       + '</g>'
   }).join('')
-  const legendeChemin = vue.chemin?.etapes
-    ? `<div class="chemin-legende"><b>Chemin ${x(vue.chemin.depart.table.nom)} → ${x(vue.chemin.arrivee.table.nom)}</b><br>${[...new Set(vue.chemin.etapes.map((e) => {
-        const j = e.lien.jointures[0]
-        return `${x(j.de)}.${x(j.colonne)} = ${x(j.vers)}.${x(j.versColonne)}`
-      }))].join('<br>')}</div>`
-    : ''
+
+  // Le chemin choisi : ses clés, en bas à droite du graphe, sur un fond blanc.
+  let legendeChemin = ''
+  if (vue.chemin?.etapes?.length) {
+    const lignes = [`Chemin ${vue.chemin.depart.table.nom} → ${vue.chemin.arrivee.table.nom}`, ...new Set(vue.chemin.etapes.map((e) => {
+      const j = e.lien.jointures[0]
+      return `${j.de}.${j.colonne} = ${j.vers}.${j.versColonne}`
+    }))]
+    const haut = 270 - lignes.length * 4
+    legendeChemin = `<rect x="300" y="${haut - 4}" width="110" height="${lignes.length * 4 + 3}" fill="#fff" fill-opacity="0.9"/>`
+      + lignes.map((l, i) => `<text class="${i ? 'mono' : 'gras'}" x="408" y="${haut + i * 4}" text-anchor="end">${x(l)}</text>`).join('')
+  }
   const base = etat.connexion?.base || schema.base
   const date = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+  const pastille = (cx, couleur, texte) => `<circle cx="${cx}" cy="282" r="1.6" fill="${couleur}"/><text x="${cx + 3}" y="283.2">${x(texte)}</text>`
 
-  const page = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Constellation des tables — ${x(base)}</title>
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="420mm" height="297mm" viewBox="0 0 420 297">
 <style>
-  @page { size: A3 landscape; margin: 10mm; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; background: #fff; }
-  body { font-family: "Segoe UI", system-ui, sans-serif; color: #1f2937; }
-  .page { display: flex; flex-direction: column; height: 277mm; width: 400mm; }
-  header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #1e3a8a; padding-bottom: 3mm; margin-bottom: 3mm; }
-  h1 { margin: 0; font-size: 20pt; color: #1e3a8a; }
-  .sous-titre { color: #6b7280; font-size: 10pt; }
-  svg { flex: 1; width: 100%; min-height: 0; }
-  line { stroke: #c7cbe0; stroke-width: ${taille * 0.12}; }
-  line.nomme { stroke: #0d9488; }
-  line.chemin { stroke: #f59e0b; stroke-width: ${taille * 0.45}; }
-  circle { fill: #7c86c4; }
-  g.decrite circle { fill: #0d9488; }
-  g.ecartee circle { fill: #d1d5db; }
-  g.chemin circle { fill: #f59e0b; stroke: #92400e; stroke-width: ${taille * 0.15}; }
-  text { text-anchor: middle; fill: #111827; font-family: "Segoe UI", system-ui, sans-serif; }
-  text.libelle { fill: #4b5563; font-style: italic; }
-  text.cle { fill: #6b7280; font-family: ui-monospace, monospace; }
-  footer { display: flex; gap: 8mm; align-items: flex-start; font-size: 9pt; color: #374151; border-top: 1px solid #e5e7eb; padding-top: 2mm; margin-top: 2mm; }
-  .pastille { display: inline-block; width: 9pt; height: 9pt; border-radius: 50%; vertical-align: -1pt; margin-right: 3pt; }
-  .chemin-legende { margin-left: auto; font-family: ui-monospace, monospace; font-size: 8.5pt; }
-  @media screen { body { padding: 10mm; background: #e5e7eb; } .page { background: #fff; padding: 10mm; box-shadow: 0 2px 12px rgba(0,0,0,.15); height: auto; min-height: 277mm; } }
-</style></head><body><div class="page">
-<header><h1>Constellation des tables</h1><div class="sous-titre">Base « ${x(base)} » — ${noeuds.length} tables, ${graphe.liens.length} liens — ${date} — BiRTEC</div></header>
-<svg viewBox="${minX} ${minY} ${largeur} ${hauteur}" preserveAspectRatio="xMidYMid meet">${traits}${cles}${bulles}</svg>
-<footer>
-  <span><span class="pastille" style="background:#0d9488"></span>Table décrite dans le dictionnaire</span>
-  <span><span class="pastille" style="background:#7c86c4"></span>Table non décrite</span>
-  <span><span class="pastille" style="background:#d1d5db"></span>Écartée de l’IA</span>
-  <span>Taille d’une bulle : nombre de liens. Trait vert : lien nommé.</span>
+  text { font-family: "Segoe UI", "Noto Sans", system-ui, sans-serif; fill: #1f2937; }
+  .titre { font-size: 8px; font-weight: 600; fill: #1e3a8a; }
+  .sous-titre { font-size: 3.5px; fill: #6b7280; }
+  .pied text { font-size: 3.2px; fill: #374151; }
+  .pied text.mono { font-family: ui-monospace, "DejaVu Sans Mono", monospace; font-size: 3px; }
+  .pied text.gras { font-weight: 600; }
+  .graphe line { stroke: #c7cbe0; stroke-width: ${taille * 0.12}; }
+  .graphe line.nomme { stroke: #0d9488; }
+  .graphe line.chemin { stroke: #f59e0b; stroke-width: ${taille * 0.45}; }
+  .graphe circle { fill: #7c86c4; }
+  .graphe g.decrite circle { fill: #0d9488; }
+  .graphe g.ecartee circle { fill: #d1d5db; }
+  .graphe g.chemin circle { fill: #f59e0b; stroke: #92400e; stroke-width: ${taille * 0.15}; }
+  .graphe text { text-anchor: middle; fill: #111827; }
+  .graphe text.libelle { fill: #4b5563; font-style: italic; }
+  .graphe text.cle { fill: #6b7280; font-family: ui-monospace, "DejaVu Sans Mono", monospace; }
+</style>
+<rect width="420" height="297" fill="#fff"/>
+<text class="titre" x="10" y="19">Constellation des tables</text>
+<text class="sous-titre" x="410" y="19" text-anchor="end">Base « ${x(base)} » — ${noeuds.length} tables, ${graphe.liens.length} liens — ${date} — BiRTEC</text>
+<line x1="10" y1="23" x2="410" y2="23" stroke="#1e3a8a" stroke-width="0.6"/>
+<svg class="graphe" x="10" y="26" width="400" height="248" viewBox="${minX} ${minY} ${largeur} ${hauteur}" preserveAspectRatio="xMidYMid meet">${traits}${cles}${bulles}</svg>
+<g class="pied">
   ${legendeChemin}
-</footer></div>
-<script>window.onload = () => setTimeout(() => window.print(), 300)</script></body></html>`
+  <line x1="10" y1="277" x2="410" y2="277" stroke="#e5e7eb" stroke-width="0.3"/>
+  ${pastille(12, '#0d9488', 'Table décrite dans le dictionnaire')}
+  ${pastille(76, '#7c86c4', 'Table non décrite')}
+  ${pastille(112, '#d1d5db', 'Écartée de l’IA')}
+  <text x="146" y="283.2">Taille d’une bulle : nombre de liens. Trait vert : lien nommé.</text>
+</g>
+</svg>`
+  return { svg, base }
+}
+
+// Télécharge la constellation en fichier PDF (A3 paysage). Le SVG est dessiné sur une toile en haute
+// définition, puis glissé tel quel (JPEG) dans un PDF d'une page.
+async function telechargerPdf(graphe, vue, schema) {
+  const { svg, base } = pageConstellation(graphe, vue, schema)
+  const image = new Image()
+  image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
+  await image.decode()
+  const largeur = 4200 // environ 250 points par pouce sur une feuille A3
+  const hauteur = Math.round((largeur * 297) / 420)
+  const toile = document.createElement('canvas')
+  toile.width = largeur
+  toile.height = hauteur
+  const c = toile.getContext('2d')
+  c.fillStyle = '#fff'
+  c.fillRect(0, 0, largeur, hauteur)
+  c.drawImage(image, 0, 0, largeur, hauteur)
+  const jpeg = new Uint8Array(await (await new Promise((ok) => toile.toBlob(ok, 'image/jpeg', 0.92))).arrayBuffer())
+  const lien = h('a', { href: URL.createObjectURL(pdfDepuisJpeg(jpeg, largeur, hauteur)), download: `constellation-${String(base || 'base').replace(/[^\w-]+/g, '_')}-${new Date().toISOString().slice(0, 10)}.pdf` })
+  document.body.append(lien)
+  lien.click()
+  lien.remove()
+  setTimeout(() => URL.revokeObjectURL(lien.href), 10_000)
+  notifier('Constellation enregistrée en PDF (dossier des téléchargements)')
+}
+
+// La même page, ouverte pour l'imprimante.
+function imprimer(graphe, vue, schema) {
+  const { svg, base } = pageConstellation(graphe, vue, schema)
+  const page = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Constellation des tables — ${base}</title>
+<style>@page { size: A3 landscape; margin: 0; } html, body { margin: 0; } svg { display: block; width: 420mm; height: 297mm; }</style>
+</head><body>${svg}<script>window.onload = () => setTimeout(() => window.print(), 300)</script></body></html>`
   const fenetre = window.open('', '_blank')
   if (!fenetre) return notifier('Le navigateur a bloqué la fenêtre d’impression : autorisez les fenêtres de BiRTEC.', 'erreur')
   fenetre.document.write(page)
