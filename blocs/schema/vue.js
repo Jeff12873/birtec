@@ -150,7 +150,7 @@ function construireGraphe(schema) {
   return { noeuds, liens, parNom, niveaux }
 }
 
-// La clé de liaison d'un lien : « ID_DI », ou « ID_M_N1 = ID_MACHI » quand les deux colonnes diffèrent.
+// La clé de liaison d'un lien : « ID_DI », ou « ID_PERE = ID_ARTICLE » quand les deux colonnes diffèrent.
 // Plusieurs colonnes entre les deux mêmes tables : séparées par « · ».
 function texteCle(lien) {
   return lien.jointures.map((j) => (j.colonne === j.versColonne ? j.colonne : `${j.colonne} = ${j.versColonne}`)).join(' · ')
