@@ -10,7 +10,8 @@
 //   mesures: [{ fonction: 'nombre'|'somme'|'moyenne'|'min'|'max', champ }],   (synthèse)
 //   filtres: [{ champ, operateur, valeurs: [] }],
 //      operateurs : 'egal' (une des valeurs), 'contient', 'commence', 'vide', 'non_vide', '>=', '<=', 'entre',
-//                   'periode' (valeurs[0] : mois_en_cours, mois_precedent, annee_en_cours, 12_mois, 30_jours, demandee)
+//                   'periode' (valeurs[0] : mois_en_cours, mois_precedent, annee_en_cours, 12_mois, 30_jours, demandee,
+//                   ou glissante « mois:4 », « jours:15 », « semaines:2 », « ans:2 »)
 //   etat: 'sans_corbeille' | 'courantes' | 'toutes',      (si le sujet a une colonne ACTIF)
 //   tri: { champ, sens: 'asc'|'desc' },
 //   totaux: true,
@@ -234,6 +235,12 @@ function conditionPeriode(e, periode, nature) {
   const debutMois = (decalage = '') => (nature === 'date' ? `DATE_FORMAT(CURDATE()${decalage}, '%Y-%m-01')` : `DATE_FORMAT(CURDATE()${decalage}, '%Y%m01')`)
   const debutAnnee = nature === 'date' ? "DATE_FORMAT(CURDATE(), '%Y-01-01')" : "DATE_FORMAT(CURDATE(), '%Y0101')"
   const aujourdhui = date('CURDATE()')
+  // Période glissante : « mois:4 » = les 4 derniers mois, jusqu'à aujourd'hui (de même jours, semaines, ans).
+  const glissante = /^(jours|semaines|mois|ans):(\d+)$/.exec(periode)
+  if (glissante) {
+    const unite = { jours: 'DAY', semaines: 'WEEK', mois: 'MONTH', ans: 'YEAR' }[glissante[1]]
+    return `${e} >= ${date(`CURDATE() - INTERVAL ${Number(glissante[2])} ${unite}`)} AND ${e} <= ${aujourdhui}`
+  }
   switch (periode) {
     case 'mois_precedent':
       return `${e} >= ${debutMois(' - INTERVAL 1 MONTH')} AND ${e} < ${debutMois()}`

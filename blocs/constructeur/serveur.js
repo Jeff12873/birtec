@@ -12,6 +12,7 @@ import { construire } from './requete.js'
 import { genererRapport, sqlAvecValeurs, extraireJson } from '../rapports/serveur.js'
 import { reglagesITM, tester } from '../itm/serveur.js'
 import { trouverFenetre, formaterNom } from '../itm/indicateur.js'
+import { lireInfo, ecrireInfo } from '../../serveur/socle/birtec.js'
 import { enregistrerIndicateur } from '../../serveur/socle/birtec.js'
 
 // Le champ du catalogue qui correspond le mieux à quelques mots (« ligne », « temps d'arrêt »…).
@@ -40,16 +41,35 @@ function trouverChamp(cat, texte, filtre = () => true) {
 function sujetParLesMots(liste, phrase) {
   // Seulement le début de la phrase, avant « par », « avec »… : c'est là qu'on nomme ce qu'on liste.
   const debut = normaliser(phrase).split(/\b(par|avec|sur|pour|dont|qui|sous|selon|en|du|des \d)\b/)[0]
-  const mots = debut.split(/[^a-z0-9]+/).map((m) => m.replace(/(s|x)$/, '')).filter((m) => m.length > 2)
+  const tous = debut.split(/[^a-z0-9]+/).filter(Boolean)
+  const mots = tous.map((m) => m.replace(/(s|x)$/, '')).filter((m) => m.length > 2)
   let meilleur = null
   for (const s of liste.filter((x) => x.decrite)) {
     const siens = normaliser(s.libelle).split(/[^a-z0-9]+/).map((m) => m.replace(/(s|x)$/, '')).filter((m) => m.length > 2)
+    // Le sigle du nom (« Demande d'intervention » → « di ») ou le nom de la table, tels qu'on les dit à l'atelier.
+    const sigle = normaliser(s.libelle.split(/[(—]/)[0]).split(/[^a-z0-9]+/).filter((m) => m.length > 2 && !['des', 'les', 'une', 'pour', 'sur'].includes(m)).map((m) => m[0]).join('')
+    const nom = normaliser(s.table)
     let score = 0
+    tous.forEach((m, i) => { if (m.length >= 2 && (m.replace(/s$/, '') === nom || (sigle.length >= 2 && m.replace(/s$/, '') === sigle))) score += 4 + 1 / (1 + i) })
     mots.forEach((m, i) => { if (siens.includes(m)) score += 1 + 1 / (1 + i) + (siens[0] === m ? 1 : 0) })
     if (score && (!meilleur || score > meilleur.score)) meilleur = { table: s.table, score }
   }
   return meilleur?.table || null
 }
+
+// « les 4 derniers mois », « des trois dernières semaines » → la période « mois:4 », « semaines:3 ».
+const NOMBRES = { un: 1, une: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6, sept: 7, huit: 8, neuf: 9, dix: 10, douze: 12, quinze: 15, trente: 30 }
+function periodeGlissante(phrase) {
+  const m = normaliser(phrase).match(/\b(\d+|un|une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|douze|quinze|trente)\s+derni(?:er|ere)s?\s+(jours?|semaines?|mois|ans?|annees?)\b/)
+  if (!m) return null
+  const nombre = Number(m[1]) || NOMBRES[m[1]]
+  const unite = m[2].startsWith('jour') ? 'jours' : m[2].startsWith('semaine') ? 'semaines' : m[2] === 'mois' ? 'mois' : 'ans'
+  return nombre > 0 ? `${unite}:${nombre}` : null
+}
+
+// Le vocabulaire de l'atelier, appris dans le formulaire et gardé dans le .birtec :
+// { expression: « niveau 1 », sujet, champ, valeurs }.
+const lireVocabulaire = () => lireInfo('vocabulaire', [])
 
 function normaliser(texte) {
   return String(texte || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -166,6 +186,21 @@ export function routes(r) {
     return { id, nom: nomFinal, fenetre: fenetre.libelle, variableArbo: fenetre.variableArbo || null, requeteIndicateur, requeteListe, ...essai }
   })
 
+  // Vocabulaire : une expression de la phrase associée à un filtre (« niveau 1 » = tel type de demande).
+  r.get('/api/constructeur/vocabulaire', () => lireVocabulaire())
+  r.post('/api/constructeur/vocabulaire', async (ctx) => {
+    const { expression, sujet, champ, valeurs, supprimer } = await ctx.json()
+    const cle = normaliser(expression).trim()
+    if (!cle || !sujet) throw new ErreurHttp(400, 'Expression ou sujet manquant.')
+    const liste = lireVocabulaire().filter((v) => !(normaliser(v.expression) === cle && v.sujet === sujet))
+    if (!supprimer) {
+      if (!champ || !valeurs?.length) throw new ErreurHttp(400, 'Choisissez la colonne et au moins une valeur.')
+      liste.push({ expression: expression.trim(), sujet, champ, valeurs })
+    }
+    ecrireInfo('vocabulaire', liste)
+    return liste
+  })
+
   // POST /api/constructeur/proposer { phrase, sujet? } : l'IA remplit le formulaire d'après une phrase.
   r.post('/api/constructeur/proposer', async (ctx) => {
     const { phrase, sujet } = await ctx.json()
@@ -198,10 +233,11 @@ export function routes(r) {
  "mesures": [{"fonction": "nombre|somme|moyenne|max|min", "de": "… (vide pour un nombre)"}],
  "filtres": [{"sur": "…", "valeur": "…"}],
  "comparaisons": [{"colonne": "…", "operateur": "<|<=|>|>=|=|<>", "autre": "…"}],
- "periode": {"sur": "… (date concernée, vide si non précisé)", "valeur": "mois_en_cours|mois_precedent|30_jours|annee_en_cours|12_mois|depassee|a_venir|demandee"} ou null}
+ "periode": {"sur": "… (date concernée, vide si non précisé)", "valeur": "mois_en_cours|mois_precedent|30_jours|annee_en_cours|12_mois|depassee|a_venir|demandee|mois:N|jours:N|semaines:N|ans:N"} ou null}
 « synthese » dès qu'il est question de nombre, de total, de « par » quelque chose ; sinon « liste ».
 Un type ou une catégorie cité (dépannage, préventif, entretien…) est un filtre : {"sur": "type de maintenance", "valeur": "dépannage"}.
-Une période choisie au lancement du rapport : "demandee".
+Une période choisie au lancement du rapport : "demandee". « Les 4 derniers mois » : "mois:4" (de même jours:N, semaines:N, ans:N).
+Un sigle (DI, FI, RI, OT…) désigne le sujet du rapport, pas un filtre.
 « En retard » : {"sur": "date limite", "valeur": "depassee"}. « À venir », « à faire bientôt » : "a_venir".
 Une comparaison entre deux valeurs de la même fiche est une « comparaison » : « sous le stock minimum » = {"colonne": "stock réel", "operateur": "<", "autre": "stock minimum"}.`,
       },
@@ -219,7 +255,8 @@ Une comparaison entre deux valeurs de la même fiche est une « comparaison » :
       sujet: cat.sujet.table,
       mode: p.mode === 'synthese' ? 'synthese' : 'liste',
       champs: (p.colonnes || []).map((t) => trouverChamp(cat, t)).filter(Boolean),
-      regroupements: (p.regrouper_par || []).map((g) => {
+      // Un regroupement par date seulement si la phrase le demande (« par mois ») : « des 4 derniers mois » est une période.
+      regroupements: (p.regrouper_par || []).filter((g) => !(g.par === 'mois' || g.par === 'annee' || /\b(mois|annee|semaine|jour)\b/.test(normaliser(g.quoi))) || /\bpar (mois|annee|an|semaine|jour|date)/.test(normaliser(phrase))).map((g) => {
         const parDate = g.par === 'mois' || g.par === 'annee' || /\b(mois|annee|semaine|jour)\b/.test(normaliser(g.quoi))
         const par = g.par && g.par !== 'valeur' ? g.par : /annee/.test(normaliser(g.quoi)) ? 'annee' : parDate ? 'mois' : 'valeur'
         return { champ: parDate ? trouverChamp(cat, g.quoi, (c) => dates(c) && c.niveau === 0) || dateMetier : trouverChamp(cat, g.quoi), par }
@@ -231,18 +268,37 @@ Une comparaison entre deux valeurs de la même fiche est une « comparaison » :
     }
     if (!etat.mesures.length) etat.mesures = [{ fonction: 'nombre', champ: null }]
     const nonTrouves = []
+    const aApprendre = []
+    const phraseN = normaliser(phrase)
+    // D'abord le vocabulaire appris : une expression connue de la phrase donne directement son filtre.
+    const connues = lireVocabulaire().filter((v) => v.sujet === cat.sujet.table && phraseN.includes(normaliser(v.expression)) && cat.champs.some((c) => c.id === v.champ))
+    for (const v of connues) etat.filtres.push({ champ: v.champ, operateur: 'egal', valeurs: v.valeurs })
+    const motsConnus = connues.flatMap((v) => normaliser(v.expression).split(/[^a-z0-9]+/).filter((m) => m.length > 1 || /\d/.test(m)))
     // Une comparaison répétée par l'IA comme filtre (« stock réel : stock minimum ») n'est pas un filtre de plus.
     const compares = (p.comparaisons || []).flatMap((c) => [c.colonne, c.autre]).map(normaliser).filter(Boolean)
     for (const f of p.filtres || []) {
       if (compares.some((x) => normaliser(`${f.sur} ${f.valeur}`).includes(x))) continue
+      // Une valeur absente de la phrase a été inventée par l'IA (souvent reprise d'un exemple) : écartée.
+      const motsValeur = normaliser(f.valeur).split(/[^a-z0-9]+/).filter((m) => m.length > 1 || /\d/.test(m))
+      if (!motsValeur.some((m) => phraseN.split(/[^a-z0-9]+/).includes(m))) continue
+      // Une période ou une date prise pour un filtre (« 4 derniers mois ») : la période s'en occupe.
+      if (/dernier|mois|semaine|jour|annee|date/.test(normaliser(`${f.sur} ${f.valeur}`))) continue
+      // L'expression telle qu'elle est dans la phrase, pour l'apprendre si elle n'est pas trouvée.
+      const expression = [`${f.sur} ${f.valeur}`, `${f.valeur}`].map((x) => String(x).trim()).find((x) => x && phraseN.includes(normaliser(x))) || String(f.valeur || f.sur || '').trim()
+      // Déjà couvert par le vocabulaire (« niveau 1 » appris) : on ne le cherche pas une seconde fois.
+      const motsFiltre = normaliser(expression).split(/[^a-z0-9]+/).filter((m) => m.length > 1 || /\d/.test(m))
+      if (motsFiltre.length && motsFiltre.every((m) => motsConnus.includes(m))) continue
       const champ = trouverChamp(cat, f.sur, (c) => c.nature === 'texte')
-      if (!champ || !f.valeur) continue
+      if (!champ || !f.valeur) {
+        if (expression) { nonTrouves.push(`${f.sur} : ${f.valeur}`); aApprendre.push(expression) }
+        continue
+      }
       // La valeur exacte telle qu'elle est dans la base (« dépannage » → « Intervention de dépannage »).
       const valeurs = await valeursDe(cat, champ).catch(() => [])
       const cherche = normaliser(f.valeur)
       const trouvees = valeurs.filter((v) => normaliser(v.valeur).includes(cherche)).map((v) => String(v.valeur))
       if (trouvees.length) etat.filtres.push({ champ, operateur: 'egal', valeurs: trouvees.slice(0, 10) })
-      else nonTrouves.push(`${f.sur} : ${f.valeur}`)
+      else { nonTrouves.push(`${f.sur} : ${f.valeur}`); aApprendre.push(expression) }
     }
     for (const c of p.comparaisons || []) {
       const comparables = (x) => x.nature !== 'texte'
@@ -251,8 +307,10 @@ Une comparaison entre deux valeurs de la même fiche est une « comparaison » :
       if (gauche && droite && gauche !== droite) etat.filtres.push({ champ: gauche, operateur: 'compare', valeurs: [c.operateur || '<', droite] })
       else nonTrouves.push(`${c.colonne} ${c.operateur} ${c.autre}`)
     }
+    // « Les 4 derniers mois » : lu dans la phrase par BiRTEC, plus sûr que l'IA.
+    const glissante = periodeGlissante(phrase)
+    if (glissante) p.periode = { sur: p.periode?.sur || '', valeur: glissante }
     // « En retard » : date limite dépassée, sur les fiches courantes (même si l'IA ne l'a pas relevé).
-    const phraseN = normaliser(phrase)
     if (/en retard|depasse/.test(phraseN) && p.periode?.valeur !== 'depassee') {
       const limite = cat.champs.find((c) => c.niveau === 0 && dates(c) && /limite|echeance/.test(normaliser(c.libelle)))
       if (limite) p.periode = { sur: limite.libelle, valeur: 'depassee' }
@@ -265,8 +323,23 @@ Une comparaison entre deux valeurs de la même fiche est une « comparaison » :
     }
     // Une synthèse sans « regrouper par » n'a pas de sens : liste détaillée.
     if (etat.mode === 'synthese' && !etat.regroupements.length) etat.mode = 'liste'
-    if (etat.mode === 'liste' && !etat.champs.length) etat.champs = cat.champs.filter((c) => c.niveau === 0 && c.decrit).slice(0, 4).map((c) => c.id)
-    const avertissements = nonTrouves.length ? [`Filtre(s) non trouvé(s) dans la base, à ajouter à la main : ${nonTrouves.join(' ; ')}`] : []
-    return { etat, titre: p.titre || '', avertissements }
+    // Une liste sans colonne : le code, la désignation, la date métier, puis les colonnes décrites.
+    if (etat.mode === 'liste' && !etat.champs.length) {
+      const sujetMeme = cat.champs.filter((c) => c.niveau === 0)
+      etat.champs = [...new Set([
+        sujetMeme.find((c) => /^code/i.test(c.libelle))?.id,
+        sujetMeme.find((c) => /^designation$/.test(normaliser(c.libelle)))?.id,
+        dateMetier,
+        ...sujetMeme.filter((c) => c.decrit && c.nature !== 'date8' && c.nature !== 'date').map((c) => c.id),
+      ].filter(Boolean))].slice(0, 5)
+    }
+    // Une liste commence par le code et la désignation de la fiche, s'ils n'y sont pas déjà.
+    if (etat.mode === 'liste') {
+      const tete = cat.champs.filter((c) => c.niveau === 0 && (/^code/i.test(c.libelle) || /^designation$/.test(normaliser(c.libelle)))).map((c) => c.id)
+      etat.champs = [...new Set([...tete, ...etat.champs])].slice(0, 8)
+    }
+    // Les filtres de la phrase que BiRTEC n'a pas su placer : le formulaire propose de les lui apprendre.
+    const avertissements = nonTrouves.length ? [`Pas trouvé dans la base : ${nonTrouves.join(' ; ')}. Utilisez « Lui apprendre » à l’étape 3.`] : []
+    return { etat, titre: p.titre || '', avertissements, aApprendre: [...new Set(aApprendre)] }
   })
 }

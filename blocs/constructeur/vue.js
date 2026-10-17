@@ -8,7 +8,8 @@ import { etat as etatAppli } from '/socle/etat.js'
 import { demanderMotDePasse } from '/blocs/configuration/vue.js'
 import { tableauResultats } from '/blocs/base/vue.js'
 
-const PERIODES = { mois_en_cours: 'Mois en cours', mois_precedent: 'Mois précédent', '30_jours': '30 derniers jours', annee_en_cours: 'Année en cours', '12_mois': '12 derniers mois', depassee: 'Dépassée (avant aujourd’hui)', a_venir: 'À venir (à partir d’aujourd’hui)', demandee: 'Choisie au lancement du rapport' }
+const PERIODES = { mois_en_cours: 'Mois en cours', mois_precedent: 'Mois précédent', '30_jours': '30 derniers jours', annee_en_cours: 'Année en cours', '12_mois': '12 derniers mois', depassee: 'Dépassée (avant aujourd’hui)', a_venir: 'À venir (à partir d’aujourd’hui)', glissante: 'Les N derniers… (au choix)', demandee: 'Choisie au lancement du rapport' }
+const UNITES = { jours: 'jours', semaines: 'semaines', mois: 'mois', ans: 'ans' }
 const OPERATEURS = {
   texte: { egal: 'est', different: 'n’est pas', contient: 'contient', commence: 'commence par', vide: 'est vide', non_vide: 'n’est pas vide' },
   nombre: { egal: '=', '>=': '≥', '<=': '≤', compare: 'comparé à une autre colonne', vide: 'est vide', non_vide: 'n’est pas vide' },
@@ -64,6 +65,7 @@ export default {
       try {
         const r = await api('/api/constructeur/proposer', { methode: 'POST', corps: { phrase: phrase.value, sujet: null } })
         brouillon.etat = { ...nouveau().etat, ...r.etat }
+        brouillon.aApprendre = r.aApprendre || []
         if (r.titre) brouillon.aspect.titre = r.titre
         catalogue = await api(`/api/constructeur/champs/${encodeURIComponent(r.etat.sujet)}`)
         notifier('Formulaire rempli : vérifiez et ajustez, l’aperçu se met à jour.')
@@ -75,6 +77,21 @@ export default {
         boutonIA.disabled = false
         vider(boutonIA, ic('etincelle', 16), 'Remplir avec l’IA')
       }
+    }
+
+    // « Lui apprendre » : l'expression (« niveau 1 ») devient un filtre choisi ici, retenu dans le .birtec
+    // pour ce sujet ; la prochaine phrase qui la contient aura ce filtre directement.
+    async function apprendre(expression) {
+      const id = await choisirChamp(catalogue, `« ${expression} » correspond à quelle colonne ?`, (c) => c.nature === 'texte')
+      if (!id) return
+      const c = catalogue.champs.find((x) => x.id === id)
+      const valeurs = await choisirValeurs(brouillon.etat.sujet, c, [])
+      if (!valeurs?.length) return
+      await api('/api/constructeur/vocabulaire', { methode: 'POST', corps: { expression, sujet: brouillon.etat.sujet, champ: id, valeurs } })
+      brouillon.etat.filtres.push({ champ: id, operateur: 'egal', valeurs })
+      brouillon.aApprendre = brouillon.aApprendre.filter((x) => x !== expression)
+      notifier(`Retenu : « ${expression} » donnera désormais ce filtre (gardé dans le fichier .birtec).`)
+      changer()
     }
 
     // ---- formulaire
@@ -145,6 +162,11 @@ export default {
         const aActif = catalogue.champs.some((c) => c.chemin === '' && c.colonne.toUpperCase() === 'ACTIF')
         etapes.push(section('3', 'Quelles lignes ?', [
           e.filtres.map((f, i) => ligneFiltre(f, champs.get(f.champ), nomChamp(f.champ), e.sujet, () => { e.filtres.splice(i, 1); changer() }, changer, catalogue, nomChamp)),
+          // Les mots de la phrase que BiRTEC n'a pas trouvés dans la base : on peut les lui apprendre une fois pour toutes.
+          (brouillon.aApprendre || []).map((expression) => h('div', { class: 'bandeau', style: { display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' } },
+            ic('alerte'), h('span', { style: { flex: 1 } }, `« ${expression} » : BiRTEC ne sait pas à quoi cela correspond dans la base.`),
+            h('button', { class: 'petit', onclick: () => apprendre(expression) }, ic('livre', 14), 'Lui apprendre'),
+            h('button', { class: 'petit discret', onclick: () => { brouillon.aApprendre = brouillon.aApprendre.filter((x) => x !== expression); dessinerFormulaire() } }, 'Ignorer'))),
           h('div', { class: 'actions' },
             h('button', { class: 'petit', onclick: async () => { const id = await choisirChamp(catalogue, 'Filtrer sur'); if (id) { const c = champs.get(id); e.filtres.push({ champ: id, operateur: c.nature.startsWith('date') ? 'periode' : 'egal', valeurs: c.nature.startsWith('date') ? ['mois_en_cours'] : [] }); changer() } } }, ic('plus', 14), 'Filtre'),
             aActif ? h('select', { title: 'Fiches prises en compte', onchange: (ev) => { e.etat = ev.target.value; changer() } },
@@ -309,7 +331,18 @@ function ligneFiltre(f, c, nom, sujet, retirer, changer, catalogue, nomChamp) {
       h('button', { class: 'petit', onclick: async () => { const id = await choisirChamp(catalogue, 'Comparer à', memeNature); if (id) { f.valeurs[1] = id; changer() } } },
         f.valeurs[1] ? nomChamp(f.valeurs[1]) : 'Choisir la colonne…'))
   } else if (f.operateur === 'periode') {
-    valeur = h('select', { onchange: (ev) => { f.valeurs = [ev.target.value]; changer() } }, Object.entries(PERIODES).map(([v, t]) => h('option', { value: v, selected: f.valeurs[0] === v }, t)))
+    // Période glissante « mois:4 » : le nombre et l'unité se règlent à côté.
+    const glissante = /^(jours|semaines|mois|ans):(\d+)$/.exec(f.valeurs[0] || '')
+    const choixPeriode = h('select', { onchange: (ev) => { f.valeurs = [ev.target.value === 'glissante' ? 'mois:3' : ev.target.value]; changer() } },
+      Object.entries(PERIODES).map(([v, t]) => h('option', { value: v, selected: glissante ? v === 'glissante' : f.valeurs[0] === v }, t)))
+    if (glissante) {
+      const nombre = h('input', { type: 'number', min: 1, max: 999, value: glissante[2], style: { width: '80px' } })
+      const unite = h('select', {}, Object.entries(UNITES).map(([v, t]) => h('option', { value: v, selected: glissante[1] === v }, t)))
+      const maj = () => { f.valeurs = [`${unite.value}:${Math.max(1, Number(nombre.value) || 1)}`]; changer() }
+      nombre.addEventListener('change', maj)
+      unite.addEventListener('change', maj)
+      valeur = h('span', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, choixPeriode, nombre, unite)
+    } else valeur = choixPeriode
   } else if (['vide', 'non_vide'].includes(f.operateur)) {
     valeur = null
   } else if (f.operateur === 'entre') {
