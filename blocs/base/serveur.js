@@ -6,6 +6,7 @@ import { creerZip } from 'ktec/zip.js'
 import { executerRequete, etatConnexion } from 'ktec/mysql.js'
 import { enregistrerDictionnaire, enregistrerLienDictionnaire, ajouterLien, lireInfo, ecrireInfo } from 'ktec/ktec.js'
 import { obtenirSchema } from './schema.js'
+import { lirePreference, ecrirePreference } from 'ktec/preferences.js'
 
 export function routes(r) {
   // GET /api/schema?rafraichir=1
@@ -64,12 +65,13 @@ export function routes(r) {
 
   // ---- disposition du schéma des liens (positions des bulles, bulles figées), gardée dans le .ktec
 
-  r.get('/api/schema/disposition', () => lireInfo('disposition_schema', { positions: {} }))
+  // Disposition propre à ce poste (préférence locale ; l'ancienne, rangée dans le .ktec, est reprise).
+  r.get('/api/schema/disposition', () => lirePreference('disposition_schema', () => lireInfo('disposition_schema', { positions: {} })))
 
   r.post('/api/schema/disposition', async (ctx) => {
     const { positions } = await ctx.json()
     if (!positions || typeof positions !== 'object') throw new ErreurHttp(400, 'Positions attendues.')
-    ecrireInfo('disposition_schema', { positions })
+    ecrirePreference('disposition_schema', { positions })
   })
 
   // ---- dictionnaire (gardé dans le fichier .ktec)

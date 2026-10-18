@@ -5,10 +5,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { dossierTravail } from 'ktec/installation.js'
 import { lireInfo, ecrireInfo, listerIndicateurs } from 'ktec/ktec.js'
+import { lirePreference, ecrirePreference } from 'ktec/preferences.js'
 
 export function routes(r) {
   r.get('/api/accueil', () => {
-    const choix = lireInfo('accueil', { indicateurs: [], rapports: [] })
+    const choix = lirePreference('accueil', () => lireInfo('accueil', { indicateurs: [], rapports: [] }))
     const indicateurs = listerIndicateurs().map((i) => ({ id: i.id, nom: i.nom, fenetre: i.fenetre }))
     const dossier = path.join(dossierTravail(), 'rapports')
     const rapports = fs.readdirSync(dossier).filter((f) => f.endsWith('.rptdesign')).map((f) => {
@@ -26,6 +27,6 @@ export function routes(r) {
   // POST /api/accueil { indicateurs: [id…], rapports: [nom…] } : choix et ordre.
   r.post('/api/accueil', async (ctx) => {
     const { indicateurs = [], rapports = [] } = await ctx.json()
-    ecrireInfo('accueil', { indicateurs: indicateurs.map(Number), rapports: rapports.map(String) })
+    ecrirePreference('accueil', { indicateurs: indicateurs.map(Number), rapports: rapports.map(String) })
   })
 }
