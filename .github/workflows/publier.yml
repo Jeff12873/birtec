@@ -1,6 +1,5 @@
-# À chaque envoi sur « main » : fabrique BiRTEC.zip et le publie dans les Releases GitHub.
-# Les postes installés le trouvent ensuite dans Administration › Mises à jour.
-# Le zip ne contient que le code : le moteur d'IA et le modèle sont téléchargés par la préparation.
+# À chaque envoi sur « main » : fabrique birtec.zip (l'application seule) et le publie dans les Releases GitHub.
+# C'est ce paquet que l'installateur KTEC télécharge ; le socle commun (serveur, IA, Java, BIRT) vient de KTEC.
 
 name: Publier
 
@@ -26,25 +25,22 @@ jobs:
 
       - name: Vérification du code
         run: |
-          for fichier in $(git ls-files '*.js' | grep -v vendor/); do node --check "$fichier"; done
+          for fichier in $(git ls-files '*.js'); do node --check "$fichier"; done
 
-      - name: BiRTEC.zip
+      - name: birtec.zip
         run: |
           version="$(cat VERSION).${{ github.run_number }}"
           echo "$version" > VERSION
           echo "VERSION=$version" >> "$GITHUB_ENV"
-          mkdir -p dist/BiRTEC
-          cp -r serveur blocs interface outils docs moteur-java VERSION package.json README.md \
-            "Lancer BiRTEC.bat" "Preparer BiRTEC.bat" "Fabriquer kit hors ligne.bat" \
-            lancer-birtec.sh preparer-birtec.sh fabriquer-kit-hors-ligne.sh dist/BiRTEC/
-          chmod +x dist/BiRTEC/*.sh
-          (cd dist && zip -qr BiRTEC.zip BiRTEC)
+          mkdir -p dist/birtec
+          cp -r app.json blocs interface docs VERSION package.json README.md dist/birtec/
+          (cd dist && zip -qr birtec.zip birtec)
 
       - name: Release
         env:
           NOTES: ${{ github.event.head_commit.message }}
         run: |
-          gh release create "v$VERSION" dist/BiRTEC.zip --title "BiRTEC $VERSION" --notes "${NOTES:-Nouvelle version}"
+          gh release create "v$VERSION" dist/birtec.zip --title "BiRTEC $VERSION" --notes "${NOTES:-Nouvelle version}"
           # On garde les 3 dernières versions
           gh release list --limit 100 --json tagName --jq '.[3:][].tagName' | while read -r ancienne; do
             gh release delete "$ancienne" --yes --cleanup-tag

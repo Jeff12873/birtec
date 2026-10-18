@@ -1,17 +1,17 @@
 // L'assistant : le point d'entrée unique pour les requêtes SQL, les rapports BIRT et les indicateurs ITM,
-// à partir de la vraie structure de la base MySQL et des connaissances du site (fichier .birtec).
+// à partir de la vraie structure de la base MySQL et des connaissances du site (fichier .ktec).
 //
 // À chaque question : on choisit les tables utiles (blocs/base/schema.js), on les décrit à l'IA avec
 // les règles ci-dessous et la démarche voulue par l'utilisateur (« consignes », modifiables, gardées
-// dans le .birtec), et la réponse est envoyée au navigateur au fur et à mesure.
+// dans le .ktec), et la réponse est envoyée au navigateur au fur et à mesure.
 // Avant de laisser la réponse, BiRTEC contrôle chaque requête (tables et colonnes existantes) ; en cas
 // d'erreur, il fait réécrire la réponse par l'IA (2 fois au plus).
 
-import { ouvrirFlux, ErreurHttp } from '../../serveur/socle/http.js'
-import { discuter, iaInstallee } from '../../serveur/socle/ia.js'
+import { ouvrirFlux, ErreurHttp } from 'ktec/http.js'
+import { discuter, iaInstallee } from 'ktec/ia.js'
 import { obtenirSchema, tablesUtiles, decrireTables, connaissancesUtiles, tablesDesRequetes, tablesDesConventions, cheminsDeJointure } from '../base/schema.js'
 import { verifierSQL, requetesDeLaReponse } from '../base/verification.js'
-import { listerNotes, listerRequetes, listerIndicateurs, lireInfo, ecrireInfo } from '../../serveur/socle/birtec.js'
+import { listerNotes, listerRequetes, listerIndicateurs, lireInfo, ecrireInfo } from 'ktec/ktec.js'
 import { reglagesITM, reglesIndicateur } from '../itm/serveur.js'
 import { verifierDefinition, assembler } from '../itm/indicateur.js'
 import { THEMES } from '../rapports/generateur.js'
@@ -77,13 +77,13 @@ export function routes(r) {
 
     try {
       if (!iaInstallee()) {
-        flux.envoyer('texte', "L'IA n'est pas installée sur ce poste : lancez la préparation (voir l'aide).")
+        flux.envoyer('texte', "L'IA n'est pas installée sur ce poste : lancez l'installation de KTEC (voir l'aide).")
         return flux.envoyer('fin', {})
       }
 
-      // La structure de la base (lue sur MySQL, ou celle du fichier .birtec si la connexion est fermée),
+      // La structure de la base (lue sur MySQL, ou celle du fichier .ktec si la connexion est fermée),
       // et les connaissances du site : conventions, notes et requêtes déjà écrites.
-      let structure = 'STRUCTURE : inconnue (connexion MySQL fermée et fichier .birtec vide). Réponds de façon générale et signale que la connexion permettrait une réponse précise.'
+      let structure = 'STRUCTURE : inconnue (connexion MySQL fermée et fichier .ktec vide). Réponds de façon générale et signale que la connexion permettrait une réponse précise.'
       const schema = await obtenirSchema()
       const precedentes = historique.filter((m) => m.role === 'agent').slice(-3).map((m) => m.contenu).join(' ')
       const recherche = `${question} ${precedentes}`

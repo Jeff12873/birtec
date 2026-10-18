@@ -5,8 +5,8 @@
 import { h, vider, ic, notifier, fenetre } from '/socle/ui.js'
 import { api } from '/socle/api.js'
 import { etat as etatAppli } from '/socle/etat.js'
-import { demanderMotDePasse } from '/blocs/configuration/vue.js'
-import { tableauResultats } from '/blocs/base/vue.js'
+import { demanderMotDePasse } from '../configuration/vue.js'
+import { tableauResultats } from '../base/vue.js'
 
 const PERIODES = { mois_en_cours: 'Mois en cours', mois_precedent: 'Mois précédent', '30_jours': '30 derniers jours', annee_en_cours: 'Année en cours', '12_mois': '12 derniers mois', depassee: 'Dépassée (avant aujourd’hui)', a_venir: 'À venir (à partir d’aujourd’hui)', glissante: 'Les N derniers… (au choix)', demandee: 'Choisie au lancement du rapport' }
 const UNITES = { jours: 'jours', semaines: 'semaines', mois: 'mois', ans: 'ans' }
@@ -79,7 +79,7 @@ export default {
       }
     }
 
-    // « Lui apprendre » : l'expression (« niveau 1 ») devient un filtre choisi ici, retenu dans le .birtec
+    // « Lui apprendre » : l'expression (« niveau 1 ») devient un filtre choisi ici, retenu dans le .ktec
     // pour ce sujet ; la prochaine phrase qui la contient aura ce filtre directement.
     async function apprendre(expression) {
       const id = await choisirChamp(catalogue, `« ${expression} » correspond à quelle colonne ?`, (c) => c.nature === 'texte')
@@ -90,7 +90,7 @@ export default {
       await api('/api/constructeur/vocabulaire', { methode: 'POST', corps: { expression, sujet: brouillon.etat.sujet, champ: id, valeurs } })
       brouillon.etat.filtres.push({ champ: id, operateur: 'egal', valeurs })
       brouillon.aApprendre = brouillon.aApprendre.filter((x) => x !== expression)
-      notifier(`Retenu : « ${expression} » donnera désormais ce filtre (gardé dans le fichier .birtec).`)
+      notifier(`Retenu : « ${expression} » donnera désormais ce filtre (gardé dans le fichier .ktec).`)
       changer()
     }
 
@@ -274,7 +274,7 @@ export default {
       zone,
       h('div', { class: 'entete-page' },
         h('div', {}, h('h1', {}, brouillon.nom ? 'Modifier le rapport' : 'Nouveau rapport'), h('p', { class: 'sous-titre' }, 'Choisissez, l’aperçu suit. BiRTEC écrit la requête lui-même.')),
-        h('button', { class: 'discret', onclick: () => { brouillon = nouveau(); window.birtec.recharger() } }, ic('rafraichir', 16), 'Recommencer'),
+        h('button', { class: 'discret', onclick: () => { brouillon = nouveau(); window.ktec.recharger() } }, ic('rafraichir', 16), 'Recommencer'),
       ),
       h('div', { class: 'carte phrase-ia' }, ic('etincelle', 18), phrase, boutonIA),
       h('div', { class: 'constructeur-grille' }, formulaire, apercu),

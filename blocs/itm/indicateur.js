@@ -18,7 +18,7 @@
 //
 // Les fenêtres sont déduites de la structure : toute table qui a ID_<TABLE>, <TABLE>, DESI1 et ACTIF peut
 // être comptée par un indicateur (c'est la forme des fiches de la GMAO). Les variables propres à la GMAO,
-// et d'éventuelles fenêtres décrites à la main, sont dans le fichier .birtec (réglage « itm »).
+// et d'éventuelles fenêtres décrites à la main, sont dans le fichier .ktec (réglage « itm »).
 
 export const REGLAGES_VIDES = { fenetres: [], variables: [] }
 

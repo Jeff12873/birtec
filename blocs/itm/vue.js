@@ -5,8 +5,8 @@
 import { h, vider, ic, fenetre, notifier, confirmer, dateHeureFr, deuxPanneaux } from '/socle/ui.js'
 import { api } from '/socle/api.js'
 import { etat } from '/socle/etat.js'
-import { demanderMotDePasse } from '/blocs/configuration/vue.js'
-import { tableauResultats } from '/blocs/base/vue.js'
+import { demanderMotDePasse } from '../configuration/vue.js'
+import { tableauResultats } from '../base/vue.js'
 
 export default {
   chemin: 'itm',
@@ -72,8 +72,8 @@ function detail(indicateur) {
 
   async function enregistrer() {
     await api('/api/itm/indicateurs', { methode: 'POST', corps: { ...indicateur, requeteIndicateur: requeteIndicateur.value, requeteListe: requeteListe.value } })
-    notifier('Indicateur enregistré dans le fichier .birtec')
-    window.birtec.recharger()
+    notifier('Indicateur enregistré dans le fichier .ktec')
+    window.ktec.recharger()
   }
 
   async function supprimer() {

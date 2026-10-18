@@ -5,12 +5,12 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { ErreurHttp, envoyerOctets } from '../../serveur/socle/http.js'
-import { chemins, dossierTravail, reglagesPoste, journal } from '../../serveur/socle/installation.js'
-import { rendreRapport, verifierRapport, etatConnexion, executerRequete } from '../../serveur/socle/mysql.js'
-import { discuter, iaInstallee } from '../../serveur/socle/ia.js'
+import { ErreurHttp, envoyerOctets } from 'ktec/http.js'
+import { chemins, dossierTravail, reglagesPoste, journal } from 'ktec/installation.js'
+import { rendreRapport, verifierRapport, etatConnexion, executerRequete } from 'ktec/mysql.js'
+import { discuter, iaInstallee } from 'ktec/ia.js'
 import { obtenirSchema, tablesUtiles, decrireTables } from '../base/schema.js'
-import { dossierRessources, lireInfo, lireFichier } from '../../serveur/socle/birtec.js'
+import { dossierRessources, lireInfo, lireFichier } from 'ktec/ktec.js'
 import { verifierSQL } from '../base/verification.js'
 import { genererRptdesign, verifierDescription, THEMES } from './generateur.js'
 
@@ -175,7 +175,7 @@ async function essayer(description, fichier, connexion) {
   return { erreurs: [], avertissements, lignes }
 }
 
-// L'image choisie pour le haut du rapport (rangée dans le .birtec, catégorie « images »).
+// L'image choisie pour le haut du rapport (rangée dans le .ktec, catégorie « images »).
 function imageDu(description) {
   if (!description.image) return null
   const octets = lireFichier('images', description.image)

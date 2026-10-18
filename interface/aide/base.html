@@ -1,5 +1,5 @@
 <h1>Base de données et dictionnaire</h1>
-<p>La liste de gauche montre les tables. <b>La case</b> devant chaque table dit si elle est donnée à l'IA : décochez les tables inutiles (techniques, vides, hors sujet). « Écarter les tables vides » le fait d'un coup quand la connexion est ouverte. Le choix est gardé dans le fichier .birtec.</p>
+<p>La liste de gauche montre les tables. <b>La case</b> devant chaque table dit si elle est donnée à l'IA : décochez les tables inutiles (techniques, vides, hors sujet). « Écarter les tables vides » le fait d'un coup quand la connexion est ouverte. Le choix est gardé dans le fichier .ktec.</p>
 <h2>Dictionnaire</h2>
 <p>Pour la table choisie : un <b>nom clair</b> et une <b>description</b> pour la table et pour chaque colonne. Ils sont donnés à l'IA, qui ne devine plus le sens des abréviations (« ot » = ordre de travail). Écrivez-y aussi les pièges : « pour une ligne de production, passer par la table de l’arborescence ». Chaque champ est enregistré quand on le quitte.</p>
 <p>Les liens entre tables se nomment dans l'écran <a href="#/aide/schema">Constellation</a>.</p>
@@ -7,4 +7,4 @@
 <p><b>Extraire des tables…</b> : cochez les tables (filtre, tout cocher) puis <b>Télécharger</b> ; ou, dans le détail d'une table, <b>Télécharger cette table</b>. Vous obtenez un fichier .zip : un CSV par table (séparateur « ; », s'ouvre dans Excel), <code>_structure.csv</code> (colonnes, noms clairs, descriptions) et un lisez-moi. 200 000 lignes au plus par table ; il faut la connexion MySQL.</p>
 <h2>Console SQL</h2>
 <p>Écrivez une requête puis <b>Ctrl+Entrée</b>. Seules les requêtes de lecture sont acceptées (SELECT, WITH, SHOW, DESCRIBE, EXPLAIN), une à la fois, 30 secondes au plus. <b>Copier</b> met le résultat dans le presse-papiers, prêt à coller dans Excel.</p>
-<p>Connexion fermée : la structure gardée dans le fichier .birtec reste consultable. Si la base change, <b>Relire la structure</b>.</p>
+<p>Connexion fermée : la structure gardée dans le fichier .ktec reste consultable. Si la base change, <b>Relire la structure</b>.</p>

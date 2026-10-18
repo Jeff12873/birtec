@@ -1,10 +1,10 @@
 // Page d'accueil : les indicateurs et les raccourcis de rapports choisis, dans l'ordre voulu
-// (gardés dans le fichier .birtec, réglage « accueil »).
+// (gardés dans le fichier .ktec, réglage « accueil »).
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { dossierTravail } from '../../serveur/socle/installation.js'
-import { lireInfo, ecrireInfo, listerIndicateurs } from '../../serveur/socle/birtec.js'
+import { dossierTravail } from 'ktec/installation.js'
+import { lireInfo, ecrireInfo, listerIndicateurs } from 'ktec/ktec.js'
 
 export function routes(r) {
   r.get('/api/accueil', () => {

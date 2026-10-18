@@ -1,13 +1,13 @@
 // Indicateurs ITM : l'assistant écrit la définition d'un indicateur de la GMAO, BiRTEC en tire la
 // requête indicateur et la requête liste, les contrôle (tables et colonnes existantes), les essaie sur
 // MySQL, vérifie qu'elles concordent et fait corriger l'IA en cas d'écart. Les indicateurs créés sont
-// gardés dans le fichier .birtec (historique). Le résultat reste du SQL, à coller dans la GMAO.
+// gardés dans le fichier .ktec (historique). Le résultat reste du SQL, à coller dans la GMAO.
 
-import { ErreurHttp } from '../../serveur/socle/http.js'
-import { discuter, iaInstallee } from '../../serveur/socle/ia.js'
-import { executerRequete, etatConnexion } from '../../serveur/socle/mysql.js'
-import { journal } from '../../serveur/socle/installation.js'
-import { lireInfo, ecrireInfo, listerIndicateurs, enregistrerIndicateur, supprimerIndicateur, listerNotes, listerRequetes } from '../../serveur/socle/birtec.js'
+import { ErreurHttp } from 'ktec/http.js'
+import { discuter, iaInstallee } from 'ktec/ia.js'
+import { executerRequete, etatConnexion } from 'ktec/mysql.js'
+import { journal } from 'ktec/installation.js'
+import { lireInfo, ecrireInfo, listerIndicateurs, enregistrerIndicateur, supprimerIndicateur, listerNotes, listerRequetes } from 'ktec/ktec.js'
 import { obtenirSchema, tablesUtiles, decrireTables, connaissancesUtiles, tablesDesConventions } from '../base/schema.js'
 import { verifierSQL } from '../base/verification.js'
 import { extraireJson } from '../rapports/serveur.js'
@@ -16,7 +16,7 @@ import { REGLAGES_VIDES, verifierDefinition, assembler, remplacerVariables, trou
 const ESSAIS_DE_CORRECTION = 2
 const LIGNES_MAX = 5000
 
-// Fenêtres décrites dans le .birtec, complétées par celles déduites de la structure (tables en forme de fiche).
+// Fenêtres décrites dans le .ktec, complétées par celles déduites de la structure (tables en forme de fiche).
 export async function reglagesITM() {
   const enregistres = { ...REGLAGES_VIDES, ...lireInfo('itm', {}) }
   const schema = await obtenirSchema()
@@ -76,7 +76,7 @@ export function routes(r) {
   })
 
   // POST /api/itm/creer { definition, demande } : depuis l'assistant. BiRTEC assemble, contrôle et essaie ;
-  // en cas d'erreur, l'IA corrige la définition (2 fois au plus). Enregistré dans le .birtec si tout va bien
+  // en cas d'erreur, l'IA corrige la définition (2 fois au plus). Enregistré dans le .ktec si tout va bien
   // (ou si « forcer » est demandé).
   r.post('/api/itm/creer', async (ctx) => {
     const { definition: proposee, demande = '', forcer = false } = await ctx.json()

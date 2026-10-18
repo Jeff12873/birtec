@@ -1,22 +1,19 @@
 # Liste blanche : seuls les fichiers du programme sont publiés.
-# Tout autre fichier ou dossier déposé ici (documents, exports de la GMAO, rapports, fichier .birtec…)
+# Tout autre fichier ou dossier déposé ici (documents, exports de la GMAO, rapports, fichier .ktec…)
 # reste sur le poste et n'est jamais envoyé sur GitHub.
 /*
 !/.github/
 !/.gitignore
 !/.gitattributes
+!/app.json
 !/blocs/
 !/docs/
 !/interface/
-!/moteur-java/
-!/outils/
-!/serveur/
-!/*.bat
-!/*.sh
 !/README.md
 !/VERSION
 !/package.json
 
 # Fichiers propres à chaque poste, même dans les dossiers du programme
+*.ktec
 *.birtec
 *.datassitec

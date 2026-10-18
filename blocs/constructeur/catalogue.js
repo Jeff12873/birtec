@@ -5,7 +5,7 @@
 //   - vers une table « parente » (une colonne ID_X du sujet → table X) : sans risque, une ligne reste une ligne ;
 //   - vers une table « fille » (une table qui pointe vers le sujet, ex. ses équipements) : une seule fois,
 //     et les lignes se multiplient (une ligne par élément de la table fille) — c'est signalé.
-// Les noms affichés sont ceux du dictionnaire (fichier .birtec) : noms clairs des tables, colonnes et liens.
+// Les noms affichés sont ceux du dictionnaire (fichier .ktec) : noms clairs des tables, colonnes et liens.
 
 const PROFONDEUR = 3
 const TECHNIQUES = /^(ID_USER|ID_SOCIETE|DATE_EXPORT|EXPORT|NUM_EXPORT|DATE_IMPORT|IMPORT|NUM_IMPORT|DATE_INACTIF|IDENTNAVIRE|DATE_MOD|HEURE_CRE)$/i

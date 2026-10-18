@@ -2,9 +2,5 @@
   "name": "birtec",
   "private": true,
   "type": "module",
-  "description": "Assistant IA local pour créer des rapports BIRT sur MySQL. Aucune dépendance : seulement Node.",
-  "scripts": {
-    "demarrer": "node serveur/demarrer.js",
-    "preparer": "node outils/preparer.js --ici"
-  }
+  "description": "BiRTEC, application KTEC : rapports BIRT et indicateurs ITM sur la base de la GMAO. Lancée par le portail KTEC."
 }

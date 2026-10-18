@@ -1,9 +1,9 @@
 // Base de données : liste des tables, détail d'une table, console SQL (lecture seule).
 
 import { h, vider, ic, essayer, notifier, deuxPanneaux, fenetre } from '/socle/ui.js'
-import { api } from '/socle/api.js'
+import { api, adresse } from '/socle/api.js'
 import { etat } from '/socle/etat.js'
-import { demanderMotDePasse } from '/blocs/configuration/vue.js'
+import { demanderMotDePasse } from '../configuration/vue.js'
 
 let sqlConsole = 'SELECT * FROM '
 
@@ -18,16 +18,16 @@ export default {
   async afficher(zone, { id, query }) {
     if (query.sql) sqlConsole = query.sql
     const schema = await api('/api/schema')
-    // Connexion fermée : on montre la structure gardée dans le fichier .birtec.
+    // Connexion fermée : on montre la structure gardée dans le fichier .ktec.
     const ferme = !etat.connexion.ouverte
-      ? h('div', { class: 'bandeau' }, ic('cadenas'), h('span', { style: { flex: 1 } }, 'Connexion MySQL fermée : structure du fichier .birtec. Connectez-vous pour exécuter des requêtes.'), h('button', { onclick: () => demanderMotDePasse().then(() => window.birtec.recharger()) }, 'Se connecter'))
+      ? h('div', { class: 'bandeau' }, ic('cadenas'), h('span', { style: { flex: 1 } }, 'Connexion MySQL fermée : structure du fichier .ktec. Connectez-vous pour exécuter des requêtes.'), h('button', { onclick: () => demanderMotDePasse().then(() => window.ktec.recharger()) }, 'Se connecter'))
       : null
     const filtre = h('input', { type: 'search', placeholder: 'Filtrer les tables…' })
     const liste = h('div', { class: 'liste-tables' })
     const detail = h('div')
     const console_ = consoleSQL()
 
-    // Une case par table : décochée, la table n'est jamais donnée à l'IA (gardé dans le fichier .birtec).
+    // Une case par table : décochée, la table n'est jamais donnée à l'IA (gardé dans le fichier .ktec).
     const voirEcartees = h('input', { type: 'checkbox', checked: localStorage.getItem('birtec-voir-ecartees') === '1', onchange: () => { try { localStorage.setItem('birtec-voir-ecartees', voirEcartees.checked ? '1' : '0') } catch {} dessinerListe() } })
     function dessinerListe() {
       const texte = filtre.value.toLowerCase()
@@ -60,10 +60,10 @@ export default {
       zone,
       ferme,
       h('div', { class: 'entete-page' },
-        h('div', {}, h('h1', {}, 'Base de données'), h('p', { class: 'sous-titre' }, `${schema.base} — ${schema.tables.length} tables. Cochez les tables à donner à l’IA, nommez et décrivez-les : tout est gardé dans le fichier .birtec.`)),
+        h('div', {}, h('h1', {}, 'Base de données'), h('p', { class: 'sous-titre' }, `${schema.base} — ${schema.tables.length} tables. Cochez les tables à donner à l’IA, nommez et décrivez-les : tout est gardé dans le fichier .ktec.`)),
         h('button', { onclick: () => choisirTablesAExtraire(schema.tables, id) }, ic('telecharger', 16), 'Extraire des tables…'),
         h('a', { class: 'bouton discret', href: `#/schema${id ? `/${encodeURIComponent(id)}` : ''}` }, ic('reseau', 16), 'Constellation'),
-        h('button', { onclick: async () => { await essayer(() => api('/api/schema?rafraichir=1'), 'Structure relue'); window.birtec.recharger() } }, ic('rafraichir', 16), 'Relire la structure'),
+        h('button', { onclick: async () => { await essayer(() => api('/api/schema?rafraichir=1'), 'Structure relue'); window.ktec.recharger() } }, ic('rafraichir', 16), 'Relire la structure'),
       ),
       deuxPanneaux(
         h('div', { class: 'carte', style: { padding: '12px' } },
@@ -71,7 +71,7 @@ export default {
           h('div', { class: 'discret', style: { fontSize: '12px', margin: '8px 0', display: 'flex', flexDirection: 'column', gap: '4px' } },
             `${schema.tables.filter((t) => !t.exclue).length} tables données à l’IA sur ${schema.tables.length}`,
             h('label', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, voirEcartees, 'Voir les tables écartées'),
-            etat.connexion.ouverte ? h('a', { href: '#', onclick: async (e) => { e.preventDefault(); const r = await api('/api/dictionnaire/ecarter-vides', { methode: 'POST' }); notifier(`${r.ecartees} table(s) vide(s) écartée(s)`); window.birtec.recharger() } }, 'Écarter les tables vides') : null),
+            etat.connexion.ouverte ? h('a', { href: '#', onclick: async (e) => { e.preventDefault(); const r = await api('/api/dictionnaire/ecarter-vides', { methode: 'POST' }); notifier(`${r.ecartees} table(s) vide(s) écartée(s)`); window.ktec.recharger() } }, 'Écarter les tables vides') : null),
           liste),
         h('div', { class: 'grille' }, detail, console_.element),
         { cle: 'base', largeur: 300 },
@@ -80,7 +80,7 @@ export default {
   },
 }
 
-// Détail d'une table : nom clair et description (modifiables, gardés dans le .birtec), colonnes, liens.
+// Détail d'une table : nom clair et description (modifiables, gardés dans le .ktec), colonnes, liens.
 function afficherTable(zone, table, console_) {
   // Un champ qui enregistre dans le dictionnaire quand on le quitte.
   const champ = (valeur, enregistrer, attributs = {}) => {
@@ -132,7 +132,7 @@ export async function extraireTables(tables) {
   if (!etat.connexion.ouverte) await demanderMotDePasse().catch(() => {})
   notifier(`Extraction de ${tables.length} table(s)…`)
   try {
-    const reponse = await fetch('/api/extraction', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-BIRTEC': '1' }, body: JSON.stringify({ tables }) })
+    const reponse = await fetch(adresse('/api/extraction'), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-KTEC': '1' }, body: JSON.stringify({ tables }) })
     if (!reponse.ok) throw new Error((await reponse.json().catch(() => ({}))).erreur || `Erreur ${reponse.status}`)
     const nom = decodeURIComponent((reponse.headers.get('Content-Disposition') || '').match(/filename\*=UTF-8''([^;]+)/)?.[1] || 'extraction.zip')
     const lien = h('a', { href: URL.createObjectURL(await reponse.blob()), download: nom })

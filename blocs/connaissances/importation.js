@@ -1,4 +1,4 @@
-// Importation d'un dossier de documents dans le fichier .birtec.
+// Importation d'un dossier de documents dans le fichier .ktec.
 //
 // BiRTEC parcourt le dossier (et ses sous-dossiers) et range ce qu'il reconnaît :
 //   export « CREATE TABLE » (.sql, .txt)        → structure des tables (+ liens déduits des noms ID_xxx)
@@ -11,11 +11,11 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { lireZip, lireTexteDansZip } from '../../serveur/socle/zip.js'
+import { lireZip, lireTexteDansZip } from 'ktec/zip.js'
 import {
   enregistrerTables, enregistrerLiens, deduireLiens, lireTables, enregistrerRequete,
   enregistrerNote, enregistrerFichier, listerRequetes,
-} from '../../serveur/socle/birtec.js'
+} from 'ktec/ktec.js'
 
 // Dossiers d'un BIRT Designer ou d'outils : rien d'utile pour l'assistant.
 const DOSSIERS_IGNORES = new Set(['plugins', 'features', 'p2', 'configuration', '.metadata', 'node_modules', '.git', 'jre', 'dropins', 'readme'])

@@ -1,0 +1,128 @@
+/* Styles propres à BiRTEC (le thème commun est celui de KTEC : /theme.css). */
+
+/* ------------------------------------------------------------ BiRTEC : code SQL, résultats */
+
+pre.code { background: #08100b; border: 1px solid var(--bord); border-radius: 10px; padding: 12px 14px; overflow-x: auto; margin: 8px 0 4px; }
+pre.code code { font-family: var(--mono); font-size: 13px; color: #bef264; background: none; padding: 0; white-space: pre; }
+.actions-code { display: flex; gap: 6px; margin-bottom: 10px; }
+.resultats { max-height: 420px; overflow: auto; margin: 8px 0 12px; }
+.resultats td, .resultats th { white-space: nowrap; font-size: 13px; padding: 7px 10px; }
+textarea.sql { font-family: var(--mono); font-size: 13px; min-height: 160px; }
+.liste-tables { max-height: calc(100vh - 220px); overflow: auto; }
+.liste-tables a { display: block; padding: 7px 10px; border-radius: 8px; color: var(--texte-2); }
+.liste-tables a:hover, .liste-tables a.actif { background: var(--carte-2); color: var(--texte); text-decoration: none; }
+
+/* Rapports : paramètres et aperçu */
+.parametres-rapport { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 8px; }
+iframe.apercu-rapport { display: block; width: 100%; height: calc(100vh - 330px); min-height: 420px; border: 0; background: #fff; }
+.carte-rapport { border: 1px solid var(--bord); border-radius: var(--rayon); padding: 12px 14px; margin: 6px 0; background: var(--carte-2); }
+.carte-rapport .mono { font-size: 13px; }
+
+/* Connaissances : onglets, chiffres du fichier .birtec, notes */
+.onglets { display: flex; gap: 4px; border-bottom: 1px solid var(--bord); margin-bottom: 16px; }
+.onglets a { padding: 9px 16px; color: var(--texte-2); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.onglets a:hover { color: var(--texte); text-decoration: none; }
+.onglets a.actif { color: var(--texte); border-bottom-color: var(--accent); }
+.chiffres { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+.chiffre { display: flex; flex-direction: column; min-width: 92px; padding: 8px 12px; border-radius: 10px; background: var(--carte-2); }
+.chiffre strong { font-size: 20px; color: var(--accent); }
+.chiffre span { font-size: 12px; color: var(--texte-3); }
+pre.note-contenu { white-space: pre-wrap; font-family: inherit; font-size: 14px; color: var(--texte-2); margin: 0 0 8px; max-height: 260px; overflow: auto; }
+details.carte summary { cursor: pointer; }
+
+/* Dictionnaire de la base : tables écartées, champs modifiables */
+.liste-tables a.ecartee { opacity: 0.45; }
+.liste-tables a input[type=checkbox] { vertical-align: middle; margin: 0 2px 0 0; }
+input.champ-dico { width: 100%; min-width: 120px; padding: 5px 8px; font-size: 13px; background: transparent; border-color: transparent; }
+input.champ-dico:hover, input.champ-dico:focus { background: var(--carte-2); border-color: var(--bord-fort); }
+input.champ-dico.enregistre { border-color: var(--accent); }
+
+/* Constellation des tables (graphe en bulles) */
+canvas.toile-schema { display: block; width: 100%; height: calc(100vh - 210px); min-height: 480px; cursor: grab; touch-action: none; }
+.reglages-schema { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: 12px; color: var(--texte-2); background: color-mix(in srgb, var(--carte) 88%, transparent); padding: 6px 10px; border-radius: 10px; border: 1px solid var(--bord); }
+.curseur-schema { display: flex; gap: 6px; align-items: center; }
+.curseur-schema input[type=range] { width: 110px; padding: 0; accent-color: var(--accent); }
+.valeur-curseur { min-width: 30px; color: var(--texte-3); font-variant-numeric: tabular-nums; }
+.case-schema { display: flex; gap: 6px; align-items: center; }
+.panneau-schema { position: sticky; top: 86px; max-height: calc(100vh - 110px); overflow: auto; }
+.liste-voisins { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; }
+ol.chemin-tables { margin: 6px 0; padding-left: 20px; font-size: 14px; }
+ol.chemin-tables li { margin: 3px 0; }
+ul.chemin-cles { margin: 0; padding-left: 18px; font-size: 13px; }
+ul.chemin-cles li { margin: 4px 0; }
+
+/* Accueil */
+.tuiles-indicateurs { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+.tuile-indicateur { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: var(--rayon); background: var(--carte-2); border: 1px solid var(--bord); color: var(--texte); }
+a.tuile-indicateur:hover { border-color: var(--accent); text-decoration: none; }
+.tuile-indicateur .valeur-tuile { font-size: 30px; color: var(--accent); line-height: 1.1; }
+.tuile-indicateur .nom-tuile { font-size: 13px; color: var(--texte-2); }
+.raccourcis-rapports { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.raccourci-rapport { position: relative; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: var(--rayon); background: var(--carte-2); border: 1px solid var(--bord); color: var(--texte); }
+a.raccourci-rapport:hover { border-color: var(--accent); text-decoration: none; }
+.tuile-indicateur[draggable=true], .raccourci-rapport[draggable=true] { cursor: grab; border-style: dashed; }
+.deplace { opacity: 0.4; }
+.poignee { color: var(--texte-3); }
+.tuile-indicateur .retirer, .raccourci-rapport .retirer { position: absolute; top: 6px; right: 6px; }
+
+.schema-grille { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .schema-grille { grid-template-columns: 1fr; } .panneau-schema { position: static; max-height: none; } }
+
+/* Les cases à cocher gardent leur taille (le style des champs les étirerait) */
+input[type=checkbox] { width: auto; flex: none; padding: 0; }
+
+/* Nouveau rapport (constructeur) */
+.phrase-ia { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; }
+.phrase-ia input { flex: 1; }
+.constructeur-grille { display: grid; grid-template-columns: minmax(380px, 1fr) minmax(0, 1.2fr); gap: 16px; align-items: start; }
+@media (max-width: 1150px) { .constructeur-grille { grid-template-columns: 1fr; } }
+.apercu-constructeur { position: sticky; top: 86px; max-height: calc(100vh - 110px); overflow: auto; }
+@media (max-width: 1150px) { .apercu-constructeur { position: static; max-height: none; } }
+.section-constructeur h2 { display: flex; align-items: center; gap: 10px; font-size: 17px; margin-bottom: 12px; }
+.numero-etape { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-texte); font-size: 14px; font-weight: 700; }
+.puces { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.puce-champ { display: inline-flex; align-items: center; gap: 4px; padding: 4px 4px 4px 10px; border-radius: 999px; background: var(--carte-2); border: 1px solid var(--bord-fort); font-size: 13px; color: var(--texte); }
+.puce-champ button { padding: 2px 6px; min-height: 0; }
+.puce-champ select.mini { padding: 2px 6px; font-size: 12px; width: auto; }
+.ligne-filtre { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--bord); }
+.ligne-filtre .nom-filtre { font-weight: 500; min-width: 140px; }
+.ligne-filtre select, .ligne-filtre input { width: auto; }
+.liste-champs { max-height: 55vh; overflow: auto; margin-top: 10px; }
+.liste-champs details { margin-bottom: 4px; }
+.liste-champs summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+.liste-champs a { display: block; padding: 5px 10px 5px 18px; border-radius: 6px; color: var(--texte-2); }
+.liste-champs a:hover { background: var(--carte-3); color: var(--texte); text-decoration: none; }
+.liste-champs a.decrit { color: var(--texte); }
+.valeur-filtre { display: flex; gap: 8px; align-items: center; padding: 3px 4px; }
+
+/* Liste à gauche, détail à droite, séparés par une poignée à glisser */
+.deux-panneaux { display: grid; grid-template-columns: var(--largeur-liste, 340px) 10px minmax(0, 1fr); gap: 6px; align-items: start; }
+.poignee-panneaux { align-self: stretch; min-height: 120px; cursor: col-resize; border-radius: 6px; position: relative; }
+.poignee-panneaux::after { content: ''; position: absolute; left: 4px; top: 0; bottom: 0; width: 2px; border-radius: 2px; background: var(--bord); transition: background 0.15s; }
+.poignee-panneaux:hover::after, .deux-panneaux.redimensionne .poignee-panneaux::after { background: var(--accent); }
+.deux-panneaux.redimensionne { user-select: none; cursor: col-resize; }
+.deux-panneaux > .carte:first-child .liste-tables { max-height: calc(100vh - 200px); }
+@media (max-width: 900px) { .deux-panneaux { grid-template-columns: minmax(0, 1fr); } .poignee-panneaux { display: none; } }
+.deux-panneaux > * { min-width: 0; }
+.deux-panneaux .carte-entete { flex-wrap: wrap; gap: 8px; }
+.deux-panneaux .carte-entete h2 { flex: 1 1 240px; min-width: 0; overflow-wrap: break-word; }
+.deux-panneaux textarea.sql, .deux-panneaux pre.code { max-width: 100%; }
+.deux-panneaux .grille > *, .deux-panneaux .carte > * { min-width: 0; }
+.deux-panneaux .grille { grid-template-columns: minmax(0, 1fr); }
+
+/* Requête dans sa propre case (indicateur ITM) */
+.case-requete { margin-top: 12px; border: 1px solid var(--bord); border-radius: var(--rayon); padding: 10px 12px; background: var(--carte-2); }
+.case-requete h3 { margin: 0; font-size: 15px; }
+.case-requete pre.code { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; }
+
+/* Question libre sur l'accueil */
+.question-compacte .messages { max-height: 55vh; overflow: auto; padding-right: 6px; }
+.question-compacte .messages:empty { display: none; }
+.question-compacte .saisie-boite textarea { min-height: 40px; }
+
+/* Constellation : cadre des raccourcis (en haut à droite du graphe) */
+.cadre-raccourcis { position: absolute; top: 10px; right: 10px; max-width: 290px; font-size: 12px; color: var(--texte-2); background: color-mix(in srgb, var(--carte) 90%, transparent); border: 1px solid var(--bord); border-radius: 10px; padding: 6px 10px; }
+.cadre-raccourcis .titre-raccourcis { display: flex; align-items: center; gap: 6px; padding: 2px 0; min-height: 0; background: none; border: 0; color: var(--texte); font-size: 12px; font-weight: 600; cursor: pointer; }
+.cadre-raccourcis dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 6px 0 2px; }
+.cadre-raccourcis dt { font-family: ui-monospace, monospace; color: var(--accent); white-space: nowrap; }
+.cadre-raccourcis dd { margin: 0; }

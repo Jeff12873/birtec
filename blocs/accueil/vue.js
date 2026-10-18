@@ -1,12 +1,12 @@
 // Page d'accueil : quelques indicateurs (chiffre du jour) et des raccourcis vers les rapports enregistrés.
 // « Organiser » permet d'en ajouter, d'en retirer et de les ranger par glisser-déposer.
-// Le choix et l'ordre sont gardés dans le fichier .birtec.
+// Le choix et l'ordre sont gardés dans le fichier .ktec.
 
 import { h, vider, ic } from '/socle/ui.js'
 import { api } from '/socle/api.js'
 import { etat } from '/socle/etat.js'
-import { demanderMotDePasse } from '/blocs/configuration/vue.js'
-import { afficherQuestion } from '/blocs/assistant/vue.js'
+import { demanderMotDePasse } from '../configuration/vue.js'
+import { afficherQuestion } from '../assistant/vue.js'
 
 let organiser = false
 
@@ -24,7 +24,7 @@ export default {
     let rapports = donnees.rapports
 
     const enregistrer = () => api('/api/accueil', { methode: 'POST', corps: { indicateurs: indicateurs.map((i) => i.id), rapports: rapports.map((r) => r.nom) } })
-    const redessiner = () => window.birtec.recharger()
+    const redessiner = () => window.ktec.recharger()
 
     // Glisser-déposer à l'intérieur d'une liste : l'élément lâché prend la place de celui survolé.
     function rangeable(element, liste, index, quandChange) {

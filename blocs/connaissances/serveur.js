@@ -1,14 +1,14 @@
-// Connaissances : le contenu du fichier .birtec (notes, structure, requêtes, fichiers BIRT),
+// Connaissances : le contenu du fichier .ktec (notes, structure, requêtes, fichiers BIRT),
 // son importation depuis un dossier et le choix du fichier.
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { ErreurHttp, envoyerOctets } from '../../serveur/socle/http.js'
-import { dossierTravail, journal } from '../../serveur/socle/installation.js'
+import { ErreurHttp, envoyerOctets } from 'ktec/http.js'
+import { dossierTravail, journal } from 'ktec/installation.js'
 import {
-  resumeBirtec, changerBirtec, cheminBirtec, listerNotes, enregistrerNote, supprimerNote, lireTables, lireLiens,
+  resumeKtec, changerKtec, cheminKtec, listerNotes, enregistrerNote, supprimerNote, lireTables, lireLiens,
   listerRequetes, supprimerRequete, listerFichiers, lireFichier, enregistrerFichier, supprimerFichier, lireInfo, ecrireInfo,
-} from '../../serveur/socle/birtec.js'
+} from 'ktec/ktec.js'
 import { oublierSchema } from '../base/schema.js'
 import { importerDossier } from './importation.js'
 import { completerCharte } from '../rapports/generateur.js'
@@ -21,19 +21,19 @@ export const FICHIERS_BIRT = {
 }
 
 export function routes(r) {
-  r.get('/api/connaissances', () => resumeBirtec())
+  r.get('/api/connaissances', () => resumeKtec())
 
-  // Ouvrir un autre fichier .birtec, ou en créer un nouveau (vide).
+  // Ouvrir un autre fichier .ktec, ou en créer un nouveau (vide).
   r.post('/api/connaissances/fichier', async (ctx) => {
     const { chemin } = await ctx.json()
-    if (!chemin?.trim()) throw new ErreurHttp(400, 'Indiquez le chemin du fichier .birtec.')
-    changerBirtec(chemin.trim())
+    if (!chemin?.trim()) throw new ErreurHttp(400, 'Indiquez le chemin du fichier .ktec.')
+    changerKtec(chemin.trim())
     oublierSchema()
-    return resumeBirtec()
+    return resumeKtec()
   })
 
   r.get('/api/connaissances/telecharger', (ctx) => {
-    envoyerOctets(ctx.res, fs.readFileSync(cheminBirtec()), { nom: path.basename(cheminBirtec()), telecharger: true })
+    envoyerOctets(ctx.res, fs.readFileSync(cheminKtec()), { nom: path.basename(cheminKtec()), telecharger: true })
   })
 
   r.post('/api/connaissances/importer', async (ctx) => {
@@ -41,7 +41,7 @@ export function routes(r) {
     if (!dossier?.trim()) throw new ErreurHttp(400, 'Indiquez le dossier à importer.')
     const bilan = importerDossier(dossier.trim())
     oublierSchema()
-    journal(`Importation de ${dossier} dans le .birtec : ${JSON.stringify({ ...bilan, ignores: bilan.ignores.length })}`)
+    journal(`Importation de ${dossier} dans le .ktec : ${JSON.stringify({ ...bilan, ignores: bilan.ignores.length })}`)
     return bilan
   })
 

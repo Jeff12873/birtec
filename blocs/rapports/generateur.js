@@ -17,7 +17,7 @@
 // Le mot de passe MySQL n'est jamais écrit dans le rapport : BiRTEC le fournit au moment de l'aperçu,
 // et la GMAO utilise sa propre connexion.
 //
-// L'aspect et les conventions de connexion viennent de la « charte » du site (fichier .birtec, réglage
+// L'aspect et les conventions de connexion viennent de la « charte » du site (fichier .ktec, réglage
 // « charte »), pour que les rapports ressemblent à ceux de la GMAO et s'y déposent tels quels :
 // couleurs, police, feuille de style, logo, nom de la source de données, pilote, profil de connexion,
 // paramètres cachés passés par la GMAO. Sans charte, un aspect neutre et une connexion simple.

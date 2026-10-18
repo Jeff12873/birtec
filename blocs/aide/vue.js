@@ -11,7 +11,7 @@ const PAGES = [
   ['itm', 'Indicateurs ITM'],
   ['base', 'Base de données et dictionnaire'],
   ['schema', 'Constellation des tables'],
-  ['connaissances', 'Connaissances (fichier .birtec)'],
+  ['connaissances', 'Connaissances (fichier .ktec)'],
   ['configuration', 'Configuration'],
   ['installation', 'Installation et version hors ligne'],
   ['depannage', 'Dépannage'],
@@ -36,7 +36,7 @@ export default {
         texte,
       ),
     )
-    const reponse = await fetch(`/aide/${page}.html`)
+    const reponse = await fetch(new URL(`../../interface/aide/${page}.html`, import.meta.url))
     texte.innerHTML = reponse.ok ? await reponse.text() : '<p>Page d’aide introuvable.</p>'
     window.scrollTo(0, 0)
   },

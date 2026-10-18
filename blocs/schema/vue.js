@@ -9,18 +9,18 @@
 //   curseurs : force des liens (attraction) et écartement des bulles (répulsion)
 //   « Figer en lâchant » : une bulle déplacée reste où on la lâche ; double-clic sur une bulle figée : la libérer
 //   « Imprimer / PDF » : page A3 paysage mise en forme, à enregistrer en PDF
-// La disposition (positions, bulles figées) est gardée dans le fichier .birtec.
+// La disposition (positions, bulles figées) est gardée dans le fichier .ktec.
 //
-// Tout ce qui est saisi est gardé dans le fichier .birtec (dictionnaire) et sert à l'IA.
+// Tout ce qui est saisi est gardé dans le fichier .ktec (dictionnaire) et sert à l'IA.
 
 import { h, vider, ic, notifier } from '/socle/ui.js'
 import { api } from '/socle/api.js'
 import { etat } from '/socle/etat.js'
-import { extraireTables } from '/blocs/base/vue.js'
+import { extraireTables } from '../base/vue.js'
 import { pdfDepuisJpeg } from '/socle/pdf.js'
 
 let voirEcartees = false
-// Positions des bulles { x, y, fige } : chargées du .birtec, gardées d'une visite à l'autre.
+// Positions des bulles { x, y, fige } : chargées du .ktec, gardées d'une visite à l'autre.
 const positions = new Map()
 let dispositionChargee = false
 
@@ -37,7 +37,7 @@ function garderReglages() {
   } catch {}
 }
 
-// Enregistre la disposition dans le .birtec (un peu après le dernier changement, pour ne pas écrire sans arrêt).
+// Enregistre la disposition dans le .ktec (un peu après le dernier changement, pour ne pas écrire sans arrêt).
 let minuterieDisposition = null
 function enregistrerDisposition() {
   clearTimeout(minuterieDisposition)
@@ -81,7 +81,7 @@ export default {
     }
     recherche.addEventListener('change', chercher)
     recherche.addEventListener('keydown', (e) => e.key === 'Enter' && chercher())
-    const caseEcartees = h('input', { type: 'checkbox', checked: voirEcartees, onchange: () => { voirEcartees = caseEcartees.checked; window.birtec.recharger() } })
+    const caseEcartees = h('input', { type: 'checkbox', checked: voirEcartees, onchange: () => { voirEcartees = caseEcartees.checked; window.ktec.recharger() } })
 
     vider(panneau, aideSchema(graphe))
     vider(
@@ -837,7 +837,7 @@ function ajoutLien(t) {
           if (!cible.value.trim()) return notifier('Indiquez la table visée.', 'erreur')
           await api('/api/dictionnaire/lien', { methode: 'POST', corps: { nouveau: true, deTable: t.nom, deColonne: colonne.value, versTable: cible.value.trim(), versColonne: colonneCible.value.trim() || colonne.value } })
           notifier('Lien ajouté')
-          window.birtec.recharger()
+          window.ktec.recharger()
         },
       }, ic('plus', 14), 'Ajouter'),
     ),

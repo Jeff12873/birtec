@@ -3,9 +3,9 @@
 // collant sa description.
 
 import { h, vider, ic, essayer, notifier, confirmer, fenetre, dateHeureFr, deuxPanneaux } from '/socle/ui.js'
-import { api } from '/socle/api.js'
+import { api, adresse } from '/socle/api.js'
 import { etat } from '/socle/etat.js'
-import { demanderMotDePasse } from '/blocs/configuration/vue.js'
+import { demanderMotDePasse } from '../configuration/vue.js'
 
 let formatChoisi = 'pdf'
 try {
@@ -80,7 +80,7 @@ async function afficherRapport(zone, nom) {
         graves.length ? h('div', { class: 'bandeau' }, ic('alerte'), graves.join(' — ')) : null,
         resultat.lignes === 0 ? h('div', { class: 'bandeau' }, ic('alerte'), 'Aucune ligne pour ces paramètres : le rapport est vide. Vérifiez les paramètres, ou demandez à l’assistant de revoir les filtres de la requête.') : null,
         resultat.lignes > 0 ? h('p', { class: 'discret', style: { fontSize: '13px' } }, `${resultat.lignes} ligne${resultat.lignes > 1 ? 's' : ''} dans le rapport.`) : null)
-      cadre.src = resultat.adresse
+      cadre.src = adresse(resultat.adresse)
     } catch (erreur) {
       vider(messages, h('div', { class: 'bandeau' }, ic('alerte'), erreur.message))
     }
@@ -91,9 +91,9 @@ async function afficherRapport(zone, nom) {
     const format = choixFormat.value
     notifier(`Export ${formats[format].libelle} en cours…`)
     await essayer(async () => {
-      const reponse = await fetch(`/api/rapports/${encodeURIComponent(nom)}/export`, {
+      const reponse = await fetch(adresse(`/api/rapports/${encodeURIComponent(nom)}/export`), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-BIRTEC': '1' },
+        headers: { 'Content-Type': 'application/json', 'X-KTEC': '1' },
         body: JSON.stringify({ format, parametres: valeurs() }),
       })
       if (!reponse.ok) throw new Error((await reponse.json().catch(() => ({}))).erreur || `Erreur ${reponse.status}`)
@@ -107,7 +107,7 @@ async function afficherRapport(zone, nom) {
       h('div', { class: 'carte-entete' },
         h('h2', {}, ic('document', 18), rapport.titre || nom),
         h('div', { class: 'actions' },
-          h('a', { class: 'bouton petit discret', href: `/api/rapports/${encodeURIComponent(nom)}/fichier`, title: 'Le fichier à ouvrir dans BIRT ou à déposer dans la GMAO' }, ic('telecharger', 14), '.rptdesign'),
+          h('a', { class: 'bouton petit discret', href: adresse(`/api/rapports/${encodeURIComponent(nom)}/fichier`), title: 'Le fichier à ouvrir dans BIRT ou à déposer dans la GMAO' }, ic('telecharger', 14), '.rptdesign'),
           rapport.description?.constructeur
             ? h('button', { class: 'petit discret', onclick: () => { sessionStorage.setItem('birtec-constructeur', JSON.stringify({ etat: rapport.description.constructeur, aspect: { titre: rapport.description.titre, sousTitre: rapport.description.sousTitre, theme: rapport.description.theme, logo: rapport.description.logo, image: rapport.description.image || '', description: rapport.description.description, positionDescription: rapport.description.positionDescription, orientation: rapport.description.orientation }, nom })); location.hash = '#/constructeur' } }, ic('crayon', 14), 'Modifier')
             : rapport.description ? h('button', { class: 'petit discret', onclick: () => creerDepuisDescription(rapport.description, nom) }, ic('crayon', 14), 'Modifier') : null,
@@ -147,7 +147,7 @@ async function reglagesAspect(nom, description, apercu) {
       await api('/api/connaissances/fichiers/images', { methode: 'POST', fichier, entetes: { 'X-Nom': encodeURIComponent(fichier.name) } })
       image.append(h('option', { value: fichier.name }, fichier.name))
       image.value = fichier.name
-      notifier(`${fichier.name} ajoutée au fichier .birtec`)
+      notifier(`${fichier.name} ajoutée au fichier .ktec`)
     },
   })
   const appliquer = async () => {
@@ -213,7 +213,7 @@ export async function creerRapport(description, nom = null) {
     notifier(resultat.corrections.length ? `Rapport créé (corrigé automatiquement ${resultat.corrections.length} fois)` : 'Rapport créé')
     for (const a of resultat.avertissements || []) notifier(a, 'erreur')
     location.hash = `#/rapports/${encodeURIComponent(resultat.nom)}`
-    window.birtec.recharger()
+    window.ktec.recharger()
     return resultat.nom
   } catch (erreur) {
     notifier(erreur.message, 'erreur')

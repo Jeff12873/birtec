@@ -3,17 +3,17 @@
 // (jointures prises dans le dictionnaire et les liens) et montre l'aperçu à chaque changement.
 // L'IA ne sert qu'à pré-remplir le formulaire à partir d'une phrase.
 
-import { ErreurHttp } from '../../serveur/socle/http.js'
-import { discuter, iaInstallee } from '../../serveur/socle/ia.js'
-import { executerRequete, etatConnexion } from '../../serveur/socle/mysql.js'
+import { ErreurHttp } from 'ktec/http.js'
+import { discuter, iaInstallee } from 'ktec/ia.js'
+import { executerRequete, etatConnexion } from 'ktec/mysql.js'
 import { obtenirSchema } from '../base/schema.js'
 import { sujets, champsDuSujet } from './catalogue.js'
 import { construire } from './requete.js'
 import { genererRapport, sqlAvecValeurs, extraireJson } from '../rapports/serveur.js'
 import { reglagesITM, tester } from '../itm/serveur.js'
 import { trouverFenetre, formaterNom } from '../itm/indicateur.js'
-import { lireInfo, ecrireInfo } from '../../serveur/socle/birtec.js'
-import { enregistrerIndicateur } from '../../serveur/socle/birtec.js'
+import { lireInfo, ecrireInfo } from 'ktec/ktec.js'
+import { enregistrerIndicateur } from 'ktec/ktec.js'
 
 // Le champ du catalogue qui correspond le mieux à quelques mots (« ligne », « temps d'arrêt »…).
 // Un mot qui désigne une table liée (« ligne », « type de maintenance ») donne son code ou sa désignation.
@@ -67,7 +67,7 @@ function periodeGlissante(phrase) {
   return nombre > 0 ? `${unite}:${nombre}` : null
 }
 
-// Le vocabulaire de l'atelier, appris dans le formulaire et gardé dans le .birtec :
+// Le vocabulaire de l'atelier, appris dans le formulaire et gardé dans le .ktec :
 // { expression: « niveau 1 », sujet, champ, valeurs }.
 const lireVocabulaire = () => lireInfo('vocabulaire', [])
 
@@ -155,7 +155,7 @@ export function routes(r) {
 
   // POST /api/constructeur/indicateur { etat, nom, dateIndicateur?, arborescence?, enregistrer? }
   // Le même formulaire donne un indicateur ITM : le sujet est la table comptée, les filtres font le WHERE.
-  // BiRTEC écrit la requête indicateur et la requête liste, les essaie, et les range dans le .birtec.
+  // BiRTEC écrit la requête indicateur et la requête liste, les essaie, et les range dans le .ktec.
   r.post('/api/constructeur/indicateur', async (ctx) => {
     const { etat, nom, dateIndicateur = null, arborescence = true, enregistrer = false } = await ctx.json()
     const cat = await catalogue(etat.sujet)

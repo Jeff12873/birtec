@@ -1,10 +1,10 @@
 // Base de données : structure des tables, dictionnaire (noms clairs, descriptions, tables écartées),
 // et requêtes de lecture (console SQL).
 
-import { ErreurHttp, envoyerOctets } from '../../serveur/socle/http.js'
-import { creerZip } from '../../serveur/socle/zip.js'
-import { executerRequete, etatConnexion } from '../../serveur/socle/mysql.js'
-import { enregistrerDictionnaire, enregistrerLienDictionnaire, ajouterLien, lireInfo, ecrireInfo } from '../../serveur/socle/birtec.js'
+import { ErreurHttp, envoyerOctets } from 'ktec/http.js'
+import { creerZip } from 'ktec/zip.js'
+import { executerRequete, etatConnexion } from 'ktec/mysql.js'
+import { enregistrerDictionnaire, enregistrerLienDictionnaire, ajouterLien, lireInfo, ecrireInfo } from 'ktec/ktec.js'
 import { obtenirSchema } from './schema.js'
 
 export function routes(r) {
@@ -62,7 +62,7 @@ export function routes(r) {
     envoyerOctets(ctx.res, creerZip(fichiers), { type: 'application/zip', nom: `extraction-${base.replace(/[^\w.-]+/g, '_')}-${horodatage}.zip`, telecharger: true })
   })
 
-  // ---- disposition du schéma des liens (positions des bulles, bulles figées), gardée dans le .birtec
+  // ---- disposition du schéma des liens (positions des bulles, bulles figées), gardée dans le .ktec
 
   r.get('/api/schema/disposition', () => lireInfo('disposition_schema', { positions: {} }))
 
@@ -72,7 +72,7 @@ export function routes(r) {
     ecrireInfo('disposition_schema', { positions })
   })
 
-  // ---- dictionnaire (gardé dans le fichier .birtec)
+  // ---- dictionnaire (gardé dans le fichier .ktec)
 
   // POST /api/dictionnaire { table, colonne?, libelle?, description?, exclue? }
   r.post('/api/dictionnaire', async (ctx) => {

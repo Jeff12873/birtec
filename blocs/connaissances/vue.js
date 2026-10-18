@@ -1,8 +1,8 @@
-// Connaissances : ce que BiRTEC sait du site, rangé dans le fichier .birtec.
+// Connaissances : ce que BiRTEC sait du site, rangé dans le fichier .ktec.
 // Notes (conventions…), structure des tables, requêtes du site, fichiers BIRT (modèles, ressources).
 
 import { h, vider, ic, fenetre, notifier, essayer, confirmer, tailleFr, dateHeureFr, nombreFr } from '/socle/ui.js'
-import { api } from '/socle/api.js'
+import { api, adresse } from '/socle/api.js'
 
 const ONGLETS = { notes: 'Notes', tables: 'Tables', requetes: 'Requêtes', fichiers: 'Fichiers BIRT' }
 
@@ -25,7 +25,7 @@ export default {
         h('div', { class: 'actions' },
           h('button', { class: 'principal', onclick: importer }, ic('dossier', 16), 'Importer un dossier'),
           h('button', { class: 'discret', onclick: modifierCharte }, ic('crayon', 16), 'Charte des rapports'),
-          h('button', { class: 'discret', onclick: () => changerFichier(resume.chemin) }, ic('document', 16), 'Autre fichier .birtec'),
+          h('button', { class: 'discret', onclick: () => changerFichier(resume.chemin) }, ic('document', 16), 'Autre fichier .ktec'),
         ),
       ),
       carteFichier(resume),
@@ -41,7 +41,7 @@ function carteFichier(r) {
   return h('div', { class: 'carte', style: { marginBottom: '16px' } },
     h('div', { class: 'carte-entete' },
       h('h2', {}, ic('livre', 18), 'Fichier de connaissances'),
-      h('a', { class: 'bouton petit discret', href: '/api/connaissances/telecharger', title: 'Une copie de sauvegarde du fichier' }, ic('telecharger', 14), 'Copie'),
+      h('a', { class: 'bouton petit discret', href: adresse('/api/connaissances/telecharger'), title: 'Une copie de sauvegarde du fichier' }, ic('telecharger', 14), 'Copie'),
     ),
     h('p', { class: 'texte-2' }, h('span', { class: 'mono' }, r.chemin), ` — ${tailleFr(r.taille)}`),
     h('div', { class: 'chiffres' },
@@ -88,7 +88,7 @@ async function importer() {
       ),
       boutons: [{ texte: 'Fermer', classe: 'principal', valeur: true }],
     })
-    window.birtec.recharger()
+    window.ktec.recharger()
   } catch (erreur) {
     notifier(erreur.message, 'erreur')
   }
@@ -96,14 +96,14 @@ async function importer() {
 
 async function changerFichier(actuel) {
   const chemin = await demanderChemin({
-    titre: 'Autre fichier .birtec',
+    titre: 'Autre fichier .ktec',
     explication: 'Chemin du fichier à ouvrir. S’il n’existe pas, un fichier vide est créé à cet endroit.',
     valeur: actuel,
     bouton: 'Ouvrir',
   })
   if (!chemin) return
   await essayer(() => api('/api/connaissances/fichier', { methode: 'POST', corps: { chemin } }), 'Fichier ouvert')
-  window.birtec.recharger()
+  window.ktec.recharger()
 }
 
 // ---------------------------------------------------------------- charte des rapports
@@ -140,7 +140,7 @@ async function ongletNotes(zone) {
             h('h3', {}, n.titre, n.toujours ? h('span', { class: 'etiquette accent', style: { marginLeft: '8px' } }, 'toujours') : null),
             h('div', { class: 'actions' },
               h('button', { class: 'petit discret', onclick: () => modifierNote(n) }, ic('crayon', 14), 'Modifier'),
-              h('button', { class: 'petit discret danger', onclick: async () => { if (await confirmer(`Supprimer la note « ${n.titre} » ?`, { texte: 'Supprimer', danger: true })) { await api(`/api/connaissances/notes/${n.id}`, { methode: 'DELETE' }); window.birtec.recharger() } } }, ic('poubelle', 14)),
+              h('button', { class: 'petit discret danger', onclick: async () => { if (await confirmer(`Supprimer la note « ${n.titre} » ?`, { texte: 'Supprimer', danger: true })) { await api(`/api/connaissances/notes/${n.id}`, { methode: 'DELETE' }); window.ktec.recharger() } } }, ic('poubelle', 14)),
             ),
           ),
           h('pre', { class: 'note-contenu' }, n.contenu.length > 1200 ? n.contenu.slice(0, 1200) + ' …' : n.contenu),
@@ -167,7 +167,7 @@ async function modifierNote(note = {}) {
       { texte: 'Enregistrer', classe: 'principal', action: () => api('/api/connaissances/notes', { methode: 'POST', corps: { id: note.id, titre: titre.value, contenu: contenu.value, toujours: toujours.checked } }).then(() => true) },
     ],
   })
-  if (ok) window.birtec.recharger()
+  if (ok) window.ktec.recharger()
 }
 
 // ---------------------------------------------------------------- tables
@@ -202,7 +202,7 @@ async function ongletRequetes(zone) {
         h('pre', { class: 'code', 'data-langue': 'sql' }, h('code', {}, r.sql)),
         h('div', { class: 'actions' },
           h('a', { class: 'bouton petit', href: `#/base?sql=${encodeURIComponent(r.sql)}` }, ic('console', 14), 'Console'),
-          h('button', { class: 'petit discret danger', onclick: async () => { if (await confirmer(`Retirer la requête « ${r.titre} » ?`, { texte: 'Retirer', danger: true })) { await api(`/api/connaissances/requetes/${r.id}`, { methode: 'DELETE' }); window.birtec.recharger() } } }, ic('poubelle', 14), 'Retirer'),
+          h('button', { class: 'petit discret danger', onclick: async () => { if (await confirmer(`Retirer la requête « ${r.titre} » ?`, { texte: 'Retirer', danger: true })) { await api(`/api/connaissances/requetes/${r.id}`, { methode: 'DELETE' }); window.ktec.recharger() } } }, ic('poubelle', 14), 'Retirer'),
         ),
       ))
     : h('div', { class: 'carte vide' }, 'Aucune requête. Importez un dossier contenant vos fichiers .sql ou vos rapports : l’IA s’en inspire pour écrire les nouvelles.'))
@@ -225,7 +225,7 @@ function blocFichiers(cle, categorie) {
       for (const fichier of e.target.files) {
         await essayer(() => api(`/api/connaissances/fichiers/${cle}`, { methode: 'POST', fichier, entetes: { 'X-Nom': encodeURIComponent(fichier.name) } }), `${fichier.name} ajouté`)
       }
-      window.birtec.recharger()
+      window.ktec.recharger()
     },
   })
   const adresse = (f) => `/api/connaissances/fichiers/${cle}/${encodeURIComponent(f.nom)}`
@@ -240,7 +240,7 @@ function blocFichiers(cle, categorie) {
             h('td', { class: 'discret' }, dateHeureFr(f.modifie)),
             h('td', { class: 'actions' },
               cle === 'modeles' ? h('button', { class: 'petit discret', title: 'Copier dans les rapports pour l’aperçu', onclick: async () => { const { nom } = await api(`/api/connaissances/modeles/${encodeURIComponent(f.nom)}/vers-rapports`, { methode: 'POST' }); location.hash = `#/rapports/${encodeURIComponent(nom)}` } }, ic('oeil', 14)) : null,
-              h('button', { class: 'petit discret danger', title: 'Retirer', onclick: async () => { if (await confirmer(`Retirer ${f.nom} du fichier .birtec ?`, { texte: 'Retirer', danger: true })) { await api(adresse(f), { methode: 'DELETE' }); window.birtec.recharger() } } }, ic('poubelle', 14)),
+              h('button', { class: 'petit discret danger', title: 'Retirer', onclick: async () => { if (await confirmer(`Retirer ${f.nom} du fichier .ktec ?`, { texte: 'Retirer', danger: true })) { await api(adresse(f), { methode: 'DELETE' }); window.ktec.recharger() } } }, ic('poubelle', 14)),
             ),
           )))))
       : h('div', { class: 'vide', style: { padding: '18px' } }, 'Aucun fichier.'),

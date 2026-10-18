@@ -3,17 +3,17 @@
 //
 // Une base de GMAO compte souvent des centaines de tables : on ne peut pas toutes les donner à l'IA.
 // Pour chaque question, on choisit les tables dont le nom, les colonnes, les commentaires ou le
-// dictionnaire (noms clairs et descriptions du fichier .birtec) ressemblent aux mots de la question,
+// dictionnaire (noms clairs et descriptions du fichier .ktec) ressemblent aux mots de la question,
 // plus les tables qui leur sont liées. Les tables écartées dans le dictionnaire ne sont jamais données.
 
-import { lireSchema, etatConnexion } from '../../serveur/socle/mysql.js'
-import { enregistrerTables, lireTables, lireLiens, enregistrerLiens, deduireLiens, lireDictionnaire, lireLiensDictionnaire } from '../../serveur/socle/birtec.js'
+import { lireSchema, etatConnexion } from 'ktec/mysql.js'
+import { enregistrerTables, lireTables, lireLiens, enregistrerLiens, deduireLiens, lireDictionnaire, lireLiensDictionnaire } from 'ktec/ktec.js'
 
 let schema = null
 
-// Connexion ouverte : la structure est lue sur MySQL puis recopiée dans le fichier .birtec.
-// Connexion fermée : on se sert de celle du fichier .birtec (l'assistant reste utile hors connexion).
-// Dans les deux cas, les liens du .birtec (importés ou déduits) complètent ceux que la base déclare.
+// Connexion ouverte : la structure est lue sur MySQL puis recopiée dans le fichier .ktec.
+// Connexion fermée : on se sert de celle du fichier .ktec (l'assistant reste utile hors connexion).
+// Dans les deux cas, les liens du .ktec (importés ou déduits) complètent ceux que la base déclare.
 export async function obtenirSchema({ rafraichir = false } = {}) {
   if (etatConnexion().ouverte) {
     if (!schema?.direct || rafraichir) {
@@ -23,7 +23,7 @@ export async function obtenirSchema({ rafraichir = false } = {}) {
       schema = { ...lu, direct: true }
     }
   } else if (!schema || schema.direct || rafraichir) {
-    schema = { base: 'structure du fichier .birtec', tables: lireTables().map((t) => ({ ...t, type: 'TABLE', liens: [] })), direct: false }
+    schema = { base: 'structure du fichier .ktec', tables: lireTables().map((t) => ({ ...t, type: 'TABLE', liens: [] })), direct: false }
   }
   return completerDictionnaire(completerLiens(schema))
 }

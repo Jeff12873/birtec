@@ -1,5 +1,7 @@
 <h1>Installation et version hors ligne</h1>
-<p>BiRTEC s'installe dans le profil de l'utilisateur, sans droits d'administrateur : <b>Preparer BiRTEC.bat</b> (Windows) ou <code>sh preparer-birtec.sh</code> (Linux). La préparation installe le moteur d'IA, le modèle, Java, le moteur BIRT et le pilote MySQL, puis crée les raccourcis.</p>
-<p>Si IASSITEC est déjà installé sur le poste, ses modèles d'IA sont réutilisés.</p>
+<p>BiRTEC est une application de la suite <b>KTEC</b> : elle s'installe avec KTEC, dans le profil de l'utilisateur, sans droits d'administrateur. KTEC installe une seule fois ce que les applications partagent : le moteur d'IA et son modèle, Java, le moteur BIRT et le pilote MySQL.</p>
+<p>BiRTEC s'ouvre depuis le portail KTEC (sa tuile), et l'on passe d'une application à l'autre par le bas du menu. La connexion MySQL est commune : le mot de passe n'est demandé qu'une fois.</p>
+<h2>Fichier de connaissances</h2>
+<p>Les connaissances du site sont dans le fichier <b>.ktec</b>, commun à toutes les applications. Au premier lancement de KTEC, l'ancien fichier <code>connaissances.birtec</code> et les rapports de BiRTEC sont copiés dans <code>Documents/KTEC</code> ; l'original reste en place.</p>
 <h2>Poste sans Internet</h2>
-<p>Un kit hors ligne contient tout : il se fabrique sur un PC connecté avec <b>Fabriquer kit hors ligne.bat</b> ou <code>sh fabriquer-kit-hors-ligne.sh</code>, puis se copie sur une clé USB.</p>
+<p>Un kit hors ligne de KTEC contient tout, et se copie sur une clé USB.</p>

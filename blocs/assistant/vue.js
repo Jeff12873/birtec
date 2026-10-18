@@ -8,8 +8,8 @@ import { h, vider, ic, notifier, fenetre } from '/socle/ui.js'
 import { api, flux } from '/socle/api.js'
 import { texteIA } from '/socle/texte-ia.js'
 import { etat } from '/socle/etat.js'
-import { tableauResultats } from '/blocs/base/vue.js'
-import { creerRapport } from '/blocs/rapports/vue.js'
+import { tableauResultats } from '../base/vue.js'
+import { creerRapport } from '../rapports/vue.js'
 
 const SUGGESTIONS = [
   'Quelles tables contiennent les interventions et comment sont-elles liées ?',
@@ -375,7 +375,7 @@ function ajouterActionsIndicateur(bloc) {
   )
 }
 
-// La démarche que suit l'IA (gardée dans le fichier .birtec).
+// La démarche que suit l'IA (gardée dans le fichier .ktec).
 async function modifierConsignes() {
   const { consignes, parDefaut } = await api('/api/assistant/consignes')
   const zoneTexte = h('textarea', { rows: 14, style: { width: '100%' } }, consignes)
@@ -383,7 +383,7 @@ async function modifierConsignes() {
     titre: 'Consignes de l’IA',
     large: true,
     contenu: h('div', {},
-      h('p', { class: 'texte-2' }, 'Comment l’assistant doit interpréter vos demandes et mener la discussion avant de créer un rapport ou un indicateur. Gardées dans le fichier .birtec.'),
+      h('p', { class: 'texte-2' }, 'Comment l’assistant doit interpréter vos demandes et mener la discussion avant de créer un rapport ou un indicateur. Gardées dans le fichier .ktec.'),
       zoneTexte,
       h('div', { class: 'actions', style: { marginTop: '8px' } }, h('button', { class: 'petit discret', onclick: () => { zoneTexte.value = parDefaut } }, 'Revenir aux consignes par défaut'))),
     boutons: [
