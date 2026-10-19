@@ -35,7 +35,7 @@ export default {
       h('div', { class: 'entete-page' },
         h('div', {}, h('h1', {}, 'Rapports'), h('p', { class: 'sous-titre' }, 'Rapports BIRT créés par BiRTEC : aperçu, export, fichier .rptdesign')),
         h('div', { class: 'actions' },
-          h('a', { class: 'bouton principal', href: '#/constructeur' }, ic('plus', 16), 'Nouveau rapport'),
+          h('a', { class: 'bouton principal', href: '#/constructeur/rapport' }, ic('plus', 16), 'Nouveau rapport'),
           h('button', { class: 'discret', onclick: () => { sessionStorage.setItem('birtec-question', 'Je veux créer un rapport BIRT. Pose-moi les questions utiles (contenu, période, regroupements, totaux), puis donne sa description.'); location.hash = '#/assistant' } }, ic('etincelle', 16), 'Avec l’assistant'),
           h('button', { class: 'discret', onclick: () => creerDepuisDescription(), title: 'Décrire le rapport en quelques phrases : le formulaire se remplit tout seul' }, ic('plus', 16), 'Décrire un rapport'),
         ),
@@ -57,8 +57,16 @@ async function afficherRapport(zone, nom) {
   const rapport = await api(`/api/rapports/${encodeURIComponent(nom)}`)
   const formats = await api('/api/rapports/formats')
 
-  // Un champ par paramètre du rapport, prérempli avec sa valeur par défaut.
+  // Un champ par paramètre du rapport, prérempli avec sa valeur par défaut ; une liste déroulante
+  // pour ceux « à choisir dans une liste » (valeurs lues dans la base).
   const champs = rapport.parametres.map((p) => {
+    if (p.liste) {
+      const champ = h('select', {}, h('option', { value: '' }, p.optionnel ? '(Toutes)' : '— Choisir —'))
+      api(`/api/rapports/${encodeURIComponent(nom)}/parametres/${encodeURIComponent(p.nom)}`)
+        .then((valeurs) => champ.append(...valeurs.map((v) => h('option', { value: v, selected: String(v) === String(p.defaut) }, v))))
+        .catch(() => {})
+      return { nom: p.nom, champ, element: h('label', { class: 'champ' }, h('span', {}, p.libelle), champ) }
+    }
     const type = { date: 'date', dateTime: 'datetime-local', integer: 'number', decimal: 'number', float: 'number' }[p.type] || 'text'
     const champ = h('input', { type, value: p.defaut, step: type === 'number' ? 'any' : null })
     return { nom: p.nom, champ, element: h('label', { class: 'champ' }, h('span', {}, p.libelle), champ) }
@@ -109,7 +117,7 @@ async function afficherRapport(zone, nom) {
         h('div', { class: 'actions' },
           h('a', { class: 'bouton petit discret', href: adresse(`/api/rapports/${encodeURIComponent(nom)}/fichier`), title: 'Le fichier à ouvrir dans BIRT ou à déposer dans la GMAO' }, ic('telecharger', 14), '.rptdesign'),
           rapport.description?.constructeur
-            ? h('button', { class: 'petit discret', onclick: () => { sessionStorage.setItem('birtec-constructeur', JSON.stringify({ etat: rapport.description.constructeur, aspect: { titre: rapport.description.titre, sousTitre: rapport.description.sousTitre, theme: rapport.description.theme, logo: rapport.description.logo, image: rapport.description.image || '', description: rapport.description.description, positionDescription: rapport.description.positionDescription, orientation: rapport.description.orientation }, nom })); location.hash = '#/constructeur' } }, ic('crayon', 14), 'Modifier')
+            ? h('button', { class: 'petit discret', onclick: () => modifier(rapport.description, nom) }, ic('crayon', 14), 'Modifier')
             : rapport.description ? h('button', { class: 'petit discret', onclick: () => creerDepuisDescription(rapport.description, nom) }, ic('crayon', 14), 'Modifier') : null,
           h('button', { class: 'petit discret danger', onclick: () => supprimer(nom) }, ic('poubelle', 14), 'Supprimer'),
         ),
@@ -197,7 +205,19 @@ async function creerDepuisDescription(description = null, nom = null) {
   } catch {}
   if (lue && typeof lue === 'object') return creerRapport(lue, nom)
   sessionStorage.setItem('birtec-phrase', valeur.trim())
-  location.hash = '#/constructeur'
+  location.hash = '#/constructeur/rapport'
+}
+
+// Rouvre l'éditeur sur un rapport créé avec le formulaire. Les rapports d'avant les blocs (un seul tableau)
+// deviennent un rapport d'un seul bloc.
+function modifier(d, nom) {
+  const c = d.constructeur
+  const aspect = { titre: d.titre, sousTitre: d.sousTitre, theme: d.theme, logo: d.logo, image: d.image || '', description: d.description, positionDescription: d.positionDescription, orientation: d.orientation }
+  const rapport = c.version === 2
+    ? { aspect: { ...aspect, ...c.aspect }, parametres: c.parametres || [], blocs: c.blocs || [] }
+    : { aspect, parametres: [], blocs: [{ type: 'tableau', titre: '', source: 'champs', etat: { calculees: [], ...c }, regles: {} }] }
+  sessionStorage.setItem('birtec-rapport', JSON.stringify({ rapport, nom }))
+  location.hash = '#/constructeur/rapport'
 }
 
 // Utilisé aussi par l'assistant. Affiche une fenêtre d'attente pendant la fabrication et la vérification.

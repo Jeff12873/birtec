@@ -35,7 +35,7 @@ export default {
       h('div', { class: 'entete-page' },
         h('div', {}, h('h1', {}, 'Indicateurs ITM'), h('p', { class: 'sous-titre' }, 'Requête indicateur et requête liste, essayées sur la base, à coller dans la GMAO')),
         h('div', { class: 'actions' },
-          h('a', { class: 'bouton principal', href: '#/constructeur', title: 'Choisir la table et les filtres, puis « Créer un indicateur ITM »' }, ic('plus', 16), 'Nouvel indicateur'),
+          h('a', { class: 'bouton principal', href: '#/indicateur', title: 'Ce qu’on compte et les conditions : BiRTEC écrit les deux requêtes' }, ic('plus', 16), 'Nouvel indicateur'),
           h('button', { class: 'discret', onclick: modifierReglages }, ic('reglages', 16), 'Variables'),
         ),
       ),
@@ -91,7 +91,7 @@ function detail(indicateur) {
         h('div', { class: 'actions' },
           h('button', { class: 'petit', onclick: tester }, ic('lecture', 14), 'Tester'),
           indicateur.definition?.constructeur
-            ? h('button', { class: 'petit discret', onclick: () => { sessionStorage.setItem('birtec-constructeur', JSON.stringify({ etat: indicateur.definition.constructeur, aspect: { titre: indicateur.nom.replace(/^\[[^\]]*\]\s*-\s*/, '') } })); location.hash = '#/constructeur' } }, ic('crayon', 14), 'Modifier (formulaire)')
+            ? h('button', { class: 'petit discret', onclick: () => { sessionStorage.setItem('birtec-indicateur', JSON.stringify({ etat: indicateur.definition.constructeur, nom: indicateur.nom, dateIndicateur: indicateur.definition.dateIndicateur, arborescence: indicateur.definition.arborescence, id: indicateur.id })); location.hash = '#/indicateur' } }, ic('crayon', 14), 'Modifier (formulaire)')
             : h('button', { class: 'petit discret', onclick: () => demanderALAssistant(`Modifie l’indicateur ITM « ${indicateur.nom} » : `) }, ic('etincelle', 14), 'Modifier avec l’assistant'),
           h('button', { class: 'petit discret danger', onclick: supprimer }, ic('poubelle', 14)),
         ),

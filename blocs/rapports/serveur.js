@@ -12,7 +12,7 @@ import { discuter, iaInstallee } from 'ktec/ia.js'
 import { obtenirSchema, tablesUtiles, decrireTables } from '../base/schema.js'
 import { dossierRessources, lireInfo, lireFichier } from 'ktec/ktec.js'
 import { verifierSQL } from '../base/verification.js'
-import { genererRptdesign, verifierDescription, THEMES } from './generateur.js'
+import { genererRptdesign, verifierDescription, normaliserDescription, BLOCS_DONNEES, THEMES } from './generateur.js'
 
 export const FORMATS = {
   pdf: { libelle: 'PDF', type: 'application/pdf' },
@@ -45,7 +45,21 @@ export function routes(r) {
     const fichier = fichierRapport(ctx.params.nom)
     const xml = fs.readFileSync(fichier, 'utf8')
     const description = lireJson(fichier.replace(/\.rptdesign$/, '.birtec.json'))
-    return { nom: ctx.params.nom, titre: lireTitre(xml), parametres: lireParametres(xml), description }
+    // Les paramètres à choisir dans une liste (ligne, équipement…) : leurs valeurs sont lues à la demande.
+    const parametres = lireParametres(xml).map((p) => {
+      const d = description?.parametres?.find((q) => q.nom === p.nom)
+      return { ...p, liste: Boolean(d?.liste?.requete), optionnel: Boolean(d?.optionnel) }
+    })
+    return { nom: ctx.params.nom, titre: lireTitre(xml), parametres, description }
+  })
+
+  // Les valeurs proposées pour un paramètre « à choisir dans une liste ».
+  r.get('/api/rapports/:nom/parametres/:parametre', async (ctx) => {
+    const description = lireJson(fichierRapport(ctx.params.nom).replace(/\.rptdesign$/, '.birtec.json'))
+    const p = description?.parametres?.find((q) => q.nom === ctx.params.parametre)
+    if (!p?.liste?.requete) throw new ErreurHttp(404, 'Ce paramètre n’a pas de liste de valeurs.')
+    const resultat = await executerRequete(p.liste.requete, 1000)
+    return resultat.lignes.map((l) => l[0]).filter((v) => v !== null && v !== '')
   })
 
   // POST /api/rapports/generer { description, nom? }
@@ -79,11 +93,19 @@ export function routes(r) {
     const sortie = path.join(chemins.cache, 'apercus', `${ctx.params.nom}.html`)
     fs.mkdirSync(path.dirname(sortie), { recursive: true })
     const fichier = fichierRapport(ctx.params.nom)
-    const resultat = await rendreRapport(fichier, 'html', sortie, parametres, dossierRessources(chemins.cache))
+    const resultat = await rendreHtml(fichier, sortie, ctx.params.nom, parametres)
     // Nombre de lignes de la requête avec ces paramètres (rapports créés par BiRTEC seulement).
     const description = lireJson(fichier.replace(/\.rptdesign$/, '.birtec.json'))
-    const lignes = description ? await compterLignes(description, parametres).catch(() => null) : null
+    const lignes = description && unSeulTableau(description) ? await compterLignes(description, parametres).catch(() => null) : null
     return { erreurs: resultat.erreurs, lignes, adresse: `/api/rapports/${encodeURIComponent(ctx.params.nom)}/apercu.html?t=${Date.now()}` }
+  })
+
+  // Les images d'un aperçu (graphiques), rangées à côté de la page.
+  r.get('/api/rapports/:nom/images/:fichier', (ctx) => {
+    const fichier = path.join(chemins.cache, 'apercus', `${path.basename(ctx.params.nom)}_images`, path.basename(ctx.params.fichier))
+    if (!fs.existsSync(fichier)) throw new ErreurHttp(404, 'Image introuvable')
+    const type = { '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.gif': 'image/gif' }[path.extname(fichier).toLowerCase()] || 'application/octet-stream'
+    envoyerOctets(ctx.res, fs.readFileSync(fichier), { type })
   })
 
   r.get('/api/rapports/:nom/apercu.html', (ctx) => {
@@ -129,8 +151,8 @@ export async function genererRapport(description, nom) {
     const resultat = await essayer(description, fichier, connexion)
     avertissements = resultat.avertissements
     if (!resultat.erreurs.length) break
-    if (essai >= ESSAIS_DE_CORRECTION || !iaInstallee() || description.constructeur) {
-      // Un rapport du constructeur n'est pas confié à l'IA : son SQL vient de BiRTEC.
+    if (essai >= ESSAIS_DE_CORRECTION || !iaInstallee() || description.constructeur || Array.isArray(description.blocs)) {
+      // Un rapport du constructeur n'est pas confié à l'IA : son SQL vient de BiRTEC (ou de l'utilisateur).
       return { nom, ok: false, erreurs: resultat.erreurs, corrections }
     }
     journal(`Rapport « ${nom} » : correction par l'IA (${resultat.erreurs[0]})`)
@@ -147,7 +169,12 @@ async function essayer(description, fichier, connexion) {
   const erreursDescription = verifierDescription(description)
   if (erreursDescription.length) return { erreurs: erreursDescription, avertissements: [] }
   // Tables et colonnes inexistantes : signalées avant tout essai, avec les tables qui ont la colonne.
-  const inconnues = verifierSQL(description.requete, await obtenirSchema())
+  const schema = await obtenirSchema()
+  const d = normaliserDescription(description)
+  const inconnues = [
+    ...d.blocs.filter((b) => BLOCS_DONNEES.includes(b.type)).flatMap((b, i) => verifierSQL(b.requete, schema).map((e) => (d.blocs.length > 1 ? `Bloc ${d.blocs.indexOf(b) + 1} : ${e}` : e))),
+    ...d.parametres.filter((p) => p.liste?.requete).flatMap((p) => verifierSQL(p.liste.requete, schema).map((e) => `Liste « ${p.libelle || p.nom} » : ${e}`)),
+  ]
   if (inconnues.length) return { erreurs: inconnues, avertissements: [] }
   fs.writeFileSync(fichier, genererRptdesign(description, { ...connexion, image: imageDu(description) }))
   const verification = await verifierRapport(fichier, dossierRessources(chemins.cache))
@@ -168,7 +195,7 @@ async function essayer(description, fichier, connexion) {
     return { erreurs: [erreur.message], avertissements: [] }
   }
   // Un rapport vide avec les valeurs par défaut cache souvent une erreur de filtre (mauvaise table, code inexistant…).
-  const lignes = await compterLignes(description, parametres).catch(() => null)
+  const lignes = unSeulTableau(description) ? await compterLignes(description, parametres).catch(() => null) : null
   const avertissements = lignes === 0
     ? [`Le rapport ne contient aucune ligne avec les valeurs par défaut des paramètres${(description.parametres || []).length ? ` (${description.parametres.map((p) => `${p.libelle || p.nom} = ${p.defaut ?? ''}`).join(', ')})` : ''} : vérifiez les filtres de la requête.`]
     : []
@@ -185,20 +212,59 @@ function imageDu(description) {
   return { nom: path.basename(description.image), type, octets }
 }
 
-// La requête du rapport, les « ? » remplacés par les valeurs des paramètres (pour l'essayer sur la base).
-export function sqlAvecValeurs(description, valeurs = {}) {
+// Rend un rapport en HTML pour l'aperçu, avec ses images (graphiques) servies par KTEC.
+function rendreHtml(fichier, sortie, nom, parametres) {
+  fs.rmSync(sortie.replace(/\.html$/, '_images'), { recursive: true, force: true })
+  return rendreRapport(fichier, 'html', sortie, parametres, dossierRessources(chemins.cache), `/api/birtec/rapports/${encodeURIComponent(nom)}/images`)
+}
+
+// Aperçu d'un rapport pas encore enregistré (éditeur de rapport) : fabriqué à part, dans le cache.
+export async function apercuBrouillon(description, valeurs = {}) {
+  const nom = '_brouillon'
+  const dossier = path.join(chemins.cache, 'apercus')
+  fs.mkdirSync(dossier, { recursive: true })
+  const fichier = path.join(dossier, `${nom}.rptdesign`)
+  const { mysql } = reglagesPoste()
+  const connexion = { url: `jdbc:mysql://${mysql.serveur}:${mysql.port || 3306}/${mysql.base}`, utilisateur: mysql.utilisateur, charte: lireInfo('charte') }
+  const erreursDescription = verifierDescription(description)
+  if (erreursDescription.length) return { erreurs: erreursDescription }
+  fs.writeFileSync(fichier, genererRptdesign(description, { ...connexion, image: imageDu(description) }))
+  const parametres = { ...Object.fromEntries((description.parametres || []).map((p) => [p.nom, p.defaut ?? ''])), ...valeurs }
+  const resultat = await rendreHtml(fichier, path.join(dossier, `${nom}.html`), nom, parametres)
+  return { erreurs: resultat.erreurs.filter((e) => !e.startsWith('Avertissement')), adresse: `/api/rapports/${nom}/apercu.html?t=${Date.now()}` }
+}
+
+// La requête d'un bloc (ou d'une ancienne description), les « ? » remplacés par les valeurs des paramètres
+// (pour l'essayer sur la base). source = { requete, liaisons?, parametres }.
+export function sqlAvecValeurs(source, valeurs = {}) {
+  const description = source.requete === undefined && source.blocs ? premierBloc(source) : source
   const parametres = description.parametres || []
   const liaisons = description.liaisons || parametres.map((p) => p.nom)
   let i = 0
   const morceaux = String(description.requete).trim().replace(/;+\s*$/, '').split(/('(?:[^'\\]|\\.|'')*')/)
   return morceaux.map((m, n) => (n % 2 ? m : m.replace(/\?/g, () => {
-    const p = parametres.find((q) => q.nom === liaisons[i++]) || {}
+    const nom = liaisons[i++]
+    const p = parametres.find((q) => q.nom === nom) || {}
     const v = valeurs[p.nom] ?? p.defaut ?? ''
     return ['entier', 'decimal'].includes(p.type) && v !== '' && !isNaN(Number(v)) ? String(Number(v)) : `'${String(v).replace(/\\/g, '\\\\').replace(/'/g, "''")}'`
   }))).join('')
 }
 
-// Nombre de lignes de la requête du rapport avec ces valeurs de paramètres.
+// Le nombre de lignes n'a de sens que pour un rapport fait d'un seul tableau (sinon : null).
+function unSeulTableau(description) {
+  const d = normaliserDescription(description)
+  const donnees = d.blocs.filter((b) => BLOCS_DONNEES.includes(b.type))
+  return donnees.length === 1 && donnees[0].type === 'tableau'
+}
+
+// Le premier bloc de données d'un rapport en blocs, avec les paramètres du rapport.
+function premierBloc(description) {
+  const d = normaliserDescription(description)
+  const b = d.blocs.find((x) => BLOCS_DONNEES.includes(x.type))
+  return b ? { requete: b.requete, liaisons: b.liaisons || [], parametres: d.parametres } : { requete: 'SELECT 1', liaisons: [], parametres: [] }
+}
+
+// Nombre de lignes de la requête du rapport (son premier bloc de données) avec ces valeurs de paramètres.
 export async function compterLignes(description, valeurs) {
   const r = await executerRequete(`SELECT COUNT(*) AS n FROM (${sqlAvecValeurs(description, valeurs)}) AS birtec_compte`, 1)
   return Number(r.lignes[0][0])

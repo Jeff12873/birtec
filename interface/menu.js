@@ -3,6 +3,7 @@
 
 import accueil from '../blocs/accueil/vue.js'
 import constructeur from '../blocs/constructeur/vue.js'
+import indicateur from '../blocs/indicateur/vue.js'
 import assistant from '../blocs/assistant/vue.js'
 import base from '../blocs/base/vue.js'
 import rapports from '../blocs/rapports/vue.js'
@@ -14,7 +15,7 @@ import aide from '../blocs/aide/vue.js'
 import { demanderMotDePasse } from '/socle/connexion.js'
 
 // L'ordre est celui du menu.
-export const blocs = [accueil, constructeur, rapports, itm, base, schema, connaissances, assistant, configuration, aide]
+export const blocs = [accueil, constructeur, indicateur, rapports, itm, base, schema, connaissances, assistant, configuration, aide]
 export { accueil }
 export const configurationBloc = 'configuration'
 export const styles = 'interface/app.css'

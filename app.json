@@ -2,7 +2,7 @@
   "id": "birtec",
   "nom": "BiRTEC",
   "sousTitre": "Rapports BIRT",
-  "description": "Rapports BIRT et indicateurs ITM, construits par formulaire sur la base de la GMAO.",
+  "description": "Rapports BIRT (tableaux, graphiques, tableaux croisés) et indicateurs ITM, sur la base de la GMAO.",
   "icone": "interface/icone.svg",
   "besoins": ["java", "birt", "ia"]
 }

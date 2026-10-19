@@ -17,13 +17,19 @@
 //   totaux: true,
 // }
 // Filtre « compare » : valeurs = [opérateur (<, <=, >, >=, =, <>), id de l'autre champ] — ex. stock réel < stock mini.
+// Filtre « demande » (texte) : la valeur est choisie au lancement du rapport, dans la liste des valeurs de la base
+// (paramètre facultatif : vide = toutes).
+// calculees: [{ libelle, a: idChamp, op: '-'|'+'|'*'|'/'|'pct'|'jours'|'heures', b: idChamp | null, valeur: nombre }]
+//   (liste détaillée : colonnes calculées, ex. durée = fin − début, taux = réalisé / prévu en %)
+//
+// options.sansRegroupement : une synthèse sans « regrouper par » donne une seule ligne (chiffre clé).
 //
 // options.aliasSujet : alias de la table du sujet (par défaut t0). Pour un indicateur ITM, c'est le nom de la
 // table lui-même, car les variables de la GMAO ({{ARBO_FILTRE_…}}) s'écrivent avec ce nom.
 
 const FORMAT_PAR_NATURE = { nombre: 'decimal', date: 'date', date8: 'date', texte: 'texte' }
 
-export function construire(etat, catalogue, { aliasSujet = 't0' } = {}) {
+export function construire(etat, catalogue, { aliasSujet = 't0', sansRegroupement = false } = {}) {
   const champs = new Map(catalogue.champs.map((c) => [c.id, c]))
   const erreurs = []
   const sujet = catalogue.sujet.table
@@ -64,6 +70,11 @@ export function construire(etat, catalogue, { aliasSujet = 't0' } = {}) {
     return c?.nature === 'date8' ? `STR_TO_DATE(NULLIF(${e}, ''), '%Y%m%d')` : e
   }
 
+  // Valeur utilisée dans un calcul : une date AAAAMMJJ devient une vraie date.
+  const valeurCalcul = (id) => affichage(id)
+  // Nom de paramètre BIRT tiré du nom du champ (« Ligne » → p_ligne).
+  const nomParametre = (libelle) => `p_${String(libelle).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 30) || 'valeur'}`
+
   // --- filtres
   const conditions = []
   const parametres = []
@@ -71,61 +82,97 @@ export function construire(etat, catalogue, { aliasSujet = 't0' } = {}) {
   const colSujet = catalogue.champs.find((c) => c.chemin === '' && c.colonne.toUpperCase() === 'ACTIF')
   if (colSujet && etat.etat !== 'toutes') conditions.push(etat.etat === 'courantes' ? `${aliasSujet}.${colSujet.colonne} = 1` : `${aliasSujet}.${colSujet.colonne} <> 0`)
 
-  for (const f of etat.filtres || []) {
+  // Une condition (une ligne de filtre) → son SQL, ou null si elle est incomplète. Les paramètres qu'elle crée
+  // sont notés dans l'ordre où leurs « ? » apparaîtront dans la requête.
+  const conditionDe = (f) => {
     const c = champs.get(f.champ)
-    if (!c) continue
+    if (!c) return null
     const e = expression(f.champ)
     const v = (f.valeurs || []).filter((x) => x !== '' && x !== null && x !== undefined)
     const litteral = (x) => (c.nature === 'nombre' && !isNaN(Number(x)) ? String(Number(x)) : `'${String(x).replace(/\\/g, '\\\\').replace(/'/g, "''")}'`)
     switch (f.operateur) {
       case 'egal':
-        if (v.length) conditions.push(v.length === 1 ? `${e} = ${litteral(v[0])}` : `${e} IN (${v.map(litteral).join(', ')})`)
+        if (v.length) return (v.length === 1 ? `${e} = ${litteral(v[0])}` : `${e} IN (${v.map(litteral).join(', ')})`)
         break
       case 'different':
-        if (v.length) conditions.push(`(${e} IS NULL OR ${e} NOT IN (${v.map(litteral).join(', ')}))`)
+        if (v.length) return `(${e} IS NULL OR ${e} NOT IN (${v.map(litteral).join(', ')}))`
         break
       case 'contient':
-        if (v.length) conditions.push(`${e} LIKE ${litteral(`%${v[0]}%`)}`)
+        if (v.length) return `${e} LIKE ${litteral(`%${v[0]}%`)}`
         break
       case 'commence':
-        if (v.length) conditions.push(`${e} LIKE ${litteral(`${v[0]}%`)}`)
+        if (v.length) return `${e} LIKE ${litteral(`${v[0]}%`)}`
         break
       case 'compare': {
         // Comparaison avec une autre colonne (ex. stock réel < stock minimum, date de fin > date limite).
         const op = ['<', '<=', '>', '>=', '=', '<>'].includes(f.valeurs?.[0]) ? f.valeurs[0] : '<'
-        if (f.valeurs?.[1] && champs.has(f.valeurs[1])) conditions.push(`${e} ${op} ${expression(f.valeurs[1])}`)
+        if (f.valeurs?.[1] && champs.has(f.valeurs[1])) return `${e} ${op} ${expression(f.valeurs[1])}`
         break
       }
       case 'vide':
-        conditions.push(`(${e} IS NULL OR ${e} = '')`)
+        return `(${e} IS NULL OR ${e} = '')`
         break
       case 'non_vide':
-        conditions.push(`(${e} IS NOT NULL AND ${e} <> '')`)
+        return `(${e} IS NOT NULL AND ${e} <> '')`
         break
       case '>=':
       case '<=':
-        if (v.length) conditions.push(`${e} ${f.operateur} ${litteral(dateSaisie(v[0], c))}`)
+        if (v.length) return `${e} ${f.operateur} ${litteral(dateSaisie(v[0], c))}`
         break
       case 'entre':
-        if (v.length === 2) conditions.push(`${e} BETWEEN ${litteral(dateSaisie(v[0], c))} AND ${litteral(dateSaisie(v[1], c))}`)
+        if (v.length === 2) return `${e} BETWEEN ${litteral(dateSaisie(v[0], c))} AND ${litteral(dateSaisie(v[1], c))}`
         break
+      case 'demande': {
+        // Valeur choisie au lancement, dans la liste des valeurs existantes ; vide = toutes.
+        // « Désignation » d'une table liée : c'est la table qui parle (« Type de maintenance »).
+        const groupe = c.groupe.split(' › ').at(-1)
+        const libelle = c.niveau && /^(d[ée]signation|code)/i.test(c.libelle) ? groupe.charAt(0).toUpperCase() + groupe.slice(1) : c.niveau ? `${c.libelle} (${groupe})` : c.libelle
+        const nom = nomParametre(libelle)
+        if (!parametres.some((p) => p.nom === nom)) {
+          const liste = construire({ sujet, mode: 'liste', champs: [f.champ], filtres: [], etat: 'toutes' }, catalogue)
+          const colonne = liste.colonnes[0]?.champ
+          parametres.push({
+            nom, libelle, type: 'texte', defaut: '', optionnel: true,
+            liste: { requete: `SELECT DISTINCT ${colonne} AS valeur FROM (${liste.sql}) AS l WHERE ${colonne} IS NOT NULL AND ${colonne} <> '' ORDER BY 1` },
+          })
+        }
+        liaisons.push(nom, nom)
+        return `(? = '' OR ${e} = ?)`
+        break
+      }
       case 'periode': {
         const periode = v[0] || 'mois_en_cours'
         if (periode === 'demandee') {
-          // Période choisie au lancement du rapport : deux paramètres BIRT.
-          const type = c.nature === 'date' ? 'date' : 'texte'
-          const debut = { nom: 'debut', libelle: 'Du', type, defaut: type === 'date' ? premierDuMois(true) : premierDuMois(false) }
-          const fin = { nom: 'fin', libelle: 'Au', type, defaut: type === 'date' ? aujourdhui(true) : aujourdhui(false) }
+          // Période choisie au lancement du rapport : deux paramètres BIRT de type date (un calendrier pour choisir).
+          // Une date rangée en AAAAMMJJ est comparée à la date choisie mise au même format.
+          const debut = { nom: 'debut', libelle: 'Du', type: 'date', defaut: premierDuMois(true) }
+          const fin = { nom: 'fin', libelle: 'Au', type: 'date', defaut: aujourdhui(true) }
           if (!parametres.some((p) => p.nom === 'debut')) parametres.push(debut, fin)
-          conditions.push(`${e} >= ? AND ${e} <= ?`)
+          const marque = c.nature === 'date' ? '?' : "DATE_FORMAT(?, '%Y%m%d')"
           liaisons.push('debut', 'fin')
+          return `${e} >= ${marque} AND ${e} <= ${marque}`
         } else {
-          conditions.push(conditionPeriode(e, periode, c.nature))
+          return conditionPeriode(e, periode, c.nature)
         }
         break
       }
     }
+    return null
   }
+
+  // Conditions liées par ET / OU, et groupes entre parenthèses (en cascade) :
+  // filtres = [{ champ, operateur, valeurs, lien }, { groupe: [ … ], lien }], lien = 'et' | 'ou' avec l'élément précédent.
+  // Comme à la lecture, ET passe avant OU : « A et B ou C » = (A et B) ou C ; un groupe change cet ordre.
+  const combiner = (liste) => {
+    const morceaux = []
+    for (const f of liste || []) {
+      const sql = Array.isArray(f.groupe) ? combiner(f.groupe) : conditionDe(f)
+      if (sql) morceaux.push(`${morceaux.length ? (f.lien === 'ou' ? ' OR ' : ' AND ') : ''}(${sql})`)
+    }
+    return morceaux.length ? morceaux.join('') : null
+  }
+  const filtres = combiner(etat.filtres)
+  if (filtres) conditions.push((etat.filtres || []).some((f) => f.lien === 'ou' || Array.isArray(f.groupe)) ? `(${filtres})` : filtres)
 
   // --- colonnes
   const colonnesRapport = []
@@ -155,7 +202,7 @@ export function construire(etat, catalogue, { aliasSujet = 't0' } = {}) {
   let orderBy = []
   if (etat.mode === 'synthese') {
     const dimensions = (etat.regroupements || []).filter((g) => champs.has(g.champ))
-    if (!dimensions.length) erreurs.push('Synthèse : choisissez au moins un « regrouper par ».')
+    if (!dimensions.length && !sansRegroupement) erreurs.push('Synthèse : choisissez au moins un « regrouper par ».')
     const sqlDimensions = []
     for (const g of dimensions) {
       const v = valeurGroupe(g)
@@ -201,6 +248,28 @@ export function construire(etat, catalogue, { aliasSujet = 't0' } = {}) {
       const nom = aliasDe(libelleDe(c))
       select.push(`${affichage(id)} AS ${nom}`)
       colonnesRapport.push({ champ: nom, libelle: libelleDe(c), format: FORMAT_PAR_NATURE[c.nature], total: etat.totaux !== false && c.nature === 'nombre' ? 'somme' : undefined })
+    }
+    // Colonnes calculées : une opération entre deux champs (ou un champ et un nombre).
+    for (const k of etat.calculees || []) {
+      const a = champs.get(k.a)
+      const b = k.b ? champs.get(k.b) : null
+      if (!a || (k.b && !b)) continue
+      const ea = valeurCalcul(k.a)
+      const eb = b ? valeurCalcul(k.b) : String(Number(k.valeur) || 0)
+      const sql = {
+        '-': `(${ea} - ${eb})`,
+        '+': `(${ea} + ${eb})`,
+        '*': `(${ea} * ${eb})`,
+        '/': `ROUND(${ea} / NULLIF(${eb}, 0), 2)`,
+        pct: `ROUND(100 * ${ea} / NULLIF(${eb}, 0), 1)`,
+        jours: `DATEDIFF(${ea}, ${eb})`,
+        heures: `ROUND(TIMESTAMPDIFF(MINUTE, ${eb}, ${ea}) / 60, 2)`,
+      }[k.op]
+      if (!sql) continue
+      const libelle = k.libelle || `${a.libelle} ${k.op} ${b ? b.libelle : k.valeur}`
+      const nom = aliasDe(libelle)
+      select.push(`${sql} AS ${nom}`)
+      colonnesRapport.push({ champ: nom, libelle, format: k.op === 'jours' ? 'entier' : 'decimal', total: etat.totaux !== false && !['pct', '/'].includes(k.op) ? 'somme' : undefined })
     }
     if (etat.tri?.champ && champs.has(etat.tri.champ)) orderBy.push(`${affichage(etat.tri.champ)} ${etat.tri.sens === 'desc' ? 'DESC' : 'ASC'}`)
   }

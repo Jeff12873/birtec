@@ -9,7 +9,8 @@ import { executerRequete, etatConnexion } from 'ktec/mysql.js'
 import { obtenirSchema } from '../base/schema.js'
 import { sujets, champsDuSujet } from './catalogue.js'
 import { construire } from './requete.js'
-import { genererRapport, sqlAvecValeurs, extraireJson } from '../rapports/serveur.js'
+import { genererRapport, sqlAvecValeurs, extraireJson, apercuBrouillon } from '../rapports/serveur.js'
+import { lectureSeule, BLOCS_DONNEES } from '../rapports/generateur.js'
 import { reglagesITM, tester } from '../itm/serveur.js'
 import { trouverFenetre, formaterNom } from '../itm/indicateur.js'
 import { lireInfo, ecrireInfo } from 'ktec/ktec.js'
@@ -77,9 +78,9 @@ function normaliser(texte) {
 
 // Les valeurs existantes d'un champ, les plus fréquentes d'abord.
 async function valeursDe(cat, champ) {
-  const { description: d, erreurs } = description({ sujet: cat.sujet.table, mode: 'synthese', regroupements: [{ champ }], mesures: [{ fonction: 'nombre' }], etat: 'sans_corbeille' }, cat)
+  const { sql, erreurs } = construire({ sujet: cat.sujet.table, mode: 'synthese', regroupements: [{ champ }], mesures: [{ fonction: 'nombre' }], etat: 'sans_corbeille' }, cat)
   if (erreurs.length) throw new ErreurHttp(400, erreurs.join(' ; '))
-  const r = await executerRequete(`SELECT * FROM (${d.requete.replace(/\nORDER BY[\s\S]*$/, '')}) AS v ORDER BY 2 DESC`, 300)
+  const r = await executerRequete(`SELECT * FROM (${sql.replace(/\nORDER BY[\s\S]*$/, '')}) AS v ORDER BY 2 DESC`, 300)
   return r.lignes.filter((l) => l[0] !== null && l[0] !== '').map((l) => ({ valeur: l[0], nombre: Number(l[1]) }))
 }
 
@@ -89,26 +90,136 @@ async function catalogue(table) {
   return c
 }
 
-// La description de rapport (format du générateur) tirée de l'état du formulaire.
-function description(etat, cat, aspect = {}) {
-  const r = construire(etat, cat)
-  const d = {
-    titre: aspect.titre || `${cat.sujet.libelle}`,
+// ---------------------------------------------------------------- rapport en blocs
+//
+// L'éditeur envoie le rapport tel qu'il est à l'écran :
+// {
+//   aspect: { titre, sousTitre, theme, logo, image, description, positionDescription, orientation },
+//   parametres: [{ nom, libelle, type, defaut }],         (paramètres ajoutés à la main, pour le SQL libre : « :nom »)
+//   blocs: [{ type, titre, source: 'champs' | 'sql',
+//             etat,                                       (source « champs » : état du formulaire, voir requete.js)
+//             sql, choix,                                 (source « sql » : la requête et le rôle de ses colonnes)
+//             forme, empile, valeurs, hauteur, libelle, totaux, texte, regles: { colonne: [règles] }, sautDePage }]
+// }
+// choix (SQL libre) : tableau { colonnes: [{ champ, libelle, format, total }], groupes: [champ] } ;
+// graphique { categorie, serie, series: [champ] } ; croise { lignes, colonnes, valeur, fonction } ; chiffre { champ, format }.
+
+// Un bloc de l'éditeur → un bloc de la description (requête, colonnes…), les paramètres qu'il crée,
+// et les colonnes que rend sa requête (pour choisir leur rôle, les mettre en évidence…).
+async function blocDescription(bloc, parametresManuels = []) {
+  const avertissements = []
+  const base = { type: bloc.type, titre: bloc.titre || '' }
+  if (!BLOCS_DONNEES.includes(bloc.type)) return { bloc: { ...base, texte: bloc.texte || '' }, parametres: [], erreurs: [], avertissements, colonnes: [] }
+
+  let requete, liaisons, colonnes, groupes = [], parametres = []
+  if (bloc.source === 'sql') {
+    const sql = String(bloc.sql || '').trim()
+    if (!sql) return { bloc: base, parametres: [], erreurs: ['Écrivez la requête SQL du bloc.'], avertissements, colonnes: [] }
+    if (!lectureSeule(sql)) return { bloc: base, parametres: [], erreurs: ['Seules les requêtes de lecture (SELECT) sont acceptées.'], avertissements, colonnes: [] }
+    // « :debut », « :ligne »… : les paramètres du rapport, remplacés par des « ? » pour BIRT.
+    const r = parametresNommes(sql, parametresManuels)
+    if (r.inconnus.length) return { bloc: base, parametres: [], erreurs: [`Paramètre(s) inconnu(s) : ${r.inconnus.map((n) => `:${n}`).join(', ')} — ajoutez-les dans « Paramètres ».`], avertissements, colonnes: [] }
+    requete = r.sql
+    liaisons = r.liaisons
+    const choix = bloc.choix || {}
+    colonnes = (choix.colonnes || []).filter((c) => c.champ)
+    groupes = (choix.groupes || []).filter(Boolean).map((champ) => ({ champ, libelle: colonnes.find((c) => c.champ === champ)?.libelle || champ, sousTotaux: true }))
+  } else {
+    if (!bloc.etat?.sujet) return { bloc: base, parametres: [], erreurs: ['Choisissez de quoi parle le bloc.'], avertissements, colonnes: [] }
+    const cat = await catalogue(bloc.etat.sujet)
+    const propre = { ...bloc.etat, regroupements: (bloc.etat.regroupements || []).filter((g) => g?.champ), mesures: (bloc.etat.mesures || []).filter(Boolean) }
+    const etat = bloc.type === 'tableau' ? propre : { ...propre, mode: 'synthese' }
+    const r = construire(etat, cat, { sansRegroupement: bloc.type === 'chiffre' })
+    if (r.erreurs.length) return { bloc: base, parametres: [], erreurs: r.erreurs, avertissements: r.avertissements, colonnes: r.colonnes }
+    avertissements.push(...r.avertissements)
+    requete = r.sql
+    liaisons = r.liaisons
+    colonnes = r.colonnes
+    groupes = r.groupes
+    parametres = r.parametres
+  }
+
+  const d = { ...base, requete, liaisons }
+  const nbDims = bloc.source === 'sql' ? 0 : (bloc.etat.regroupements || []).filter((g) => g?.champ).length
+  if (bloc.source !== 'sql') {
+    if (bloc.type === 'graphique' && !nbDims) return { bloc: d, parametres, erreurs: ['Choisissez ce qui va sur l’axe (les catégories).'], avertissements, colonnes }
+    if (bloc.type === 'croise' && nbDims < 2) return { bloc: d, parametres, erreurs: ['Choisissez ce qui va en lignes et ce qui va en colonnes.'], avertissements, colonnes }
+  }
+  const col = (i) => colonnes[i]?.champ
+  if (bloc.type === 'tableau') {
+    d.colonnes = colonnes.map((c) => ({ ...c, regles: bloc.regles?.[c.champ] || undefined }))
+    d.groupes = groupes.map((g, i) => ({ ...g, sautDePage: i === 0 && Boolean(bloc.sautDePage) }))
+  } else if (bloc.type === 'graphique') {
+    const c = bloc.source === 'sql' ? bloc.choix || {} : { categorie: col(0), serie: nbDims > 1 ? col(1) : null, series: colonnes.slice(nbDims).map((x) => x.champ) }
+    Object.assign(d, {
+      forme: bloc.forme || 'barres', empile: Boolean(bloc.empile), valeurs: bloc.valeurs !== false, hauteur: Number(bloc.hauteur) || 85,
+      categorie: c.categorie, serie: c.serie || null,
+      series: (c.series || []).filter(Boolean).map((champ) => ({ champ, libelle: colonnes.find((x) => x.champ === champ)?.libelle || champ })),
+    })
+  } else if (bloc.type === 'croise') {
+    const c = bloc.source === 'sql' ? bloc.choix || {} : { lignes: col(0), colonnes: col(1), valeur: col(2), fonction: 'somme' }
+    const valeur = colonnes.find((x) => x.champ === c.valeur)
+    Object.assign(d, {
+      lignes: c.lignes, colonnes: c.colonnes, valeur: c.valeur, fonction: c.fonction || 'somme', totaux: bloc.totaux !== false,
+      libelleLignes: colonnes.find((x) => x.champ === c.lignes)?.libelle || c.lignes, format: valeur?.format === 'entier' ? 'entier' : bloc.source === 'sql' ? c.format || 'decimal' : 'decimal',
+    })
+    if (bloc.source !== 'sql' && (bloc.etat.mesures?.[0]?.fonction || 'nombre') === 'nombre') d.format = 'entier'
+  } else if (bloc.type === 'chiffre') {
+    const c = bloc.source === 'sql' ? bloc.choix || {} : { champ: col(0), format: colonnes[0]?.format }
+    Object.assign(d, { champ: c.champ, format: c.format || 'entier', libelle: bloc.libelle || colonnes.find((x) => x.champ === c.champ)?.libelle || '' })
+  }
+  return { bloc: d, parametres, erreurs: [], avertissements, colonnes }
+}
+
+// Remplace « :nom » (hors chaînes) par « ? » et note le paramètre de chaque « ? ».
+function parametresNommes(sql, parametres) {
+  const liaisons = []
+  const inconnus = new Set()
+  const morceaux = sql.split(/('(?:[^'\\]|\\.|'')*')/)
+  const resultat = morceaux.map((m, i) => (i % 2 ? m : m.replace(/(?<![:\w]):([A-Za-z_]\w*)/g, (tout, nom) => {
+    if (!parametres.some((p) => p.nom === nom)) inconnus.add(nom)
+    liaisons.push(nom)
+    return '?'
+  }))).join('')
+  return { sql: resultat, liaisons, inconnus: [...inconnus] }
+}
+
+// Le rapport de l'éditeur → la description du générateur.
+async function descriptionRapport(rapport) {
+  const aspect = rapport.aspect || {}
+  const manuels = (rapport.parametres || []).filter((p) => p.nom)
+  const erreurs = []
+  const avertissements = []
+  const parametres = [...manuels]
+  const blocs = []
+  for (const [i, b] of (rapport.blocs || []).entries()) {
+    const r = await blocDescription(b, manuels)
+    erreurs.push(...r.erreurs.map((e) => `Bloc ${i + 1}${b.titre ? ` (${b.titre})` : ''} : ${e}`))
+    avertissements.push(...r.avertissements)
+    for (const p of r.parametres) if (!parametres.some((q) => q.nom === p.nom)) parametres.push(p)
+    blocs.push(r.bloc)
+  }
+  if (!blocs.length) erreurs.push('Ajoutez au moins un bloc (tableau, graphique…).')
+  let titre = aspect.titre
+  if (!titre) {
+    const premier = (rapport.blocs || []).find((b) => b.etat?.sujet)
+    titre = premier ? (await catalogue(premier.etat.sujet).catch(() => null))?.sujet.libelle : ''
+  }
+  const large = blocs.some((b) => b.type === 'croise' || (b.type === 'tableau' && (b.colonnes || []).length > 6))
+  const description = {
+    titre: titre || 'Rapport',
     sousTitre: aspect.sousTitre || '',
-    orientation: aspect.orientation || (r.colonnes.length > 6 ? 'paysage' : 'portrait'),
-    requete: r.sql,
-    parametres: r.parametres,
-    liaisons: r.liaisons,
-    colonnes: r.colonnes,
-    groupes: r.groupes,
+    orientation: aspect.orientation || (large ? 'paysage' : 'portrait'),
     theme: aspect.theme || 'charte',
     logo: aspect.logo !== false,
     image: aspect.image || null,
     description: aspect.description || '',
     positionDescription: aspect.positionDescription || 'entete',
-    constructeur: etat, // pour rouvrir le formulaire plus tard
+    parametres,
+    blocs,
+    constructeur: { version: 2, ...rapport }, // pour rouvrir l'éditeur plus tard
   }
-  return { description: d, erreurs: r.erreurs, avertissements: r.avertissements }
+  return { description, erreurs, avertissements }
 }
 
 export function routes(r) {
@@ -119,23 +230,46 @@ export function routes(r) {
     return { sujet: c.sujet, champs: c.champs }
   })
 
-  // Aperçu : la requête construite, ses 50 premières lignes et le nombre total de lignes.
-  r.post('/api/constructeur/apercu', async (ctx) => {
-    const { etat, aspect } = await ctx.json()
-    const cat = await catalogue(etat.sujet)
-    const { description: d, erreurs, avertissements } = description(etat, cat, aspect)
-    if (erreurs.length) return { erreurs, avertissements, sql: d.requete }
-    if (!etatConnexion().ouverte) return { erreurs: [], avertissements: [...avertissements, 'Connexion MySQL fermée : pas d’aperçu.'], sql: d.requete }
-    const sql = sqlAvecValeurs(d)
+  // Aperçu d'un bloc : sa requête, ses 50 premières lignes, le nombre total de lignes et ses colonnes.
+  r.post('/api/constructeur/bloc', async (ctx) => {
+    const { bloc, parametres = [] } = await ctx.json()
+    const r = await blocDescription(bloc, parametres.filter((p) => p.nom))
+    const sortie = { erreurs: r.erreurs, avertissements: r.avertissements, sql: r.bloc.requete || '', liaisons: r.bloc.liaisons || [], colonnes: r.colonnes, parametres: r.parametres }
+    if (r.erreurs.length || !BLOCS_DONNEES.includes(bloc.type)) return sortie
+    if (!etatConnexion().ouverte) return { ...sortie, avertissements: [...r.avertissements, 'Connexion MySQL fermée : pas d’aperçu.'] }
+    const tous = [...parametres.filter((p) => p.nom), ...r.parametres]
+    const sql = sqlAvecValeurs({ requete: r.bloc.requete, liaisons: r.bloc.liaisons, parametres: tous })
     try {
       const [lignes, compte] = await Promise.all([
         executerRequete(sql, 50),
         executerRequete(`SELECT COUNT(*) FROM (${sql}) AS birtec_compte`, 1),
       ])
-      return { erreurs: [], avertissements, sql: d.requete, colonnes: d.colonnes, resultat: lignes, total: Number(compte.lignes[0][0]) }
+      // SQL libre : les colonnes sont celles que rend la requête (format deviné d'après leur type).
+      const colonnes = bloc.source === 'sql'
+        ? lignes.colonnes.map((c) => ({ champ: c.nom, libelle: c.nom, format: formatDuType(c.type) }))
+        : r.colonnes
+      return { ...sortie, colonnes, resultat: lignes, total: Number(compte.lignes[0][0]) }
     } catch (erreur) {
-      return { erreurs: [erreur.message], avertissements, sql: d.requete }
+      return { ...sortie, erreurs: [erreur.message] }
     }
+  })
+
+  // Aperçu du rapport entier, fabriqué par le moteur BIRT (graphiques compris).
+  r.post('/api/constructeur/rapport/apercu', async (ctx) => {
+    const { rapport, valeurs = {} } = await ctx.json()
+    const { description, erreurs, avertissements } = await descriptionRapport(rapport)
+    if (erreurs.length) return { erreurs, avertissements }
+    if (!etatConnexion().ouverte) return { erreurs: ['Connexion MySQL fermée : saisissez le mot de passe.'], avertissements }
+    const r = await apercuBrouillon(description, valeurs)
+    return { ...r, avertissements, parametres: description.parametres }
+  })
+
+  // POST /api/constructeur/rapport/creer { rapport, nom? } : fabrique le rapport (sans passer par l'IA).
+  r.post('/api/constructeur/rapport/creer', async (ctx) => {
+    const { rapport, nom } = await ctx.json()
+    const { description, erreurs } = await descriptionRapport(rapport)
+    if (erreurs.length) throw new ErreurHttp(400, erreurs.join(' ; '))
+    return genererRapport(description, nom)
   })
 
   // Les valeurs existantes d'un champ (pour choisir un filtre dans une liste).
@@ -144,26 +278,17 @@ export function routes(r) {
     return valeursDe(await catalogue(sujet), champ)
   })
 
-  // POST /api/constructeur/creer { etat, aspect } : fabrique le rapport (sans passer par l'IA).
-  r.post('/api/constructeur/creer', async (ctx) => {
-    const { etat, aspect, nom } = await ctx.json()
-    const cat = await catalogue(etat.sujet)
-    const { description: d, erreurs } = description(etat, cat, aspect)
-    if (erreurs.length) throw new ErreurHttp(400, erreurs.join(' ; '))
-    return genererRapport(d, nom)
-  })
-
   // POST /api/constructeur/indicateur { etat, nom, dateIndicateur?, arborescence?, enregistrer? }
   // Le même formulaire donne un indicateur ITM : le sujet est la table comptée, les filtres font le WHERE.
   // BiRTEC écrit la requête indicateur et la requête liste, les essaie, et les range dans le .ktec.
   r.post('/api/constructeur/indicateur', async (ctx) => {
-    const { etat, nom, dateIndicateur = null, arborescence = true, enregistrer = false } = await ctx.json()
+    const { etat, nom, dateIndicateur = null, arborescence = true, enregistrer = false, id: idExistant = null } = await ctx.json()
     const cat = await catalogue(etat.sujet)
     const reglages = await reglagesITM()
     const fenetre = trouverFenetre(reglages, cat.sujet.table)
     if (!fenetre) throw new ErreurHttp(400, `« ${cat.sujet.libelle} » ne peut pas être compté par un indicateur : la table doit avoir un identifiant, un code, une désignation et un état (ACTIF).`)
-    if ((etat.filtres || []).some((f) => f.operateur === 'periode' && f.valeurs?.[0] === 'demandee')) {
-      throw new ErreurHttp(400, 'Un indicateur n’a pas de paramètre : remplacez la période « choisie au lancement » par une période fixe (mois en cours, 12 derniers mois…).')
+    if (toutesConditions(etat.filtres).some((f) => (f.operateur === 'periode' && f.valeurs?.[0] === 'demandee') || f.operateur === 'demande')) {
+      throw new ErreurHttp(400, 'Un indicateur n’a pas de paramètre : remplacez les choix « au lancement » par une valeur ou une période fixe (mois en cours, 12 derniers mois…).')
     }
     // Le sujet garde son nom de table : les variables de la GMAO ({{ARBO_FILTRE_…}}) s'écrivent avec lui.
     const t = cat.sujet.table
@@ -181,7 +306,7 @@ export function routes(r) {
     const essai = etatConnexion().ouverte ? await tester(requeteIndicateur, requeteListe) : { erreurs: [], avertissements: ['Connexion MySQL fermée : requêtes non essayées.'] }
     let id = null
     if (enregistrer && !essai.erreurs.length) {
-      id = enregistrerIndicateur({ nom: nomFinal, fenetre: fenetre.libelle, demande: `Créé avec le formulaire « Nouveau rapport »`, definition: { constructeur: etat, dateIndicateur, arborescence }, requeteIndicateur, requeteListe, source: 'formulaire' })
+      id = enregistrerIndicateur({ id: idExistant || undefined, nom: nomFinal, fenetre: fenetre.libelle, demande: 'Créé avec le formulaire « Nouvel indicateur »', definition: { constructeur: etat, dateIndicateur, arborescence }, requeteIndicateur, requeteListe, source: 'formulaire' })
     }
     return { id, nom: nomFinal, fenetre: fenetre.libelle, variableArbo: fenetre.variableArbo || null, requeteIndicateur, requeteListe, ...essai }
   })
@@ -342,4 +467,19 @@ Une comparaison entre deux valeurs de la même fiche est une « comparaison » :
     const avertissements = nonTrouves.length ? [`Pas trouvé dans la base : ${nonTrouves.join(' ; ')}. Utilisez « Lui apprendre » à l’étape 3.`] : []
     return { etat, titre: p.titre || '', avertissements, aApprendre: [...new Set(aApprendre)] }
   })
+}
+
+// Format d'affichage deviné d'après le type JDBC d'une colonne (SQL libre).
+function formatDuType(type) {
+  const t = String(type || '').toUpperCase()
+  if (/INT|BIGINT|SMALLINT|TINYINT/.test(t)) return 'entier'
+  if (/DEC|NUMERIC|DOUBLE|FLOAT|REAL/.test(t)) return 'decimal'
+  if (t === 'DATE') return 'date'
+  if (/TIMESTAMP|DATETIME/.test(t)) return 'dateheure'
+  return 'texte'
+}
+
+// Toutes les conditions, groupes (ET / OU en cascade) compris.
+function toutesConditions(filtres = []) {
+  return filtres.flatMap((f) => (Array.isArray(f.groupe) ? toutesConditions(f.groupe) : [f]))
 }

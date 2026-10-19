@@ -1,24 +1,36 @@
-<h1>Nouveau rapport</h1>
-<p>La façon la plus simple de créer un rapport : un formulaire en quatre étapes, avec l'aperçu qui se met à jour à chaque choix. <b>BiRTEC écrit la requête lui-même</b> à partir du dictionnaire et des liens entre tables : pas d'erreur de colonne ni de jointure.</p>
-<h2>En une phrase</h2>
-<p>Tapez ce que vous voulez, par exemple « les dépannages des 12 derniers mois par ligne, avec le nombre et le temps d'arrêt », puis <b>Remplir avec l'IA</b> (quelques secondes). L'IA comprend la phrase ; BiRTEC choisit les champs et cherche dans la base la valeur exacte des filtres (« dépannage » → « Intervention de dépannage »). Vérifiez, ajustez, l'aperçu suit.</p>
-<p>Les sigles sont compris (« DI », « FI », « RI » : le nom de la table ou les initiales de son nom clair), de même que les périodes glissantes (« des 4 derniers mois », « des deux dernières semaines »), réglables ensuite à l'étape 3 avec « Les N derniers… ».</p>
-<h2>Apprendre le vocabulaire de l'atelier</h2>
-<p>Quand un mot de la phrase n'existe pas tel quel dans la base (« niveau 1 », « ligne chaude »…), l'étape 3 l'affiche dans un bandeau avec <b>Lui apprendre</b> : choisissez la colonne puis la ou les valeurs qui lui correspondent (par exemple un type de demande). BiRTEC le retient dans le fichier .ktec, pour ce sujet : la prochaine phrase qui contient l'expression aura ce filtre directement. <b>Ignorer</b> retire le bandeau sans rien retenir.</p>
-<h2>Les quatre étapes</h2>
-<ol>
-<li><b>De quoi parle le rapport</b> : une ligne du rapport = une intervention, une fiche, une demande, une pièce…</li>
-<li><b>Que montrer</b> :
+<h1>Nouveau : rapport ou indicateur</h1>
+<p>On choisit d'abord ce qu'on crée : <b>un rapport</b> (une ou plusieurs pages à imprimer ou exporter) ou <b>un indicateur ITM</b> (un chiffre à suivre dans la GMAO). Après l'enregistrement, BiRTEC propose de faire aussi l'autre avec le même sujet et les mêmes filtres.</p>
+
+<h2>Le rapport : des blocs les uns sous les autres</h2>
+<p>Un rapport est une page faite de blocs, ajoutés avec les boutons sous « Les blocs du rapport », rangés avec ↑ ↓, dupliqués ou retirés :</p>
 <ul>
-<li><b>Liste détaillée</b> : les colonnes, dans l'ordre (le ‹ fait avancer une colonne), un ou deux regroupements avec sous-totaux, un tri.</li>
-<li><b>Synthèse</b> : « regrouper par » (ligne, équipement, type, mois…) et les valeurs calculées (nombre, total, moyenne…). « Trier du plus grand au plus petit » donne un classement.</li>
-</ul></li>
-<li><b>Quelles lignes</b> : filtres (une valeur parmi celles de la base, contient, période, <b>comparé à une autre colonne</b> — ex. stock réel &lt; stock minimum, date de fin &gt; date limite). Une période « choisie au lancement du rapport » devient un paramètre Du / Au du rapport. Fiches : toutes sauf la corbeille, courantes seulement, ou toutes.</li>
-<li><b>Présentation</b> : titre, thème, logo, image en haut, description en en-tête ou en bas de page.</li>
-</ol>
-<p><b>Créer le rapport</b> le fabrique et l'ouvre dans l'onglet Rapports. « Modifier » y rouvre ce formulaire.</p>
-<h2>Indicateur ITM</h2>
-<p>Le même formulaire donne un indicateur : le sujet (étape 1) est ce qu'on compte, les filtres (étape 3) font la condition. <b>Créer un indicateur ITM</b> demande un nom (« [Catégorie] - Nom court »), la date à afficher dans la liste, et s'il faut limiter à l'arborescence de la personne connectée ; « Essayer » montre le chiffre du jour. BiRTEC écrit la requête indicateur et la requête liste, vérifie qu'elles concordent, et les range dans l'onglet Indicateurs ITM, prêtes à copier dans la GMAO. Une période « choisie au lancement » n'est pas possible pour un indicateur (pas de paramètre) : prenez une période fixe.</p>
+<li><b>Tableau</b> : une liste détaillée (colonnes, colonnes calculées, jusqu'à trois regroupements avec sous-totaux, une page par groupe si on veut) ou une synthèse (regrouper par, nombre, totaux, moyennes, classement).</li>
+<li><b>Graphique</b> : barres, barres couchées, courbe, aires ou camembert. L'axe (par mois, par ligne…), et en option « séparer par » (une couleur par type, par exemple), barres empilées.</li>
+<li><b>Tableau croisé</b> : une valeur au croisement d'une ligne et d'une colonne (lignes de production × mois…), avec les totaux de chaque ligne, de chaque colonne et le total général. Les nouveaux mois apparaissent tout seuls.</li>
+<li><b>Chiffre clé</b> : un seul chiffre, en grand, avec un texte dessous.</li>
+<li><b>Texte</b> et <b>Saut de page</b>.</li>
+</ul>
+<p>Un nouveau bloc reprend le sujet et les filtres du bloc choisi : on montre souvent le même périmètre de plusieurs façons.</p>
+
+<h2>Avec les champs, ou en SQL libre</h2>
+<p><b>Avec les champs</b> : BiRTEC écrit la requête lui-même à partir du dictionnaire et des liens entre tables, sans erreur de colonne ni de jointure. <b>SQL libre</b> : la requête du bloc est modifiable (en passant des champs au SQL libre, celle de BiRTEC est reprise). Seules les requêtes de lecture (SELECT) sont acceptées, et BiRTEC vérifie les tables et les colonnes. Les paramètres du rapport s'y écrivent <code>:nom</code> (ex. <code>:debut</code>). Après « Exécuter », on choisit le rôle des colonnes : colonnes affichées (titre, format, total), axe et valeurs du graphique, lignes / colonnes / valeur du tableau croisé.</p>
+
+<h2>Colonnes calculées et mises en évidence</h2>
+<p><b>Calcul</b> (liste détaillée) : A − B, A + B, A × B, A ÷ B, A en % de B, ou le nombre de jours / d'heures entre deux dates (ex. retard = date de réalisation − date limite). <b>Mises en évidence</b> : une cellule change de couleur selon sa valeur (ex. retard &gt; 30 jours en rouge).</p>
+
+<h2>Paramètres demandés au lancement</h2>
+<p>Dans les filtres : une période « choisie au lancement du rapport » donne les paramètres Du / Au (avec un calendrier) ; une valeur « choisie au lancement (dans la liste) » donne un paramètre à choisir parmi les valeurs de la base (vide = toutes). Ces paramètres sont communs à tous les blocs. « Paramètres » permet d'en ajouter à la main pour le SQL libre.</p>
+
+<h2>Aperçu</h2>
+<p><b>Ce bloc</b> : ses données (et un dessin rapide pour un graphique), mises à jour à chaque choix. <b>Le rapport entier</b> : le rapport fabriqué par le moteur BIRT, tel qu'il sera imprimé, avec les valeurs par défaut des paramètres.</p>
+
+<h2>En une phrase</h2>
+<p>Tapez ce que vous voulez, par exemple « les dépannages des 12 derniers mois par ligne, avec le nombre et le temps d'arrêt », puis <b>Remplir avec l'IA</b> : le bloc choisi se remplit (ou un bloc est ajouté). Avec « graphique », « courbe », « camembert » ou « évolution » dans la phrase, c'est un graphique. Les sigles (DI, FI, RI) et les périodes glissantes (« des 4 derniers mois ») sont compris.</p>
+<p>Quand un mot de la phrase n'existe pas tel quel dans la base (« niveau 1 », « ligne chaude »…), un bandeau propose <b>Lui apprendre</b> : choisissez la colonne et les valeurs ; BiRTEC le retient dans le fichier .ktec pour ce sujet.</p>
+
+<h2>L'indicateur ITM</h2>
+<p>Trois étapes : <b>ce qu'on compte</b>, <b>les conditions</b> (les mêmes filtres que les rapports, sans choix « au lancement » : un indicateur n'a pas de paramètre), <b>le nom</b> (« [Catégorie] - Nom court »), la date affichée dans la liste et la limite à l'arborescence de la personne connectée. Le chiffre du jour et la liste se mettent à jour en direct ; BiRTEC écrit la requête indicateur et la requête liste, vérifie qu'elles concordent, et les range dans « Indicateurs ITM », prêtes à copier dans la GMAO.</p>
+
 <h2>Les champs proposés</h2>
-<p>Ceux du sujet, et ceux des tables liées : les tables parentes (type de maintenance, équipement, ligne…) et les tables « filles » décrites (équipements d'une intervention, intervenants…). Une table fille peut multiplier les lignes d'une liste (une ligne par équipement) : c'est signalé par ⋯. Plus le dictionnaire est complet (noms clairs, liens nommés, liens manquants ajoutés dans la Constellation), plus la liste est claire.</p>
-<div class="conseil">Pour un calcul inhabituel (MTBF, sous-requête…) ou pour comprendre la base, utilisez « Question libre ».</div>
+<p>Ceux du sujet, et ceux des tables liées : les tables parentes (type de maintenance, équipement, ligne…) et les tables « filles » décrites (équipements d'une intervention, intervenants…). Une table fille peut multiplier les lignes d'une liste : c'est signalé par ⋯. Plus le dictionnaire est complet, plus la liste est claire.</p>
+<div class="conseil">Pour un calcul inhabituel (MTBF, sous-requête…) ou pour comprendre la base, utilisez « Question libre », ou un bloc en SQL libre.</div>
