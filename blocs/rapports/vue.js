@@ -37,7 +37,7 @@ export default {
         h('div', { class: 'actions' },
           h('a', { class: 'bouton principal', href: '#/constructeur' }, ic('plus', 16), 'Nouveau rapport'),
           h('button', { class: 'discret', onclick: () => { sessionStorage.setItem('birtec-question', 'Je veux créer un rapport BIRT. Pose-moi les questions utiles (contenu, période, regroupements, totaux), puis donne sa description.'); location.hash = '#/assistant' } }, ic('etincelle', 16), 'Avec l’assistant'),
-          h('button', { class: 'discret', onclick: () => creerDepuisDescription() }, ic('plus', 16), 'Coller une description'),
+          h('button', { class: 'discret', onclick: () => creerDepuisDescription(), title: 'Décrire le rapport en quelques phrases : le formulaire se remplit tout seul' }, ic('plus', 16), 'Décrire un rapport'),
         ),
       ),
       deuxPanneaux(
@@ -173,26 +173,31 @@ async function reglagesAspect(nom, description, apercu) {
 
 // Création (ou modification) à partir d'une description JSON, collée ou reprise d'un rapport existant.
 async function creerDepuisDescription(description = null, nom = null) {
-  const zoneTexte = h('textarea', { class: 'sql', rows: 18, spellcheck: false }, description ? JSON.stringify(description, null, 2) : '')
+  // Nouveau rapport : la description en mots (comme on la dirait à un collègue). Modifier un rapport existant :
+  // sa description technique (JSON), pour les retouches fines.
+  const zoneTexte = h('textarea', { class: description ? 'sql' : '', rows: description ? 18 : 8, spellcheck: !description, placeholder: 'Ex. : les demandes d’intervention de maintenance des 4 derniers mois, avec leur machine et leur état, triées par date' }, description ? JSON.stringify(description, null, 2) : '')
   const valeur = await fenetre({
-    titre: nom ? 'Modifier le rapport' : 'Créer un rapport depuis sa description',
+    titre: nom ? 'Modifier le rapport' : 'Décrire le rapport à créer',
     large: true,
     contenu: h('div', {},
-      h('p', { class: 'texte-2' }, 'Description du rapport (format donné dans l’aide « Rapports ») : titre, requête, paramètres, colonnes, groupes, totaux.'),
+      h('p', { class: 'texte-2' }, nom
+        ? 'Description technique du rapport (format donné dans l’aide « Rapports ») : titre, requête, paramètres, colonnes, groupes, totaux.'
+        : 'Décrivez le rapport en quelques phrases, avec vos mots : ce qu’on liste ou ce qu’on compte, les colonnes, les filtres, la période. Le formulaire « Nouveau rapport » se remplit tout seul, vous vérifiez, l’aperçu suit.'),
       zoneTexte),
     boutons: [
       { texte: 'Annuler', classe: 'discret', valeur: null },
-      { texte: nom ? 'Refaire le rapport' : 'Créer le rapport', classe: 'principal', action: () => zoneTexte.value },
+      { texte: nom ? 'Refaire le rapport' : 'Remplir le formulaire', classe: 'principal', action: () => zoneTexte.value },
     ],
   })
-  if (!valeur) return
-  let lue
+  if (!valeur?.trim()) return
+  // Une description technique (JSON) est toujours acceptée ; sinon c'est du texte, confié au formulaire.
+  let lue = null
   try {
     lue = JSON.parse(valeur)
-  } catch {
-    return notifier('Description illisible : ce doit être du JSON.', 'erreur')
-  }
-  await creerRapport(lue, nom)
+  } catch {}
+  if (lue && typeof lue === 'object') return creerRapport(lue, nom)
+  sessionStorage.setItem('birtec-phrase', valeur.trim())
+  location.hash = '#/constructeur'
 }
 
 // Utilisé aussi par l'assistant. Affiche une fenêtre d'attente pendant la fabrication et la vérification.

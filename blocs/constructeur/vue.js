@@ -281,6 +281,13 @@ export default {
     )
     dessinerFormulaire()
     rafraichirApercu()
+    // Description collée en texte libre depuis l'écran Rapports : on la donne à « Remplir avec l'IA ».
+    const transmise = sessionStorage.getItem('birtec-phrase')
+    if (transmise) {
+      sessionStorage.removeItem('birtec-phrase')
+      phrase.value = transmise
+      remplirAvecIA()
+    }
   },
 }
 
