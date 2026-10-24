@@ -23,6 +23,9 @@ let voirEcartees = false
 // Positions des bulles { x, y, fige } : chargées du .ktec, gardées d'une visite à l'autre.
 const positions = new Map()
 let dispositionChargee = false
+// L'allumage des étoiles ne se joue qu'à la première ouverture de l'écran.
+let allumageJoue = false
+const DUREE_ALLUMAGE = 3.4 // secondes
 
 // Réglages de la simulation (gardés sur ce poste).
 const reglages = { attraction: 1, ecartement: 1, figer: true, cles: false, raccourcis: true }
@@ -68,6 +71,7 @@ export default {
     const graphe = construireGraphe(schema)
     const panneau = h('div', { class: 'carte panneau-schema' })
     const toile = h('canvas', { class: 'toile-schema' })
+    const ciel = h('canvas', { class: 'ciel-schema' })
     const vue = new VueGraphe(toile, graphe, {
       surSelection: (n) => vider(panneau, panneauTable(n, vue)),
       surChemin: (chemin) => vider(panneau, panneauChemin(chemin, vue, panneau)),
@@ -97,7 +101,8 @@ export default {
         ),
       ),
       h('div', { class: 'schema-grille' },
-        h('div', { class: 'carte', style: { padding: '0', overflow: 'hidden', position: 'relative' } },
+        h('div', { class: 'carte carte-ciel', style: { padding: '0', overflow: 'hidden', position: 'relative' } },
+          ciel,
           toile,
           cadreRaccourcis(),
           reglagesSchema(vue, caseEcartees),
@@ -106,6 +111,7 @@ export default {
       ),
     )
     vue.demarrer()
+    animerCiel(ciel, vue)
     const choisi = graphe.parNom.get(String(id || '').toLowerCase())
     if (choisi) setTimeout(() => vue.centrerSur(choisi, true), 400)
   },
@@ -218,6 +224,8 @@ class VueGraphe {
     this.lienChoisi = null
     this.tenu = null
     this.couleurs = couleursDuTheme()
+    this.allumage = allumageJoue ? null : { debut: 0 }
+    allumageJoue = true
     this.ecouter()
   }
 
@@ -235,16 +243,45 @@ class VueGraphe {
     // Premier affichage : on laisse la disposition se faire un peu avant de cadrer.
     const premiere = !positions.size
     if (premiere) for (let i = 0; i < 120; i++) this.simuler()
+    if (this.allumage) this.preparerAllumage()
     this.toutVoir()
     const boucle = () => {
       if (!this.toile.isConnected) return // écran quitté
       if (this.chaleur > 0.004) {
         this.simuler()
         this.dessiner()
+      } else if (this.allumage) {
+        this.dessiner()
       }
       requestAnimationFrame(boucle)
     }
     requestAnimationFrame(boucle)
+  }
+
+  // L'allumage : les étoiles s'allument une à une (blanches, puis elles prennent leur couleur), et les liens
+  // se tracent ensuite en partant de la table la plus reliée, de proche en proche.
+  preparerAllumage() {
+    const { noeuds, liens } = this.graphe
+    for (const n of noeuds) n.allumage = Math.random() * 1.1
+    const ordre = []
+    const vus = new Set()
+    for (const racine of [...noeuds].sort((x, y) => y.degre - x.degre)) {
+      if (vus.has(racine)) continue
+      vus.add(racine)
+      const file = [racine]
+      while (file.length) {
+        const n = file.shift()
+        for (const l of liens) {
+          if (l.trace || (l.a !== n && l.b !== n)) continue
+          const autre = l.a === n ? l.b : l.a
+          l.trace = { de: n, vers: autre }
+          ordre.push(l)
+          if (!vus.has(autre)) { vus.add(autre); file.push(autre) }
+        }
+      }
+    }
+    ordre.forEach((l, i) => { l.trace.delai = 1.2 + (i / Math.max(1, ordre.length)) * 1.6 })
+    this.allumage.debut = performance.now()
   }
 
   // Un pas de simulation : répulsion entre bulles, attraction le long des liens, légère gravité vers le centre.
@@ -524,6 +561,9 @@ class VueGraphe {
     const couleurs = this.couleurs
     c.setTransform(this.ratio || 1, 0, 0, this.ratio || 1, 0, 0)
     c.clearRect(0, 0, r.width, r.height)
+    const t = this.allumage ? (performance.now() - this.allumage.debut) / 1000 : Infinity
+    if (t > DUREE_ALLUMAGE) this.allumage = null
+    const borne = (x) => Math.max(0, Math.min(1, x))
 
     const surChemin = new Set()
     const liensChemin = new Set()
@@ -539,8 +579,16 @@ class VueGraphe {
 
     // Liens
     for (const l of this.graphe.liens) {
-      const a = this.versEcran(l.a.x, l.a.y)
-      const b = this.versEcran(l.b.x, l.b.y)
+      let a = this.versEcran(l.a.x, l.a.y)
+      let b = this.versEcran(l.b.x, l.b.y)
+      if (this.allumage && l.trace) {
+        // Pendant l'allumage, le lien se trace depuis la table déjà atteinte.
+        const avance = borne((t - l.trace.delai) / 0.5)
+        if (!avance) continue
+        a = this.versEcran(l.trace.de.x, l.trace.de.y)
+        const fin = this.versEcran(l.trace.vers.x, l.trace.vers.y)
+        b = { x: a.x + (fin.x - a.x) * avance, y: a.y + (fin.y - a.y) * avance }
+      }
       const surLeChemin = liensChemin.has(l)
       const actif = surLeChemin || l === this.lienChoisi || (focus && (l.a === focus || l.b === focus))
       c.strokeStyle = surLeChemin ? couleurs.chemin : actif ? couleurs.accent : couleurs.lien
@@ -554,7 +602,7 @@ class VueGraphe {
     c.globalAlpha = 1
 
     // Clés de liaison, écrites le long de chaque ligne (dans son axe, jamais à l'envers).
-    if (reglages.cles) {
+    if (reglages.cles && !this.allumage) {
       c.font = `${Math.round(10 + Math.min(3, k))}px ui-monospace, monospace`
       c.textAlign = 'center'
       c.textBaseline = 'bottom'
@@ -586,10 +634,32 @@ class VueGraphe {
       const rayon = Math.max(2.5, n.rayon * Math.sqrt(k))
       if (p.x < -rayon - 80 || p.y < -rayon - 40 || p.x > r.width + rayon + 80 || p.y > r.height + rayon + 40) continue
       const pale = attenue(n)
-      c.globalAlpha = pale ? 0.15 : n.table.exclue ? 0.4 : 1
-      c.fillStyle = n === this.source ? couleurs.accent : surChemin.has(n) ? couleurs.chemin : n.niveau.ecran
+      let couleur = n === this.source ? couleurs.accent : surChemin.has(n) ? couleurs.chemin : n.niveau.ecran
+      let eclat = 1
+      let rayonVu = rayon
+      if (this.allumage) {
+        // Un point blanc qui s'allume, puis prend sa couleur.
+        eclat = borne((t - n.allumage) / 0.35)
+        if (!eclat) continue
+        couleur = melange('#ffffff', couleur, borne((t - n.allumage - 0.35) / 0.7))
+        rayonVu = rayon * (0.4 + 0.6 * eclat)
+      }
+      const opacite = (pale ? 0.15 : n.table.exclue ? 0.4 : 1) * eclat
+      // Halo : la lueur douce d'une étoile.
+      if (!pale && /^#[0-9a-f]{6}$/i.test(couleur)) {
+        const halo = c.createRadialGradient(p.x, p.y, rayonVu * 0.6, p.x, p.y, rayonVu * 2.6)
+        halo.addColorStop(0, couleur + '55')
+        halo.addColorStop(1, couleur + '00')
+        c.globalAlpha = opacite
+        c.fillStyle = halo
+        c.beginPath()
+        c.arc(p.x, p.y, rayonVu * 2.6, 0, Math.PI * 2)
+        c.fill()
+      }
+      c.globalAlpha = opacite
+      c.fillStyle = couleur
       c.beginPath()
-      c.arc(p.x, p.y, rayon, 0, Math.PI * 2)
+      c.arc(p.x, p.y, rayonVu, 0, Math.PI * 2)
       c.fill()
       if (n === focus || n === this.source || surChemin.has(n)) {
         c.strokeStyle = couleurs.texte
@@ -605,8 +675,8 @@ class VueGraphe {
       }
       // Noms : en zoomant, ou pour les tables importantes, survolées, choisies, sur le chemin.
       const visible = k > 1.1 || n === focus || n === this.source || surChemin.has(n) || (focus && focus.voisins.has(n)) || (k > 0.45 && grands.has(n))
-      if (visible && !pale) {
-        c.globalAlpha = n.table.exclue ? 0.5 : 1
+      if (visible && !pale && t > DUREE_ALLUMAGE - 1) {
+        c.globalAlpha = (n.table.exclue ? 0.5 : 1) * borne(t - (DUREE_ALLUMAGE - 1))
         c.fillStyle = couleurs.texte
         c.font = `${n === focus || surChemin.has(n) ? '600 ' : ''}${Math.round(11 + Math.min(4, k))}px system-ui, sans-serif`
         c.textAlign = 'center'
@@ -640,6 +710,52 @@ function niveauxDu(noeuds) {
     v.nom += ` (${v.min ? fourchette(v.min, haut) : fourchette(1, Math.min(2, haut))} liens)`
   })
   return niveaux
+}
+
+// Mélange de deux couleurs « #rrggbb » (f = 0 : la première, 1 : la seconde).
+function melange(de, vers, f) {
+  if (!/^#[0-9a-f]{6}$/i.test(vers)) return vers
+  const canal = (hex, i) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16)
+  return '#' + [0, 1, 2].map((i) => Math.round(canal(de, i) + (canal(vers, i) - canal(de, i)) * f).toString(16).padStart(2, '0')).join('')
+}
+
+// Le ciel derrière la constellation : des étoiles lointaines qui scintillent doucement et glissent un peu
+// quand on déplace la vue (parallaxe). Sur une toile à part, pour ne pas redessiner tout le graphe.
+function animerCiel(toile, graphe) {
+  const etoiles = Array.from({ length: 240 }, () => ({
+    x: Math.random(), y: Math.random(),
+    r: 0.3 + Math.random() ** 3 * 1.2,
+    phase: Math.random() * Math.PI * 2,
+    vitesse: 0.3 + Math.random() * 1.1,
+    profondeur: 0.015 + Math.random() * 0.05,
+  }))
+  const c = toile.getContext('2d')
+  let derniere = 0
+  const image = (instant) => {
+    if (!toile.isConnected) return
+    requestAnimationFrame(image)
+    if (instant - derniere < 50) return // 20 images par seconde suffisent pour scintiller
+    derniere = instant
+    const ratio = window.devicePixelRatio || 1
+    const { width: largeur, height: hauteur } = toile.getBoundingClientRect()
+    if (toile.width !== Math.round(largeur * ratio) || toile.height !== Math.round(hauteur * ratio)) {
+      toile.width = Math.round(largeur * ratio)
+      toile.height = Math.round(hauteur * ratio)
+    }
+    c.setTransform(ratio, 0, 0, ratio, 0, 0)
+    c.clearRect(0, 0, largeur, hauteur)
+    const { x: vx, y: vy, k } = graphe.vue
+    c.fillStyle = '#dce6ff'
+    for (const e of etoiles) {
+      const x = (((e.x * largeur - vx * k * e.profondeur) % largeur) + largeur) % largeur
+      const y = (((e.y * hauteur - vy * k * e.profondeur) % hauteur) + hauteur) % hauteur
+      c.globalAlpha = 0.15 + 0.6 * (0.5 + 0.5 * Math.sin((instant / 1000) * e.vitesse + e.phase)) * Math.min(1, e.r)
+      c.beginPath()
+      c.arc(x, y, e.r, 0, Math.PI * 2)
+      c.fill()
+    }
+  }
+  requestAnimationFrame(image)
 }
 
 function couleursDuTheme() {

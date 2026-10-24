@@ -1,6 +1,14 @@
 {
   "versions": [
     {
+      "version": "0.9.2",
+      "date": "2026-10-24",
+      "points": [
+        "Constellation : ciel étoilé, tables qui brillent comme des étoiles",
+        "À la première ouverture, les étoiles s'allument et les liens se tracent peu à peu"
+      ]
+    },
+    {
       "version": "0.9.1",
       "date": "2026-10-24",
       "points": [
