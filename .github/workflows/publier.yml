@@ -33,7 +33,7 @@ jobs:
           echo "$version" > VERSION
           echo "VERSION=$version" >> "$GITHUB_ENV"
           mkdir -p dist/birtec
-          cp -r app.json blocs interface docs VERSION package.json README.md dist/birtec/
+          cp -r app.json blocs interface docs VERSION package.json README.md nouveautes.json dist/birtec/
           (cd dist && zip -qr birtec.zip birtec)
 
       - name: Release

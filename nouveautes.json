@@ -1,0 +1,6 @@
+{
+  "versions": [
+    { "version": "0.9.0", "date": "2026-10-19", "points": ["Rapports en blocs : tableaux, graphiques, tableaux croisés, chiffres clés", "SQL libre, colonnes calculées, mises en évidence", "Indicateur ITM sur un écran à part, conversion rapport ↔ indicateur", "Conditions ET / OU en groupes"] },
+    { "version": "0.8.2", "date": "2026-10-19", "points": ["« Décrire un rapport » en quelques phrases", "Nouvelle icône"] }
+  ]
+}
