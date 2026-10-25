@@ -1,6 +1,14 @@
 {
   "versions": [
     {
+      "version": "0.9.6",
+      "date": "2026-10-25",
+      "points": [
+        "Constellation : l'allumage des étoiles se joue à chaque retour sur l'écran",
+        "Les motifs servent seulement à voir : plus de bouton « Garder », votre disposition n'est jamais remplacée"
+      ]
+    },
+    {
       "version": "0.9.5",
       "date": "2026-10-25",
       "points": [

@@ -1,6 +1,6 @@
 // Les motifs de la constellation : des façons de ranger les bulles, calculées à partir des tables et de leurs
-// liens. Un motif ne fait que proposer des positions : la disposition de l'utilisateur (gardée dans le .ktec)
-// n'est pas touchée tant qu'il ne choisit pas « Garder cette disposition ».
+// liens. Un motif ne fait que proposer des positions, pour voir : la disposition de l'utilisateur (gardée dans
+// le .ktec) n'est jamais touchée.
 //   disposer(id, graphe, { source }) → { positions: Map(noeud → { x, y }), etiquettes: [{ x, y, texte }],
 //                                        trace: [{ x, y }] (un dessin en filigrane), liensDiscrets,
 //                                        image: { x, y, largeur, hauteur } (l'image du motif, en fond), pluie }

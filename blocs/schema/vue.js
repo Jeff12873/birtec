@@ -9,9 +9,9 @@
 //   curseurs : force des liens (attraction) et écartement des bulles (répulsion)
 //   « Figer en lâchant » : une bulle déplacée reste où on la lâche ; double-clic sur une bulle figée : la libérer
 //   « Imprimer / PDF » : page A3 paysage mise en forme, à enregistrer en PDF
-//   menu des motifs : ranger autrement (anneaux, hiérarchie, galaxies…) ; « Ma disposition » ramène chaque bulle
-//   à sa place, « Garder cette disposition » enregistre le motif à la place (bulles figées)
-//   étincelle : rejouer l'allumage des étoiles
+//   menu des motifs : ranger autrement (anneaux, hiérarchie, galaxies…), pour voir seulement : la disposition
+//   enregistrée n'est jamais touchée ; « Ma disposition » ramène chaque bulle à sa place
+//   étincelle : rejouer l'allumage des étoiles (il se joue aussi à chaque ouverture de l'écran)
 // La disposition (positions, bulles figées) est gardée dans le fichier .ktec.
 //
 // Tout ce qui est saisi est gardé dans le fichier .ktec (dictionnaire) et sert à l'IA.
@@ -28,8 +28,6 @@ let voirEcartees = false
 // Positions des bulles { x, y, fige } : chargées du .ktec, gardées d'une visite à l'autre.
 const positions = new Map()
 let dispositionChargee = false
-// L'allumage des étoiles ne se joue qu'à la première ouverture de l'écran.
-let allumageJoue = false
 const DUREE_ALLUMAGE = 3.4 // secondes
 // Les images du motif « Concombre masqué » (chargées au premier usage).
 const IMAGE_CONCOMBRE = new URL('../../interface/concombre-masque.webp', import.meta.url).href
@@ -89,13 +87,12 @@ export default {
       surMotif: () => { dessinerMotif(); faireTomber(pluie, vue.pluie) },
     })
 
-    // Le menu des motifs, et « Garder » tant qu'un motif est affiché.
+    // Le menu des motifs.
     const zoneMotif = h('div', { class: 'zone-motif' })
     function dessinerMotif() {
       vider(zoneMotif,
         // Un motif caché n'apparaît dans le menu que pendant qu'il est affiché.
-        menuDeroulant({ choix: MOTIFS.filter((m) => !m.cache || m.id === vue.motif).map((m) => ({ valeur: m.id, libelle: m.nom })), valeur: vue.motif || 'libre', surChoix: (id) => vue.appliquerMotif(id) }),
-        vue.motif ? h('button', { class: 'discret', title: 'Enregistre ce rangement à la place de votre disposition (les bulles sont figées)', onclick: () => vue.garderMotif() }, ic('coche', 16), 'Garder') : null)
+        menuDeroulant({ choix: MOTIFS.filter((m) => !m.cache || m.id === vue.motif).map((m) => ({ valeur: m.id, libelle: m.nom })), valeur: vue.motif || 'libre', surChoix: (id) => vue.appliquerMotif(id) }))
     }
     dessinerMotif()
 
@@ -248,8 +245,7 @@ class VueGraphe {
     this.lienChoisi = null
     this.tenu = null
     this.couleurs = couleursDuTheme()
-    this.allumage = allumageJoue ? null : { debut: 0 }
-    allumageJoue = true
+    this.allumage = { debut: 0 } // l'allumage des étoiles, à chaque ouverture de l'écran
     this.motif = null // motif affiché (null : la disposition de l'utilisateur)
     this.utilisateur = null // positions de l'utilisateur, gardées pendant qu'un motif est affiché
     this.transition = null
@@ -378,26 +374,6 @@ class VueGraphe {
       this.utilisateur = null
     }
     this.transition = null
-  }
-
-  // Enregistre le motif affiché comme disposition de l'utilisateur : toutes les bulles figées à leur place.
-  garderMotif() {
-    if (!this.motif || this.transition) return
-    for (const n of this.graphe.noeuds) {
-      n.fige = true
-      positions.set(n.table.nom, { x: n.x, y: n.y, fige: true })
-    }
-    enregistrerDisposition()
-    this.motif = null
-    this.utilisateur = null
-    this.etiquettes = []
-    this.trace = null
-    this.liensDiscrets = false
-    this.image = null
-    this.pluie = false
-    this.rappels.surMotif?.()
-    this.dessiner()
-    notifier('Disposition enregistrée (double-clic sur une bulle pour la libérer)')
   }
 
   // Un pas de simulation : répulsion entre bulles, attraction le long des liens, légère gravité vers le centre.
