@@ -9,6 +9,9 @@
 //   curseurs : force des liens (attraction) et écartement des bulles (répulsion)
 //   « Figer en lâchant » : une bulle déplacée reste où on la lâche ; double-clic sur une bulle figée : la libérer
 //   « Imprimer / PDF » : page A3 paysage mise en forme, à enregistrer en PDF
+//   menu des motifs : ranger autrement (anneaux, hiérarchie, galaxies…) ; « Ma disposition » ramène chaque bulle
+//   à sa place, « Garder cette disposition » enregistre le motif à la place (bulles figées)
+//   étincelle : rejouer l'allumage des étoiles
 // La disposition (positions, bulles figées) est gardée dans le fichier .ktec.
 //
 // Tout ce qui est saisi est gardé dans le fichier .ktec (dictionnaire) et sert à l'IA.
@@ -18,6 +21,8 @@ import { api } from '/socle/api.js'
 import { etat } from '/socle/etat.js'
 import { extraireTables } from '../base/vue.js'
 import { pdfDepuisJpeg } from '/socle/pdf.js'
+import { MOTIFS, disposer } from '../../interface/motifs.js'
+import { menuDeroulant } from '../../interface/menu-deroulant.js'
 
 let voirEcartees = false
 // Positions des bulles { x, y, fige } : chargées du .ktec, gardées d'une visite à l'autre.
@@ -76,7 +81,17 @@ export default {
       surSelection: (n) => vider(panneau, panneauTable(n, vue)),
       surChemin: (chemin) => vider(panneau, panneauChemin(chemin, vue, panneau)),
       surLien: (l) => vider(panneau, panneauLien(l)),
+      surMotif: () => dessinerMotif(),
     })
+
+    // Le menu des motifs, et « Garder » tant qu'un motif est affiché.
+    const zoneMotif = h('div', { class: 'zone-motif' })
+    function dessinerMotif() {
+      vider(zoneMotif,
+        menuDeroulant({ choix: MOTIFS.map((m) => ({ valeur: m.id, libelle: m.nom })), valeur: vue.motif || 'libre', surChoix: (id) => vue.appliquerMotif(id) }),
+        vue.motif ? h('button', { class: 'discret', title: 'Enregistre ce rangement à la place de votre disposition (les bulles sont figées)', onclick: () => vue.garderMotif() }, ic('coche', 16), 'Garder') : null)
+    }
+    dessinerMotif()
 
     const recherche = h('input', { type: 'search', placeholder: 'Chercher une table…', list: 'birtec-tables' })
     const chercher = () => {
@@ -95,6 +110,8 @@ export default {
         h('div', { class: 'actions' },
           recherche,
           h('datalist', { id: 'birtec-tables' }, graphe.noeuds.map((n) => h('option', { value: n.table.nom }, n.table.libelle || ''))),
+          zoneMotif,
+          h('button', { class: 'discret icone-seule', title: 'Rejouer l’allumage des étoiles', onclick: () => vue.rejouer() }, ic('etincelle', 16)),
           h('button', { class: 'discret', title: 'Voir tout le graphe', onclick: () => vue.toutVoir() }, ic('rafraichir', 16), 'Tout voir'),
           h('button', { title: 'Enregistre toute la constellation, telle qu’elle est disposée, dans un fichier PDF (A3 paysage)', onclick: () => telechargerPdf(graphe, vue, schema).catch((e) => notifier(`PDF impossible : ${e.message}`, 'erreur')) }, ic('document', 16), 'Constellation en PDF'),
           h('button', { class: 'discret', title: 'La même page, envoyée à l’imprimante', onclick: () => imprimer(graphe, vue, schema) }, ic('document', 16), 'Imprimer'),
@@ -226,6 +243,12 @@ class VueGraphe {
     this.couleurs = couleursDuTheme()
     this.allumage = allumageJoue ? null : { debut: 0 }
     allumageJoue = true
+    this.motif = null // motif affiché (null : la disposition de l'utilisateur)
+    this.utilisateur = null // positions de l'utilisateur, gardées pendant qu'un motif est affiché
+    this.transition = null
+    this.etiquettes = []
+    this.trace = null // dessin en filigrane d'un motif (silhouette)
+    this.liensDiscrets = false
     this.ecouter()
   }
 
@@ -247,7 +270,10 @@ class VueGraphe {
     this.toutVoir()
     const boucle = () => {
       if (!this.toile.isConnected) return // écran quitté
-      if (this.chaleur > 0.004) {
+      if (this.transition) {
+        this.avancerTransition()
+        this.dessiner()
+      } else if (this.chaleur > 0.004 && !this.motif) {
         this.simuler()
         this.dessiner()
       } else if (this.allumage) {
@@ -262,6 +288,7 @@ class VueGraphe {
   // se tracent ensuite en partant de la table la plus reliée, de proche en proche.
   preparerAllumage() {
     const { noeuds, liens } = this.graphe
+    for (const l of liens) delete l.trace
     for (const n of noeuds) n.allumage = Math.random() * 1.1
     const ordre = []
     const vus = new Set()
@@ -282,6 +309,72 @@ class VueGraphe {
     }
     ordre.forEach((l, i) => { l.trace.delai = 1.2 + (i / Math.max(1, ordre.length)) * 1.6 })
     this.allumage.debut = performance.now()
+  }
+
+  rejouer() {
+    this.allumage = { debut: 0 }
+    this.preparerAllumage()
+  }
+
+  // Un motif : les bulles glissent vers leurs nouvelles places (et la vue se recadre). « libre » : retour aux
+  // positions de l'utilisateur, notées au premier motif choisi.
+  appliquerMotif(id) {
+    let cibles
+    if (id === 'libre') {
+      if (!this.utilisateur) return
+      cibles = this.utilisateur
+      this.etiquettes = []
+      this.trace = null
+      this.liensDiscrets = false
+    } else {
+      if (!this.utilisateur) this.utilisateur = new Map(this.graphe.noeuds.map((n) => [n, { x: n.x, y: n.y, fige: n.fige }]))
+      const r = disposer(id, this.graphe, { source: this.source })
+      cibles = r.positions
+      this.etiquettes = r.etiquettes
+      this.trace = r.trace || null
+      this.liensDiscrets = Boolean(r.liensDiscrets)
+    }
+    this.motif = id === 'libre' ? null : id
+    const depart = new Map(this.graphe.noeuds.map((n) => [n, { x: n.x, y: n.y }]))
+    this.transition = { debut: performance.now(), depart, cibles, vueDepart: { ...this.vue }, vueArrivee: this.cadrage([...cibles.values()]), retour: id === 'libre' }
+    this.rappels.surMotif?.()
+  }
+
+  avancerTransition() {
+    const t = Math.min(1, (performance.now() - this.transition.debut) / 900)
+    const doux = t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2
+    const { depart, cibles, vueDepart, vueArrivee } = this.transition
+    for (const n of this.graphe.noeuds) {
+      const a = depart.get(n)
+      const b = cibles.get(n) || a
+      n.x = a.x + (b.x - a.x) * doux
+      n.y = a.y + (b.y - a.y) * doux
+    }
+    for (const cle of ['x', 'y', 'k']) this.vue[cle] = vueDepart[cle] + (vueArrivee[cle] - vueDepart[cle]) * doux
+    if (t < 1) return
+    if (this.transition.retour) {
+      for (const [n, p] of this.utilisateur) n.fige = p.fige
+      this.utilisateur = null
+    }
+    this.transition = null
+  }
+
+  // Enregistre le motif affiché comme disposition de l'utilisateur : toutes les bulles figées à leur place.
+  garderMotif() {
+    if (!this.motif || this.transition) return
+    for (const n of this.graphe.noeuds) {
+      n.fige = true
+      positions.set(n.table.nom, { x: n.x, y: n.y, fige: true })
+    }
+    enregistrerDisposition()
+    this.motif = null
+    this.utilisateur = null
+    this.etiquettes = []
+    this.trace = null
+    this.liensDiscrets = false
+    this.rappels.surMotif?.()
+    this.dessiner()
+    notifier('Disposition enregistrée (double-clic sur une bulle pour la libérer)')
   }
 
   // Un pas de simulation : répulsion entre bulles, attraction le long des liens, légère gravité vers le centre.
@@ -421,7 +514,7 @@ class VueGraphe {
     t.addEventListener('dblclick', (e) => {
       const p = position(e)
       const n = this.noeudSous(p.x, p.y)
-      if (n?.fige) {
+      if (n?.fige && !this.motif) {
         this.liberer(n)
         notifier(`${n.table.nom} libérée`)
       }
@@ -437,7 +530,7 @@ class VueGraphe {
       const g = glisse
       glisse = null
       this.tenu = null
-      if (g?.bouge && g.type === 'noeud') {
+      if (g?.bouge && g.type === 'noeud' && !this.motif) {
         // Lâchée : elle reste là si « figer » est coché, sinon elle repart avec les autres.
         g.noeud.fige = reglages.figer
         positions.set(g.noeud.table.nom, { x: g.noeud.x, y: g.noeud.y, fige: g.noeud.fige })
@@ -517,6 +610,7 @@ class VueGraphe {
   }
 
   libererTout() {
+    if (this.motif) return
     for (const n of this.graphe.noeuds) n.fige = false
     this.relancer(0.6)
     enregistrerDisposition()
@@ -524,19 +618,26 @@ class VueGraphe {
 
   // Remet de l'énergie : le graphe se réorganise selon les réglages.
   relancer(chaleur = 0.5) {
+    if (this.motif) return
     this.chaleur = Math.max(this.chaleur, chaleur)
   }
 
   toutVoir() {
-    const noeuds = this.graphe.noeuds
-    if (!noeuds.length) return
-    const xs = noeuds.map((n) => n.x)
-    const ys = noeuds.map((n) => n.y)
+    if (!this.graphe.noeuds.length) return
+    this.vue = this.cadrage(this.graphe.noeuds)
+    this.dessiner()
+  }
+
+  // La vue qui montre tous ces points ({ x, y }).
+  cadrage(points) {
+    const xs = points.map((p) => p.x)
+    const ys = points.map((p) => p.y)
     const r = this.toile.getBoundingClientRect()
     const largeur = Math.max(...xs) - Math.min(...xs) + 80
-    const hauteur = Math.max(...ys) - Math.min(...ys) + 80
-    this.vue = { x: (Math.max(...xs) + Math.min(...xs)) / 2, y: (Math.max(...ys) + Math.min(...ys)) / 2, k: Math.min(2, Math.max(0.08, Math.min(r.width / largeur, r.height / hauteur))) }
-    this.dessiner()
+    const hauteur = Math.max(...ys) - Math.min(...ys) + 110
+    const barre = 70 // la barre des réglages, en bas de la toile, ne doit rien cacher
+    const k = Math.min(2, Math.max(0.08, Math.min(r.width / largeur, (r.height - barre) / hauteur)))
+    return { x: (Math.max(...xs) + Math.min(...xs)) / 2, y: (Math.max(...ys) + Math.min(...ys)) / 2 - 10 + barre / 2 / k, k }
   }
 
   centrerSur(n, choisir = false) {
@@ -577,6 +678,23 @@ class VueGraphe {
     const focus = this.survol
     const attenue = (n) => (focus ? n !== focus && !focus.voisins.has(n) : surChemin.size > 0 && !surChemin.has(n))
 
+    // Filigrane du motif (la silhouette du concombre masqué), qui apparaît une fois les bulles en place.
+    if (this.trace && !this.transition) {
+      c.beginPath()
+      this.trace.forEach((p, i) => { const e = this.versEcran(p.x, p.y); i ? c.lineTo(e.x, e.y) : c.moveTo(e.x, e.y) })
+      c.closePath()
+      c.strokeStyle = couleurs.accent
+      c.globalAlpha = 0.7
+      c.lineWidth = 2
+      c.setLineDash([6, 6])
+      c.shadowColor = couleurs.accent
+      c.shadowBlur = 8
+      c.stroke()
+      c.shadowBlur = 0
+      c.setLineDash([])
+      c.globalAlpha = 1
+    }
+
     // Liens
     for (const l of this.graphe.liens) {
       let a = this.versEcran(l.a.x, l.a.y)
@@ -592,7 +710,7 @@ class VueGraphe {
       const surLeChemin = liensChemin.has(l)
       const actif = surLeChemin || l === this.lienChoisi || (focus && (l.a === focus || l.b === focus))
       c.strokeStyle = surLeChemin ? couleurs.chemin : actif ? couleurs.accent : couleurs.lien
-      c.globalAlpha = actif ? 1 : focus || surChemin.size ? 0.1 : l.jointures.some((j) => j.libelle) ? 0.7 : 0.4
+      c.globalAlpha = (actif ? 1 : focus || surChemin.size ? 0.1 : l.jointures.some((j) => j.libelle) ? 0.7 : 0.4) * (this.liensDiscrets && !actif ? 0.3 : 1)
       c.lineWidth = surLeChemin ? 3 : actif ? 1.6 : 0.8
       c.beginPath()
       c.moveTo(a.x, a.y)
@@ -625,6 +743,19 @@ class VueGraphe {
         c.restore()
       }
       c.textBaseline = 'alphabetic'
+    }
+
+    // Étiquettes du motif (nom d'un anneau, d'un groupe…)
+    if (this.etiquettes.length && !this.transition) {
+      c.font = '600 11px system-ui, sans-serif'
+      c.textAlign = 'center'
+      c.fillStyle = couleurs.texte2
+      c.globalAlpha = 0.85
+      for (const e of this.etiquettes) {
+        const p = this.versEcran(e.x, e.y)
+        c.fillText(e.texte.toUpperCase(), p.x, p.y)
+      }
+      c.globalAlpha = 1
     }
 
     // Bulles et noms

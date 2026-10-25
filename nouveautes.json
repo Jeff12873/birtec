@@ -1,6 +1,15 @@
 {
   "versions": [
     {
+      "version": "0.9.3",
+      "date": "2026-10-25",
+      "points": [
+        "Constellation : fond de nébuleuse, étoiles toujours en parallaxe",
+        "Bouton pour rejouer l'allumage des étoiles",
+        "Motifs de rangement (anneaux, hiérarchie, galaxies, familles, cercle, spirale, concombre masqué…), retour à votre disposition à tout moment"
+      ]
+    },
+    {
       "version": "0.9.2",
       "date": "2026-10-24",
       "points": [

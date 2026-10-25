@@ -39,8 +39,9 @@ input.champ-dico.enregistre { border-color: var(--accent); }
 
 /* Constellation des tables (graphe en bulles) */
 canvas.toile-schema { position: relative; display: block; width: 100%; height: calc(100vh - 210px); min-height: 480px; cursor: grab; touch-action: none; }
-/* Constellation : un ciel de nuit, sobre */
-.carte-ciel { background: radial-gradient(ellipse at 28% 22%, rgba(90, 120, 210, 0.10), transparent 60%), radial-gradient(ellipse at 78% 78%, rgba(16, 185, 129, 0.06), transparent 55%), linear-gradient(180deg, #04070f, #0a1020); }
+/* Constellation : un ciel de nuit (la nébuleuse, fixe ; les étoiles en parallaxe par-dessus) */
+.carte-ciel { background: linear-gradient(180deg, rgba(4, 7, 15, 0.30), rgba(4, 7, 15, 0.55)), url('nebuleuse.webp') center / cover no-repeat, #04070f; }
+.zone-motif { display: flex; gap: 6px; align-items: center; }
 canvas.ciel-schema { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .reglages-schema { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: 12px; color: var(--texte-2); background: color-mix(in srgb, var(--carte) 88%, transparent); padding: 6px 10px; border-radius: 10px; border: 1px solid var(--bord); }
 .curseur-schema { display: flex; gap: 6px; align-items: center; }
@@ -169,3 +170,17 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 .cadre-groupe { width: 100%; border: 1px dashed var(--bord-fort); border-left: 3px solid var(--accent); border-radius: 8px; padding: 6px 10px 8px; margin: 2px 0; }
 .entete-groupe { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
 .groupe-filtres .actions { margin-top: 4px; }
+
+/* Menu déroulant aux couleurs du thème (tous navigateurs) */
+.menu-theme { position: relative; }
+.menu-theme-bouton { max-width: 340px; padding: 7px 34px 7px 12px; border-radius: 10px; font-size: 14px; text-align: left; background-color: var(--carte); background-image: linear-gradient(45deg, transparent 50%, var(--texte-2) 50%), linear-gradient(135deg, var(--texte-2) 50%, transparent 50%); background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%; background-size: 5px 5px; background-repeat: no-repeat; }
+.menu-theme-bouton span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-theme-liste { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; min-width: 100%; width: max-content; max-width: min(460px, 90vw); background: var(--carte); border: 1px solid var(--bord-fort); border-radius: 12px; padding: 4px; box-shadow: 0 12px 30px rgba(0, 0, 0, .45); }
+.menu-theme.haut .menu-theme-liste { top: auto; bottom: calc(100% + 6px); }
+.menu-theme-filtre { width: 100%; margin-bottom: 4px; padding: 6px 10px; font-size: 13px; }
+.menu-theme-options { max-height: min(360px, 50vh); overflow: auto; }
+.menu-theme-choix { display: flex; align-items: baseline; gap: 10px; padding: 6px 10px; border-radius: 8px; font-size: 14px; color: var(--texte); cursor: pointer; }
+.menu-theme-choix span { flex: 1; }
+.menu-theme-choix small { color: var(--texte-3); font-variant-numeric: tabular-nums; }
+.menu-theme-choix:hover, .menu-theme-choix.vise { background: var(--carte-2); }
+.menu-theme-choix.on { background: var(--accent-doux); color: var(--accent); font-weight: 600; }
