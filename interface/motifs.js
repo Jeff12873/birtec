@@ -16,7 +16,7 @@ export const MOTIFS = [
   { id: 'familles', nom: 'Familles de noms' },
   { id: 'cercle', nom: 'Cercle' },
   { id: 'spirale', nom: 'Spirale' },
-  { id: 'concombre', nom: 'Concombre masqué' },
+  { id: 'concombre', nom: 'Concombre masqué', cache: true }, // à découvrir : l'étoile verte du ciel
 ]
 
 const tri = (a, b) => b.degre - a.degre || a.table.nom.localeCompare(b.table.nom)

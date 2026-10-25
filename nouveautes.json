@@ -1,10 +1,17 @@
 {
   "versions": [
     {
+      "version": "0.9.5",
+      "date": "2026-10-25",
+      "points": [
+        "Regardez bien les étoiles…"
+      ]
+    },
+    {
       "version": "0.9.4",
       "date": "2026-10-25",
       "points": [
-        "Motif « Concombre masqué » : le héros en transparence derrière les tables, et une pluie de concombres"
+        "Une surprise se cache dans le ciel de la constellation…"
       ]
     },
     {
@@ -13,7 +20,7 @@
       "points": [
         "Constellation : fond de nébuleuse, étoiles toujours en parallaxe",
         "Bouton pour rejouer l'allumage des étoiles",
-        "Motifs de rangement (anneaux, hiérarchie, galaxies, familles, cercle, spirale, concombre masqué…), retour à votre disposition à tout moment"
+        "Motifs de rangement (anneaux, hiérarchie, galaxies, familles, cercle, spirale…), retour à votre disposition à tout moment"
       ]
     },
     {

@@ -93,7 +93,8 @@ export default {
     const zoneMotif = h('div', { class: 'zone-motif' })
     function dessinerMotif() {
       vider(zoneMotif,
-        menuDeroulant({ choix: MOTIFS.map((m) => ({ valeur: m.id, libelle: m.nom })), valeur: vue.motif || 'libre', surChoix: (id) => vue.appliquerMotif(id) }),
+        // Un motif caché n'apparaît dans le menu que pendant qu'il est affiché.
+        menuDeroulant({ choix: MOTIFS.filter((m) => !m.cache || m.id === vue.motif).map((m) => ({ valeur: m.id, libelle: m.nom })), valeur: vue.motif || 'libre', surChoix: (id) => vue.appliquerMotif(id) }),
         vue.motif ? h('button', { class: 'discret', title: 'Enregistre ce rangement à la place de votre disposition (les bulles sont figées)', onclick: () => vue.garderMotif() }, ic('coche', 16), 'Garder') : null)
     }
     dessinerMotif()
@@ -572,6 +573,8 @@ class VueGraphe {
           this.lienChoisi = null
           this.rappels.surSelection(g.noeud)
         }
+      } else if (this.etoileVerte && Math.hypot(p.x - this.etoileVerte.x, p.y - this.etoileVerte.y) < 9) {
+        this.appliquerMotif(this.motif === 'concombre' ? 'libre' : 'concombre')
       } else {
         const l = this.lienSous(p.x, p.y)
         if (l) {
@@ -905,6 +908,7 @@ function melange(de, vers, f) {
 
 // Le ciel derrière la constellation : des étoiles lointaines qui scintillent doucement et glissent un peu
 // quand on déplace la vue (parallaxe). Sur une toile à part, pour ne pas redessiner tout le graphe.
+// Parmi elles, une seule étoile verte, qui clignote autrement : un clic dessus fait venir le concombre masqué.
 function animerCiel(toile, graphe) {
   const etoiles = Array.from({ length: 240 }, () => ({
     x: Math.random(), y: Math.random(),
@@ -913,6 +917,7 @@ function animerCiel(toile, graphe) {
     vitesse: 0.3 + Math.random() * 1.1,
     profondeur: 0.015 + Math.random() * 0.05,
   }))
+  const verte = { x: 0.2 + Math.random() * 0.6, y: 0.15 + Math.random() * 0.5, profondeur: 0.04 }
   const c = toile.getContext('2d')
   let derniere = 0
   const image = (instant) => {
@@ -938,6 +943,18 @@ function animerCiel(toile, graphe) {
       c.arc(x, y, e.r, 0, Math.PI * 2)
       c.fill()
     }
+    // L'étoile verte : deux battements rapprochés, puis une pause.
+    const x = (((verte.x * largeur - vx * k * verte.profondeur) % largeur) + largeur) % largeur
+    const y = (((verte.y * hauteur - vy * k * verte.profondeur) % hauteur) + hauteur) % hauteur
+    const phase = (instant / 1000) % 3.2
+    c.globalAlpha = 0.35 + 0.65 * Math.max(Math.exp(-(((phase - 0.3) / 0.12) ** 2)), Math.exp(-(((phase - 0.75) / 0.12) ** 2)))
+    c.fillStyle = '#6ee7a8'
+    c.beginPath()
+    c.arc(x, y, 1.6, 0, Math.PI * 2)
+    c.fill()
+    c.fillStyle = '#dce6ff'
+    c.globalAlpha = 1
+    graphe.etoileVerte = { x, y }
   }
   requestAnimationFrame(image)
 }
