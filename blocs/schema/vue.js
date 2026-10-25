@@ -31,6 +31,10 @@ let dispositionChargee = false
 // L'allumage des étoiles ne se joue qu'à la première ouverture de l'écran.
 let allumageJoue = false
 const DUREE_ALLUMAGE = 3.4 // secondes
+// Les images du motif « Concombre masqué » (chargées au premier usage).
+const IMAGE_CONCOMBRE = new URL('../../interface/concombre-masque.webp', import.meta.url).href
+const PETIT_CONCOMBRE = new URL('../../interface/concombre-petit.webp', import.meta.url).href
+let imageConcombre = null
 
 // Réglages de la simulation (gardés sur ce poste).
 const reglages = { attraction: 1, ecartement: 1, figer: true, cles: false, raccourcis: true }
@@ -77,11 +81,12 @@ export default {
     const panneau = h('div', { class: 'carte panneau-schema' })
     const toile = h('canvas', { class: 'toile-schema' })
     const ciel = h('canvas', { class: 'ciel-schema' })
+    const pluie = h('div', { class: 'pluie-constellation', 'aria-hidden': 'true' })
     const vue = new VueGraphe(toile, graphe, {
       surSelection: (n) => vider(panneau, panneauTable(n, vue)),
       surChemin: (chemin) => vider(panneau, panneauChemin(chemin, vue, panneau)),
       surLien: (l) => vider(panneau, panneauLien(l)),
-      surMotif: () => dessinerMotif(),
+      surMotif: () => { dessinerMotif(); faireTomber(pluie, vue.pluie) },
     })
 
     // Le menu des motifs, et « Garder » tant qu'un motif est affiché.
@@ -120,6 +125,7 @@ export default {
       h('div', { class: 'schema-grille' },
         h('div', { class: 'carte carte-ciel', style: { padding: '0', overflow: 'hidden', position: 'relative' } },
           ciel,
+          pluie,
           toile,
           cadreRaccourcis(),
           reglagesSchema(vue, caseEcartees),
@@ -249,6 +255,9 @@ class VueGraphe {
     this.etiquettes = []
     this.trace = null // dessin en filigrane d'un motif (silhouette)
     this.liensDiscrets = false
+    this.image = null // image du motif, en fond, légèrement transparente
+    this.fondu = null // instant où l'image a commencé d'apparaître
+    this.pluie = false
     this.ecouter()
   }
 
@@ -276,7 +285,7 @@ class VueGraphe {
       } else if (this.chaleur > 0.004 && !this.motif) {
         this.simuler()
         this.dessiner()
-      } else if (this.allumage) {
+      } else if (this.allumage || this.fondu) {
         this.dessiner()
       }
       requestAnimationFrame(boucle)
@@ -326,6 +335,8 @@ class VueGraphe {
       this.etiquettes = []
       this.trace = null
       this.liensDiscrets = false
+      this.image = null
+      this.pluie = false
     } else {
       if (!this.utilisateur) this.utilisateur = new Map(this.graphe.noeuds.map((n) => [n, { x: n.x, y: n.y, fige: n.fige }]))
       const r = disposer(id, this.graphe, { source: this.source })
@@ -333,6 +344,14 @@ class VueGraphe {
       this.etiquettes = r.etiquettes
       this.trace = r.trace || null
       this.liensDiscrets = Boolean(r.liensDiscrets)
+      this.image = r.image || null
+      this.pluie = Boolean(r.pluie)
+      if (this.image && !imageConcombre) {
+        imageConcombre = new Image()
+        imageConcombre.onload = () => { if (this.image && !this.transition) this.fondu = performance.now() }
+        imageConcombre.onerror = () => { this.image = null; this.fondu = null }
+        imageConcombre.src = IMAGE_CONCOMBRE
+      }
     }
     this.motif = id === 'libre' ? null : id
     const depart = new Map(this.graphe.noeuds.map((n) => [n, { x: n.x, y: n.y }]))
@@ -352,6 +371,7 @@ class VueGraphe {
     }
     for (const cle of ['x', 'y', 'k']) this.vue[cle] = vueDepart[cle] + (vueArrivee[cle] - vueDepart[cle]) * doux
     if (t < 1) return
+    if (this.image) this.fondu = performance.now()
     if (this.transition.retour) {
       for (const [n, p] of this.utilisateur) n.fige = p.fige
       this.utilisateur = null
@@ -372,6 +392,8 @@ class VueGraphe {
     this.etiquettes = []
     this.trace = null
     this.liensDiscrets = false
+    this.image = null
+    this.pluie = false
     this.rappels.surMotif?.()
     this.dessiner()
     notifier('Disposition enregistrée (double-clic sur une bulle pour la libérer)')
@@ -678,6 +700,16 @@ class VueGraphe {
     const focus = this.survol
     const attenue = (n) => (focus ? n !== focus && !focus.voisins.has(n) : surChemin.size > 0 && !surChemin.has(n))
 
+    // Image du motif, légèrement transparente, qui apparaît en fondu une fois les bulles en place.
+    if (this.image && !this.transition && imageConcombre?.complete) {
+      const fondu = this.fondu ? Math.min(1, (performance.now() - this.fondu) / 700) : 1
+      if (fondu >= 1) this.fondu = null
+      const a = this.versEcran(this.image.x, this.image.y)
+      c.globalAlpha = 0.3 * fondu
+      c.drawImage(imageConcombre, a.x, a.y, this.image.largeur * k, this.image.hauteur * k)
+      c.globalAlpha = 1
+    }
+
     // Filigrane du motif (la silhouette du concombre masqué), qui apparaît une fois les bulles en place.
     if (this.trace && !this.transition) {
       c.beginPath()
@@ -841,6 +873,27 @@ function niveauxDu(noeuds) {
     v.nom += ` (${v.min ? fourchette(v.min, haut) : fourchette(1, Math.min(2, haut))} liens)`
   })
   return niveaux
+}
+
+// La pluie de concombres derrière les bulles, tant que le motif « Concombre masqué » est affiché.
+function faireTomber(zone, actif) {
+  clearInterval(zone.minuterie)
+  if (!actif) {
+    zone.replaceChildren()
+    return
+  }
+  zone.minuterie = setInterval(() => {
+    if (!zone.isConnected) return clearInterval(zone.minuterie)
+    if (document.hidden || zone.childElementCount > 40) return
+    const c = h('img', { src: PETIT_CONCOMBRE, alt: '' })
+    c.style.left = `${Math.random() * 100}%`
+    c.style.animationDuration = `${4 + Math.random() * 4}s`
+    c.style.setProperty('--chute', `${zone.clientHeight + 120}px`)
+    c.style.setProperty('--tour', `${Math.round(Math.random() * 720 - 360)}deg`)
+    c.style.setProperty('--taille', `${0.6 + Math.random() * 0.8}`)
+    c.addEventListener('animationend', () => c.remove())
+    zone.append(c)
+  }, 280)
 }
 
 // Mélange de deux couleurs « #rrggbb » (f = 0 : la première, 1 : la seconde).

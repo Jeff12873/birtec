@@ -2,7 +2,8 @@
 // liens. Un motif ne fait que proposer des positions : la disposition de l'utilisateur (gardée dans le .ktec)
 // n'est pas touchée tant qu'il ne choisit pas « Garder cette disposition ».
 //   disposer(id, graphe, { source }) → { positions: Map(noeud → { x, y }), etiquettes: [{ x, y, texte }],
-//                                        trace: [{ x, y }] (un dessin en filigrane), liensDiscrets }
+//                                        trace: [{ x, y }] (un dessin en filigrane), liensDiscrets,
+//                                        image: { x, y, largeur, hauteur } (l'image du motif, en fond), pluie }
 
 const ECART = 46 // distance visée entre deux bulles voisines
 
@@ -234,7 +235,13 @@ function concombre(noeuds, graphe, positions) {
   // Assez grand pour que les bulles du bord se touchent presque : la silhouette se lit même avec peu de tables.
   const echelle = Math.max(170, (Math.min(ordre.length, 260) * ECART * 0.8) / perimetre)
   const surLeBord = ordre.slice(0, Math.max(1, Math.floor((echelle * perimetre) / (ECART * 0.8))))
-  const extra = { trace: points.map(([x, y]) => ({ x: x * echelle, y: y * echelle })), liensDiscrets: true }
+  // L'image (320 × 480) tient exactement dans la silhouette : hauteur 2, largeur 4/3, centrée.
+  const extra = {
+    trace: points.map(([x, y]) => ({ x: x * echelle, y: y * echelle })),
+    liensDiscrets: true,
+    image: { x: (-2 / 3) * echelle, y: -echelle, largeur: (4 / 3) * echelle, hauteur: 2 * echelle },
+    pluie: true,
+  }
   const dedans = ordre.slice(surLeBord.length)
   reperes.forEach((n, i) => positions.set(n, { x: REPERES[i][0] * echelle, y: REPERES[i][1] * echelle }))
   // Le bord : des points également espacés le long de la silhouette.
