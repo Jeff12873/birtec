@@ -20,11 +20,18 @@ export const FICHIERS_BIRT = {
   ressources: { libelle: 'Bibliothèques et ressources', extensions: ['.rptlibrary', '.properties', '.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.dat'] },
 }
 
+// Réglages et SQL : réservés à l'administrateur (ctx.exigerModeAdmin, KTEC 0.6 et plus).
+const reserve = (r) => Object.fromEntries(['get', 'post', 'delete'].map((m) => [m, (chemin, action) => r[m](chemin, (ctx) => {
+  ctx.exigerModeAdmin?.()
+  return action(ctx)
+})]))
+
 export function routes(r) {
-  r.get('/api/connaissances', () => resumeKtec())
+  const admin = reserve(r)
+  admin.get('/api/connaissances', () => resumeKtec())
 
   // Ouvrir un autre fichier .ktec, ou en créer un nouveau (vide).
-  r.post('/api/connaissances/fichier', async (ctx) => {
+  admin.post('/api/connaissances/fichier', async (ctx) => {
     const { chemin } = await ctx.json()
     if (!chemin?.trim()) throw new ErreurHttp(400, 'Indiquez le chemin du fichier .ktec.')
     changerKtec(chemin.trim())
@@ -32,11 +39,11 @@ export function routes(r) {
     return resumeKtec()
   })
 
-  r.get('/api/connaissances/telecharger', (ctx) => {
+  admin.get('/api/connaissances/telecharger', (ctx) => {
     envoyerOctets(ctx.res, fs.readFileSync(cheminKtec()), { nom: path.basename(cheminKtec()), telecharger: true })
   })
 
-  r.post('/api/connaissances/importer', async (ctx) => {
+  admin.post('/api/connaissances/importer', async (ctx) => {
     const { dossier } = await ctx.json()
     if (!dossier?.trim()) throw new ErreurHttp(400, 'Indiquez le dossier à importer.')
     const bilan = importerDossier(dossier.trim())
@@ -49,7 +56,7 @@ export function routes(r) {
 
   r.get('/api/connaissances/charte', () => completerCharte(lireInfo('charte')))
 
-  r.post('/api/connaissances/charte', async (ctx) => {
+  admin.post('/api/connaissances/charte', async (ctx) => {
     const charte = await ctx.json()
     if (typeof charte !== 'object' || Array.isArray(charte)) throw new ErreurHttp(400, 'La charte doit être un objet JSON.')
     ecrireInfo('charte', completerCharte(charte))
@@ -57,19 +64,19 @@ export function routes(r) {
 
   // ---- notes
 
-  r.get('/api/connaissances/notes', () => listerNotes())
+  admin.get('/api/connaissances/notes', () => listerNotes())
 
-  r.post('/api/connaissances/notes', async (ctx) => {
+  admin.post('/api/connaissances/notes', async (ctx) => {
     const note = await ctx.json()
     if (!note.titre?.trim()) throw new ErreurHttp(400, 'La note doit avoir un titre.')
     return { id: enregistrerNote({ ...note, titre: note.titre.trim() }) }
   })
 
-  r.delete('/api/connaissances/notes/:id', (ctx) => supprimerNote(Number(ctx.params.id)))
+  admin.delete('/api/connaissances/notes/:id', (ctx) => supprimerNote(Number(ctx.params.id)))
 
   // ---- structure et requêtes
 
-  r.get('/api/connaissances/tables', () => {
+  admin.get('/api/connaissances/tables', () => {
     const liens = lireLiens()
     return lireTables().map((t) => ({
       nom: t.nom,
@@ -79,18 +86,18 @@ export function routes(r) {
     }))
   })
 
-  r.get('/api/connaissances/requetes', () => listerRequetes())
+  admin.get('/api/connaissances/requetes', () => listerRequetes())
 
-  r.delete('/api/connaissances/requetes/:id', (ctx) => supprimerRequete(Number(ctx.params.id)))
+  admin.delete('/api/connaissances/requetes/:id', (ctx) => supprimerRequete(Number(ctx.params.id)))
 
   // ---- fichiers BIRT
 
-  r.get('/api/connaissances/fichiers', () =>
+  admin.get('/api/connaissances/fichiers', () =>
     Object.fromEntries(Object.entries(FICHIERS_BIRT).map(([categorie, infos]) => [categorie, { ...infos, fichiers: listerFichiers(categorie) }])),
   )
 
   // Dépôt d'un fichier : le corps est le fichier, son nom dans l'en-tête X-Nom.
-  r.post('/api/connaissances/fichiers/:categorie', async (ctx) => {
+  admin.post('/api/connaissances/fichiers/:categorie', async (ctx) => {
     const infos = FICHIERS_BIRT[ctx.params.categorie]
     if (!infos) throw new ErreurHttp(404, 'Catégorie inconnue')
     const nom = path.basename(decodeURIComponent(ctx.req.headers['x-nom'] || ''))
@@ -100,16 +107,16 @@ export function routes(r) {
     enregistrerFichier(ctx.params.categorie, nom, await ctx.octets())
   })
 
-  r.get('/api/connaissances/fichiers/:categorie/:nom', (ctx) => {
+  admin.get('/api/connaissances/fichiers/:categorie/:nom', (ctx) => {
     const contenu = lireFichier(ctx.params.categorie, ctx.params.nom)
     if (!contenu) throw new ErreurHttp(404, 'Fichier introuvable')
     envoyerOctets(ctx.res, Buffer.from(contenu), { nom: ctx.params.nom, telecharger: true })
   })
 
-  r.delete('/api/connaissances/fichiers/:categorie/:nom', (ctx) => supprimerFichier(ctx.params.categorie, ctx.params.nom))
+  admin.delete('/api/connaissances/fichiers/:categorie/:nom', (ctx) => supprimerFichier(ctx.params.categorie, ctx.params.nom))
 
   // Copie un rapport modèle dans les rapports, pour le voir en aperçu ou s'en servir de base.
-  r.post('/api/connaissances/modeles/:nom/vers-rapports', (ctx) => {
+  admin.post('/api/connaissances/modeles/:nom/vers-rapports', (ctx) => {
     const contenu = lireFichier('modeles', ctx.params.nom)
     if (!contenu) throw new ErreurHttp(404, 'Modèle introuvable')
     const nom = path.basename(ctx.params.nom).replace(/\.(rptdesign|rpttemplate)$/i, '')

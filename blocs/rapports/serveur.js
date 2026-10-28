@@ -181,7 +181,7 @@ async function essayer(description, fichier, connexion) {
   // Une ressource absente (feuille de style du serveur BIRT…) n'empêche pas le rapport de fonctionner.
   const bloquantes = verification.erreurs.filter((e) => !/style sheet .* is not found|The style ".*" .* is not found|library .* not found/i.test(e))
   if (bloquantes.length) return { erreurs: bloquantes, avertissements: [] }
-  if (!etatConnexion().ouverte) return { erreurs: [], avertissements: ['Connexion MySQL fermée : le rapport n’a pas été essayé sur la base.'] }
+  if (!etatConnexion().ouverte) return { erreurs: [], avertissements: ['Connexion à la GMAO indisponible : le rapport n’a pas été essayé sur la base.'] }
 
   // On le fait tourner avec les valeurs par défaut des paramètres : la requête est ainsi vraiment essayée.
   const parametres = Object.fromEntries((description.parametres || []).map((p) => [p.nom, p.defaut ?? '']))

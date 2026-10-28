@@ -135,7 +135,7 @@ async function afficherRapport(zone, nom) {
     h('div', { class: 'carte', style: { padding: 0, overflow: 'hidden' } }, cadre),
   )
   if (etat.connexion.ouverte) apercu()
-  else vider(messages, h('p', { class: 'discret' }, 'Connexion MySQL fermée : « Aperçu » demandera le mot de passe.'))
+  else vider(messages, h('p', { class: 'discret' }, 'Connexion à la GMAO indisponible : pas d’aperçu pour l’instant.'))
 }
 
 // Aspect d'un rapport créé par BiRTEC : thème, image centrée en haut, logo. Appliqué sans passer par l'IA.

@@ -7,7 +7,7 @@ export default {
   chemin: 'configuration',
   titre: 'Configuration',
   icone: 'reglages',
-  menu: true,
+  menu: 'admin',
   groupe: 'Réglages',
   aide: 'configuration',
 

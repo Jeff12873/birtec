@@ -69,7 +69,7 @@ export default {
   chemin: 'constructeur',
   titre: 'Nouveau',
   icone: 'plus',
-  menu: true,
+  menu: 'admin',
   groupe: 'Créer',
   aide: 'constructeur',
   rafraichir: false,

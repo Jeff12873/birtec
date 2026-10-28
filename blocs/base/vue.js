@@ -11,7 +11,7 @@ export default {
   chemin: 'base',
   titre: 'Base de données',
   icone: 'base',
-  menu: true,
+  menu: 'admin',
   groupe: 'Ma base',
   aide: 'base',
 
@@ -20,7 +20,7 @@ export default {
     const schema = await api('/api/schema')
     // Connexion fermée : on montre la structure gardée dans le fichier .ktec.
     const ferme = !etat.connexion.ouverte
-      ? h('div', { class: 'bandeau' }, ic('cadenas'), h('span', { style: { flex: 1 } }, 'Connexion MySQL fermée : structure du fichier .ktec. Connectez-vous pour exécuter des requêtes.'), h('button', { onclick: () => demanderMotDePasse().then(() => window.ktec.recharger()) }, 'Se connecter'))
+      ? h('div', { class: 'bandeau' }, ic('cadenas'), h('span', { style: { flex: 1 } }, 'Connexion à la GMAO indisponible : structure du fichier .ktec, sans exécution de requêtes.'))
       : null
     const filtre = h('input', { type: 'search', placeholder: 'Filtrer les tables…' })
     const liste = h('div', { class: 'liste-tables' })

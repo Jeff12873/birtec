@@ -8,19 +8,26 @@ import { enregistrerDictionnaire, enregistrerLienDictionnaire, ajouterLien, lire
 import { obtenirSchema } from './schema.js'
 import { lirePreference, ecrirePreference } from 'ktec/preferences.js'
 
+// Réglages et SQL : réservés à l'administrateur (ctx.exigerModeAdmin, KTEC 0.6 et plus).
+const reserve = (r) => Object.fromEntries(['get', 'post', 'delete'].map((m) => [m, (chemin, action) => r[m](chemin, (ctx) => {
+  ctx.exigerModeAdmin?.()
+  return action(ctx)
+})]))
+
 export function routes(r) {
+  const admin = reserve(r)
   // GET /api/schema?rafraichir=1
   r.get('/api/schema', (ctx) => obtenirSchema({ rafraichir: Boolean(ctx.query.rafraichir) }))
 
   // POST /api/requete { sql, limite }  → { colonnes, lignes, tronque, dureeMs }
-  r.post('/api/requete', async (ctx) => {
+  admin.post('/api/requete', async (ctx) => {
     const { sql, limite = 200 } = await ctx.json()
     if (!sql?.trim()) throw new ErreurHttp(400, 'Requête vide.')
     return executerRequete(sql, Math.min(5000, Number(limite) || 200))
   })
 
   // Aperçu d'une table : ses 20 premières lignes.
-  r.get('/api/table/:nom', async (ctx) => {
+  admin.get('/api/table/:nom', async (ctx) => {
     const schema = await obtenirSchema()
     const table = schema.tables.find((t) => t.nom === ctx.params.nom)
     if (!table) throw new ErreurHttp(404, 'Table inconnue')
@@ -30,10 +37,10 @@ export function routes(r) {
   // ---- extraction : les tables choisies, en CSV dans un .zip (avec leur structure et un lisez-moi)
 
   // POST /api/extraction { tables: [noms], limite? } → fichier .zip
-  r.post('/api/extraction', async (ctx) => {
+  admin.post('/api/extraction', async (ctx) => {
     const { tables: demandees = [], limite = LIGNES_MAX_EXTRACTION } = await ctx.json()
     if (!demandees.length) throw new ErreurHttp(400, 'Choisissez au moins une table.')
-    if (!etatConnexion().ouverte) throw new ErreurHttp(409, 'Connexion MySQL fermée : saisissez le mot de passe pour extraire les données.')
+    if (!etatConnexion().ouverte) throw new ErreurHttp(409, 'Connexion à la GMAO indisponible : impossible d’extraire les données.')
     const schema = await obtenirSchema()
     const fichiers = []
     const bilan = []
@@ -68,7 +75,7 @@ export function routes(r) {
   // Disposition propre à ce poste (préférence locale ; l'ancienne, rangée dans le .ktec, est reprise).
   r.get('/api/schema/disposition', () => lirePreference('disposition_schema', () => lireInfo('disposition_schema', { positions: {} })))
 
-  r.post('/api/schema/disposition', async (ctx) => {
+  admin.post('/api/schema/disposition', async (ctx) => {
     const { positions } = await ctx.json()
     if (!positions || typeof positions !== 'object') throw new ErreurHttp(400, 'Positions attendues.')
     ecrirePreference('disposition_schema', { positions })
@@ -77,14 +84,14 @@ export function routes(r) {
   // ---- dictionnaire (gardé dans le fichier .ktec)
 
   // POST /api/dictionnaire { table, colonne?, libelle?, description?, exclue? }
-  r.post('/api/dictionnaire', async (ctx) => {
+  admin.post('/api/dictionnaire', async (ctx) => {
     const entree = await ctx.json()
     if (!entree.table) throw new ErreurHttp(400, 'Table manquante.')
     enregistrerDictionnaire(entree)
   })
 
   // POST /api/dictionnaire/lien { deTable, deColonne, versTable, versColonne?, libelle, description, nouveau? }
-  r.post('/api/dictionnaire/lien', async (ctx) => {
+  admin.post('/api/dictionnaire/lien', async (ctx) => {
     const lien = await ctx.json()
     if (!lien.deTable || !lien.deColonne || !lien.versTable) throw new ErreurHttp(400, 'Lien incomplet.')
     if (lien.nouveau) ajouterLien({ ...lien, versColonne: lien.versColonne || lien.deColonne })
@@ -92,8 +99,8 @@ export function routes(r) {
   })
 
   // Écarte les tables vides (nombre de lignes lu dans information_schema) : il faut la connexion.
-  r.post('/api/dictionnaire/ecarter-vides', async () => {
-    if (!etatConnexion().ouverte) throw new ErreurHttp(409, 'Connexion MySQL fermée : impossible de savoir quelles tables sont vides.')
+  admin.post('/api/dictionnaire/ecarter-vides', async () => {
+    if (!etatConnexion().ouverte) throw new ErreurHttp(409, 'Connexion à la GMAO indisponible : impossible de savoir quelles tables sont vides.')
     const schema = await obtenirSchema()
     const r = await executerRequete('SELECT TABLE_NAME, TABLE_ROWS FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()', 5000)
     let ecartees = 0

@@ -118,7 +118,7 @@ async function essayer(definition, reglages) {
   // Tables et colonnes inexistantes : signalées avant tout essai, avec les tables qui ont la colonne.
   const inconnues = verifierSQL(requeteListe, await obtenirSchema())
   if (inconnues.length) return { requeteIndicateur, requeteListe, erreurs: inconnues, avertissements }
-  const essai = etatConnexion().ouverte ? await tester(requeteIndicateur, requeteListe) : { erreurs: [], avertissements: ['Connexion MySQL fermée : requêtes non essayées.'] }
+  const essai = etatConnexion().ouverte ? await tester(requeteIndicateur, requeteListe) : { erreurs: [], avertissements: ['Connexion à la GMAO indisponible : requêtes non essayées.'] }
   return { requeteIndicateur, requeteListe, ...essai, avertissements: [...avertissements, ...essai.avertissements] }
 }
 

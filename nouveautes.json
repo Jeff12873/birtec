@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.9.7",
+      "date": "2026-10-28",
+      "points": [
+        "Configuration, base, connaissances et constructeur réservés à l'administrateur ; plus de mot de passe MySQL à saisir (connexion réglée dans KTEC)"
+      ]
+    },
+    {
       "version": "0.9.6",
       "date": "2026-10-25",
       "points": [

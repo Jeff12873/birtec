@@ -291,7 +291,7 @@ function ajouterActionsSQL(bloc) {
       h('button', {
         class: 'petit',
         onclick: async () => {
-          if (!etat.connexion.ouverte) return notifier('Connexion MySQL fermée : saisissez le mot de passe (en haut à droite).', 'erreur')
+          if (!etat.connexion.ouverte) return notifier('Connexion à la GMAO indisponible (voir en haut à droite).', 'erreur')
           vider(resultat, h('p', { class: 'discret curseur' }, 'Exécution'))
           try {
             vider(resultat, tableauResultats(await api('/api/requete', { methode: 'POST', corps: { sql, limite: 50 } })))
@@ -344,7 +344,7 @@ function ajouterActionsIndicateur(bloc) {
   bloc.style.display = 'none'
   const resultat = h('div')
   const creer = async (forcer = false) => {
-    if (!etat.connexion.ouverte) notifier('Connexion MySQL fermée : l’indicateur ne pourra pas être essayé sur la base.', 'erreur')
+    if (!etat.connexion.ouverte) notifier('Connexion à la GMAO indisponible : l’indicateur ne pourra pas être essayé sur la base.', 'erreur')
     vider(resultat, h('p', { class: 'discret curseur' }, 'BiRTEC assemble les deux requêtes et les essaie sur la base'))
     try {
       const r = await api('/api/itm/creer', { methode: 'POST', corps: { definition, demande: definition.explication || '', forcer } })

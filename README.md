@@ -7,7 +7,7 @@ Assistant IA pour écrire les requêtes SQL et concevoir les rapports **Eclipse 
 à partir de la vraie structure de la base **MySQL**. L'IA (un modèle libre, Qwen3.5) tourne sur le poste :
 rien ne sort de l'entreprise.
 
-- **Connexion MySQL en lecture seule** : le mot de passe est demandé à chaque ouverture, jamais enregistré ;
+- **Connexion MySQL en lecture seule** : réglée par l'administrateur dans KTEC, chiffrée dans le fichier de connaissances ;
   seules les requêtes de lecture sont acceptées.
 - **Accueil** : indicateurs du jour et raccourcis de rapports, à organiser par glisser-déposer.
 - **Nouveau rapport** (la façon simple) : un formulaire en 4 étapes (sujet, colonnes ou synthèse, filtres,

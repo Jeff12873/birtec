@@ -10,7 +10,7 @@ export default {
   chemin: 'connaissances',
   titre: 'Connaissances',
   icone: 'livre',
-  menu: true,
+  menu: 'admin',
   groupe: 'Ma base',
   aide: 'connaissances',
 

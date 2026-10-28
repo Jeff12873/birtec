@@ -222,21 +222,28 @@ async function descriptionRapport(rapport) {
   return { description, erreurs, avertissements }
 }
 
-export function routes(r) {
-  r.get('/api/constructeur/sujets', async () => sujets(await obtenirSchema()))
+// Réglages et SQL : réservés à l'administrateur (ctx.exigerModeAdmin, KTEC 0.6 et plus).
+const reserve = (r) => Object.fromEntries(['get', 'post', 'delete'].map((m) => [m, (chemin, action) => r[m](chemin, (ctx) => {
+  ctx.exigerModeAdmin?.()
+  return action(ctx)
+})]))
 
-  r.get('/api/constructeur/champs/:table', async (ctx) => {
+export function routes(r) {
+  const admin = reserve(r)
+  admin.get('/api/constructeur/sujets', async () => sujets(await obtenirSchema()))
+
+  admin.get('/api/constructeur/champs/:table', async (ctx) => {
     const c = await catalogue(ctx.params.table)
     return { sujet: c.sujet, champs: c.champs }
   })
 
   // Aperçu d'un bloc : sa requête, ses 50 premières lignes, le nombre total de lignes et ses colonnes.
-  r.post('/api/constructeur/bloc', async (ctx) => {
+  admin.post('/api/constructeur/bloc', async (ctx) => {
     const { bloc, parametres = [] } = await ctx.json()
     const r = await blocDescription(bloc, parametres.filter((p) => p.nom))
     const sortie = { erreurs: r.erreurs, avertissements: r.avertissements, sql: r.bloc.requete || '', liaisons: r.bloc.liaisons || [], colonnes: r.colonnes, parametres: r.parametres }
     if (r.erreurs.length || !BLOCS_DONNEES.includes(bloc.type)) return sortie
-    if (!etatConnexion().ouverte) return { ...sortie, avertissements: [...r.avertissements, 'Connexion MySQL fermée : pas d’aperçu.'] }
+    if (!etatConnexion().ouverte) return { ...sortie, avertissements: [...r.avertissements, 'Connexion à la GMAO indisponible : pas d’aperçu.'] }
     const tous = [...parametres.filter((p) => p.nom), ...r.parametres]
     const sql = sqlAvecValeurs({ requete: r.bloc.requete, liaisons: r.bloc.liaisons, parametres: tous })
     try {
@@ -255,17 +262,17 @@ export function routes(r) {
   })
 
   // Aperçu du rapport entier, fabriqué par le moteur BIRT (graphiques compris).
-  r.post('/api/constructeur/rapport/apercu', async (ctx) => {
+  admin.post('/api/constructeur/rapport/apercu', async (ctx) => {
     const { rapport, valeurs = {} } = await ctx.json()
     const { description, erreurs, avertissements } = await descriptionRapport(rapport)
     if (erreurs.length) return { erreurs, avertissements }
-    if (!etatConnexion().ouverte) return { erreurs: ['Connexion MySQL fermée : saisissez le mot de passe.'], avertissements }
+    if (!etatConnexion().ouverte) return { erreurs: ['Connexion à la GMAO indisponible (réglée par l’administrateur).'], avertissements }
     const r = await apercuBrouillon(description, valeurs)
     return { ...r, avertissements, parametres: description.parametres }
   })
 
   // POST /api/constructeur/rapport/creer { rapport, nom? } : fabrique le rapport (sans passer par l'IA).
-  r.post('/api/constructeur/rapport/creer', async (ctx) => {
+  admin.post('/api/constructeur/rapport/creer', async (ctx) => {
     const { rapport, nom } = await ctx.json()
     const { description, erreurs } = await descriptionRapport(rapport)
     if (erreurs.length) throw new ErreurHttp(400, erreurs.join(' ; '))
@@ -273,7 +280,7 @@ export function routes(r) {
   })
 
   // Les valeurs existantes d'un champ (pour choisir un filtre dans une liste).
-  r.post('/api/constructeur/valeurs', async (ctx) => {
+  admin.post('/api/constructeur/valeurs', async (ctx) => {
     const { sujet, champ } = await ctx.json()
     return valeursDe(await catalogue(sujet), champ)
   })
@@ -281,7 +288,7 @@ export function routes(r) {
   // POST /api/constructeur/indicateur { etat, nom, dateIndicateur?, arborescence?, enregistrer? }
   // Le même formulaire donne un indicateur ITM : le sujet est la table comptée, les filtres font le WHERE.
   // BiRTEC écrit la requête indicateur et la requête liste, les essaie, et les range dans le .ktec.
-  r.post('/api/constructeur/indicateur', async (ctx) => {
+  admin.post('/api/constructeur/indicateur', async (ctx) => {
     const { etat, nom, dateIndicateur = null, arborescence = true, enregistrer = false, id: idExistant = null } = await ctx.json()
     const cat = await catalogue(etat.sujet)
     const reglages = await reglagesITM()
@@ -303,7 +310,7 @@ export function routes(r) {
     if (date && date.niveau === 0) colonnes.push(`${t}.${date.colonne} AS DATE_INDICATEUR`)
     const requeteIndicateur = `-- ${nomFinal}\nSELECT COUNT(DISTINCT ${t}.${fenetre.id}) AS VAL\n${jointures}${ou}`
     const requeteListe = `-- ${nomFinal}\nSELECT DISTINCT\n  ${colonnes.join(',\n  ')}\n${jointures}${ou}\nORDER BY ${date && date.niveau === 0 ? 'DATE_INDICATEUR' : 'CODE'}`
-    const essai = etatConnexion().ouverte ? await tester(requeteIndicateur, requeteListe) : { erreurs: [], avertissements: ['Connexion MySQL fermée : requêtes non essayées.'] }
+    const essai = etatConnexion().ouverte ? await tester(requeteIndicateur, requeteListe) : { erreurs: [], avertissements: ['Connexion à la GMAO indisponible : requêtes non essayées.'] }
     let id = null
     if (enregistrer && !essai.erreurs.length) {
       id = enregistrerIndicateur({ id: idExistant || undefined, nom: nomFinal, fenetre: fenetre.libelle, demande: 'Créé avec le formulaire « Nouvel indicateur »', definition: { constructeur: etat, dateIndicateur, arborescence }, requeteIndicateur, requeteListe, source: 'formulaire' })
@@ -313,7 +320,7 @@ export function routes(r) {
 
   // Vocabulaire : une expression de la phrase associée à un filtre (« niveau 1 » = tel type de demande).
   r.get('/api/constructeur/vocabulaire', () => lireVocabulaire())
-  r.post('/api/constructeur/vocabulaire', async (ctx) => {
+  admin.post('/api/constructeur/vocabulaire', async (ctx) => {
     const { expression, sujet, champ, valeurs, supprimer } = await ctx.json()
     const cle = normaliser(expression).trim()
     if (!cle || !sujet) throw new ErreurHttp(400, 'Expression ou sujet manquant.')
@@ -327,7 +334,7 @@ export function routes(r) {
   })
 
   // POST /api/constructeur/proposer { phrase, sujet? } : l'IA remplit le formulaire d'après une phrase.
-  r.post('/api/constructeur/proposer', async (ctx) => {
+  admin.post('/api/constructeur/proposer', async (ctx) => {
     const { phrase, sujet } = await ctx.json()
     if (!phrase?.trim()) throw new ErreurHttp(400, 'Décrivez le rapport en une phrase.')
     if (!iaInstallee()) throw new ErreurHttp(409, 'L’IA n’est pas installée sur ce poste.')
