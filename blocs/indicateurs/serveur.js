@@ -1,4 +1,4 @@
-// Indicateurs ITM : l'assistant écrit la définition d'un indicateur de la GMAO, BiRTEC en tire la
+// Indicateurs GMAO : l'assistant écrit la définition d'un indicateur de la GMAO, BiRTEC en tire la
 // requête indicateur et la requête liste, les contrôle (tables et colonnes existantes), les essaie sur
 // MySQL, vérifie qu'elles concordent et fait corriger l'IA en cas d'écart. Les indicateurs créés sont
 // gardés dans le fichier .ktec (historique). Le résultat reste du SQL, à coller dans la GMAO.
@@ -13,12 +13,15 @@ import { verifierSQL } from '../base/verification.js'
 import { extraireJson } from '../rapports/serveur.js'
 import { REGLAGES_VIDES, verifierDefinition, assembler, remplacerVariables, trouverFenetre, normaliser, deduireFenetres } from './indicateur.js'
 
+// Le nom de la clé des réglages dans les fichiers .ktec déjà existants (on ne la renomme pas).
+const CLE_REGLAGES = 'itm'
+
 const ESSAIS_DE_CORRECTION = 2
 const LIGNES_MAX = 5000
 
 // Fenêtres décrites dans le .ktec, complétées par celles déduites de la structure (tables en forme de fiche).
-export async function reglagesITM() {
-  const enregistres = { ...REGLAGES_VIDES, ...lireInfo('itm', {}) }
+export async function reglagesIndicateurs() {
+  const enregistres = { ...REGLAGES_VIDES, ...lireInfo(CLE_REGLAGES, {}) }
   const schema = await obtenirSchema()
   const connues = new Set(enregistres.fenetres.map((f) => f.table.toLowerCase()))
   const deduites = deduireFenetres(schema.tables).filter((f) => !connues.has(f.table.toLowerCase()))
@@ -26,61 +29,61 @@ export async function reglagesITM() {
 }
 
 export function routes(r) {
-  r.get('/api/itm/reglages', async () => {
-    const reglages = await reglagesITM()
+  r.get('/api/indicateurs/reglages', async () => {
+    const reglages = await reglagesIndicateurs()
     return { ...reglages, fenetres: reglages.fenetres.filter((f) => !f.deduite), deduites: reglages.fenetres.filter((f) => f.deduite).length }
   })
 
-  r.post('/api/itm/reglages', async (ctx) => {
+  r.post('/api/indicateurs/reglages', async (ctx) => {
     const reglages = await ctx.json()
     reglages.fenetres ||= []
     if (!Array.isArray(reglages.fenetres) || !Array.isArray(reglages.variables)) throw new ErreurHttp(400, 'Il faut deux listes : fenetres et variables.')
     for (const f of reglages.fenetres) if (!f.libelle || !f.table || !f.id || !f.code) throw new ErreurHttp(400, 'Chaque fenêtre a besoin de libelle, table, id et code.')
-    ecrireInfo('itm', { fenetres: reglages.fenetres, variables: reglages.variables })
+    ecrireInfo(CLE_REGLAGES, { fenetres: reglages.fenetres, variables: reglages.variables })
   })
 
-  r.get('/api/itm/indicateurs', () => listerIndicateurs())
+  r.get('/api/indicateurs/indicateurs', () => listerIndicateurs())
 
-  r.post('/api/itm/indicateurs', async (ctx) => {
+  r.post('/api/indicateurs/indicateurs', async (ctx) => {
     const indicateur = await ctx.json()
     if (!indicateur.nom?.trim()) throw new ErreurHttp(400, 'L’indicateur doit avoir un nom.')
     return { id: enregistrerIndicateur(indicateur) }
   })
 
-  r.delete('/api/itm/indicateurs/:id', (ctx) => supprimerIndicateur(Number(ctx.params.id)))
+  r.delete('/api/indicateurs/indicateurs/:id', (ctx) => supprimerIndicateur(Number(ctx.params.id)))
 
   // La valeur seule d'un indicateur (page d'accueil) : requête indicateur, variables remplacées.
-  r.get('/api/itm/indicateurs/:id/valeur', async (ctx) => {
+  r.get('/api/indicateurs/indicateurs/:id/valeur', async (ctx) => {
     const indicateur = listerIndicateurs().find((i) => i.id === Number(ctx.params.id))
     if (!indicateur) throw new ErreurHttp(404, 'Indicateur introuvable')
     if (!etatConnexion().ouverte) return { valeur: null }
-    const { sql } = remplacerVariables(indicateur.requeteIndicateur || '', await reglagesITM())
+    const { sql } = remplacerVariables(indicateur.requeteIndicateur || '', await reglagesIndicateurs())
     const r = await executerRequete(sql, 2)
     const colonne = r.colonnes.findIndex((c) => c.nom.toUpperCase() === 'VAL')
     return { valeur: r.lignes[0]?.[colonne < 0 ? 0 : colonne] ?? null }
   })
 
   // Assemble les deux requêtes à partir d'une définition (écrite ou retouchée à la main).
-  r.post('/api/itm/assembler', async (ctx) => {
+  r.post('/api/indicateurs/assembler', async (ctx) => {
     const { definition } = await ctx.json()
-    const reglages = await reglagesITM()
+    const reglages = await reglagesIndicateurs()
     const erreurs = verifierDefinition(definition, reglages)
     if (erreurs.length) return { erreurs }
     return { erreurs: [], definition: normaliser(definition, reglages), ...assembler(definition, reglages) }
   })
 
   // Essaie les deux requêtes (éventuellement retouchées à la main) sur la base.
-  r.post('/api/itm/tester', async (ctx) => {
+  r.post('/api/indicateurs/tester', async (ctx) => {
     const { requeteIndicateur, requeteListe } = await ctx.json()
     return tester(requeteIndicateur, requeteListe)
   })
 
-  // POST /api/itm/creer { definition, demande } : depuis l'assistant. BiRTEC assemble, contrôle et essaie ;
+  // POST /api/indicateurs/creer { definition, demande } : depuis l'assistant. BiRTEC assemble, contrôle et essaie ;
   // en cas d'erreur, l'IA corrige la définition (2 fois au plus). Enregistré dans le .ktec si tout va bien
   // (ou si « forcer » est demandé).
-  r.post('/api/itm/creer', async (ctx) => {
+  r.post('/api/indicateurs/creer', async (ctx) => {
     const { definition: proposee, demande = '', forcer = false } = await ctx.json()
-    const reglages = await reglagesITM()
+    const reglages = await reglagesIndicateurs()
     let definition = normaliser(proposee, reglages)
     let resultat = await essayer(definition, reglages)
     const corrections = []
@@ -125,7 +128,7 @@ async function essayer(definition, reglages) {
 // Les deux requêtes sur la base, variables remplacées par leurs valeurs d'essai.
 // Vérifie : une seule valeur VAL, colonnes ID/CODE/DESI1/ACTIF, et le chiffre égal au nombre de lignes.
 export async function tester(requeteIndicateur, requeteListe) {
-  const reglages = await reglagesITM()
+  const reglages = await reglagesIndicateurs()
   const erreurs = []
   const avertissements = []
   const indicateur = remplacerVariables(requeteIndicateur || '', reglages)
@@ -179,7 +182,7 @@ export function reglesIndicateur(reglages, tablesUtiles = null) {
     .filter((f) => !garder || garder.has(f.table.toLowerCase()) || !f.deduite)
     .map((f) => `- table ${f.table} « ${f.libelle} » : identifiant ${f.table}.${f.id}, code ${f.table}.${f.code}${f.variableArbo ? `, filtre d'arborescence ${f.variableArbo}` : ''}`).join('\n')
   const variables = reglages.variables.map((v) => `- ${v.nom} : ${v.description || ''}`).join('\n')
-  return `Un indicateur ITM = une requête qui compte des fiches d'une table (la fenêtre que la GMAO ouvrira), et une requête liste qui affiche ces fiches.
+  return `Un indicateur GMAO = une requête qui compte des fiches d'une table (la fenêtre que la GMAO ouvrira), et une requête liste qui affiche ces fiches.
 BiRTEC construit lui-même les deux requêtes à partir de cette définition JSON :
 {"nom": "[Catégorie] - Nom court", "table": "table principale", "jointures": "LEFT JOIN … ON …\\nLEFT JOIN … ON …", "conditions": "…", "arborescence": true, "dateIndicateur": "table.COLONNE ou null", "tri": "DATE_INDICATEUR DESC", "explication": "une phrase"}
 

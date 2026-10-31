@@ -1,4 +1,4 @@
-// Indicateurs ITM : l'historique des indicateurs créés (depuis l'assistant) ou relevés dans la GMAO.
+// Indicateurs GMAO : l'historique des indicateurs créés (depuis l'assistant) ou relevés dans la GMAO.
 // Pour chacun : la requête indicateur et la requête liste à copier dans la GMAO, l'essai sur la base,
 // et la retouche (à la main, ou en le confiant à l'assistant).
 
@@ -9,22 +9,22 @@ import { demanderMotDePasse } from '../configuration/vue.js'
 import { tableauResultats } from '../base/vue.js'
 
 export default {
-  chemin: 'itm',
-  titre: 'Indicateurs ITM',
+  chemin: 'indicateurs',
+  titre: 'Indicateurs GMAO',
   icone: 'graphique',
   menu: true,
   groupe: 'Mes créations',
-  aide: 'itm',
+  aide: 'indicateurs',
 
   async afficher(zone, { id }) {
-    const indicateurs = await api('/api/itm/indicateurs')
+    const indicateurs = await api('/api/indicateurs/indicateurs')
     const choisi = indicateurs.find((i) => String(i.id) === id) || null
     const filtre = h('input', { type: 'search', placeholder: 'Filtrer…' })
     const liste = h('div', { class: 'liste-tables' })
     const dessinerListe = () => {
       const texte = filtre.value.toLowerCase()
       vider(liste, indicateurs.filter((i) => !texte || i.nom.toLowerCase().includes(texte)).map((i) =>
-        h('a', { href: `#/itm/${i.id}`, class: i === choisi ? 'actif' : '', title: `${i.fenetre || ''} — ${dateHeureFr(i.modifie)}` }, ic('graphique', 14), ' ', i.nom)))
+        h('a', { href: `#/indicateurs/${i.id}`, class: i === choisi ? 'actif' : '', title: `${i.fenetre || ''} — ${dateHeureFr(i.modifie)}` }, ic('graphique', 14), ' ', i.nom)))
       if (!indicateurs.length) liste.append(h('p', { class: 'discret' }, 'Aucun indicateur pour l’instant.'))
     }
     filtre.addEventListener('input', dessinerListe)
@@ -33,7 +33,7 @@ export default {
     vider(
       zone,
       h('div', { class: 'entete-page' },
-        h('div', {}, h('h1', {}, 'Indicateurs ITM'), h('p', { class: 'sous-titre' }, 'Requête indicateur et requête liste, essayées sur la base, à coller dans la GMAO')),
+        h('div', {}, h('h1', {}, 'Indicateurs GMAO'), h('p', { class: 'sous-titre' }, 'Requête indicateur et requête liste, essayées sur la base, à coller dans la GMAO')),
         h('div', { class: 'actions' },
           h('a', { class: 'bouton principal', href: '#/indicateur', title: 'Ce qu’on compte et les conditions : BiRTEC écrit les deux requêtes' }, ic('plus', 16), 'Nouvel indicateur'),
           h('button', { class: 'discret', onclick: modifierReglages }, ic('reglages', 16), 'Variables'),
@@ -42,8 +42,8 @@ export default {
       deuxPanneaux(
         h('div', { class: 'carte', style: { padding: '12px' } }, filtre, h('div', { style: { height: '10px' } }), liste),
         choisi ? detail(choisi) : h('div', { class: 'carte' }, h('p', { class: 'texte-2' },
-          '« Nouvel indicateur » ouvre le formulaire : choisissez ce qu’on compte (étape 1) et les filtres (étape 3), puis « Créer un indicateur ITM ». BiRTEC écrit les deux requêtes, les essaie et les range ici. Choisissez un indicateur à gauche pour copier ses requêtes.')),
-        { cle: 'itm', largeur: 380 },
+          '« Nouvel indicateur » ouvre le formulaire : choisissez ce qu’on compte (étape 1) et les filtres (étape 3), puis « Créer un indicateur GMAO ». BiRTEC écrit les deux requêtes, les essaie et les range ici. Choisissez un indicateur à gauche pour copier ses requêtes.')),
+        { cle: 'indicateurs', largeur: 380 },
       ),
     )
   },
@@ -64,22 +64,22 @@ function detail(indicateur) {
     if (!etat.connexion.ouverte) await demanderMotDePasse().catch(() => {})
     vider(resultat, h('p', { class: 'discret curseur' }, 'Essai des deux requêtes'))
     try {
-      vider(resultat, dessinerResultat(await api('/api/itm/tester', { methode: 'POST', corps: { requeteIndicateur: requeteIndicateur.value, requeteListe: requeteListe.value } })))
+      vider(resultat, dessinerResultat(await api('/api/indicateurs/tester', { methode: 'POST', corps: { requeteIndicateur: requeteIndicateur.value, requeteListe: requeteListe.value } })))
     } catch (erreur) {
       vider(resultat, h('div', { class: 'bandeau' }, ic('alerte'), erreur.message))
     }
   }
 
   async function enregistrer() {
-    await api('/api/itm/indicateurs', { methode: 'POST', corps: { ...indicateur, requeteIndicateur: requeteIndicateur.value, requeteListe: requeteListe.value } })
+    await api('/api/indicateurs/indicateurs', { methode: 'POST', corps: { ...indicateur, requeteIndicateur: requeteIndicateur.value, requeteListe: requeteListe.value } })
     notifier('Indicateur enregistré dans le fichier .ktec')
     window.ktec.recharger()
   }
 
   async function supprimer() {
     if (!(await confirmer(`Supprimer l’indicateur « ${indicateur.nom} » ?`, { texte: 'Supprimer', danger: true }))) return
-    await api(`/api/itm/indicateurs/${indicateur.id}`, { methode: 'DELETE' })
-    location.hash = '#/itm'
+    await api(`/api/indicateurs/indicateurs/${indicateur.id}`, { methode: 'DELETE' })
+    location.hash = '#/indicateurs'
   }
 
   if (etat.connexion.ouverte) setTimeout(tester, 0)
@@ -92,7 +92,7 @@ function detail(indicateur) {
           h('button', { class: 'petit', onclick: tester }, ic('lecture', 14), 'Tester'),
           indicateur.definition?.constructeur
             ? h('button', { class: 'petit discret', onclick: () => { sessionStorage.setItem('birtec-indicateur', JSON.stringify({ etat: indicateur.definition.constructeur, nom: indicateur.nom, dateIndicateur: indicateur.definition.dateIndicateur, arborescence: indicateur.definition.arborescence, id: indicateur.id })); location.hash = '#/indicateur' } }, ic('crayon', 14), 'Modifier (formulaire)')
-            : h('button', { class: 'petit discret', onclick: () => demanderALAssistant(`Modifie l’indicateur ITM « ${indicateur.nom} » : `) }, ic('etincelle', 14), 'Modifier avec l’assistant'),
+            : h('button', { class: 'petit discret', onclick: () => demanderALAssistant(`Modifie l’indicateur GMAO « ${indicateur.nom} » : `) }, ic('etincelle', 14), 'Modifier avec l’assistant'),
           h('button', { class: 'petit discret danger', onclick: supprimer }, ic('poubelle', 14)),
         ),
       ),
@@ -132,7 +132,7 @@ function dessinerResultat(r) {
 
 // Variables de la GMAO (et fenêtres décrites à la main, en plus de celles déduites de la structure).
 async function modifierReglages() {
-  const reglages = await api('/api/itm/reglages')
+  const reglages = await api('/api/indicateurs/reglages')
   const { deduites, ...aGarder } = reglages
   const zoneTexte = h('textarea', { class: 'sql', rows: 20, spellcheck: false }, JSON.stringify(aGarder, null, 2))
   const ok = await fenetre({
@@ -143,7 +143,7 @@ async function modifierReglages() {
       zoneTexte),
     boutons: [
       { texte: 'Annuler', classe: 'discret', valeur: null },
-      { texte: 'Enregistrer', classe: 'principal', action: () => api('/api/itm/reglages', { methode: 'POST', corps: JSON.parse(zoneTexte.value) }).then(() => true) },
+      { texte: 'Enregistrer', classe: 'principal', action: () => api('/api/indicateurs/reglages', { methode: 'POST', corps: JSON.parse(zoneTexte.value) }).then(() => true) },
     ],
   })
   if (ok) notifier('Réglages enregistrés')

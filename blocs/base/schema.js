@@ -7,7 +7,8 @@
 // plus les tables qui leur sont liées. Les tables écartées dans le dictionnaire ne sont jamais données.
 
 import { lireSchema, etatConnexion } from 'ktec/mysql.js'
-import { enregistrerTables, lireTables, lireLiens, enregistrerLiens, deduireLiens, lireDictionnaire, lireLiensDictionnaire } from 'ktec/ktec.js'
+import { enregistrerTables, lireTables, lireLiens, enregistrerLiens, deduireLiens, lireDictionnaire, lireLiensDictionnaire, lireInfo } from 'ktec/ktec.js'
+import { devinerTypes, coutLien } from '../../interface/types.js'
 
 let schema = null
 
@@ -32,11 +33,13 @@ export async function obtenirSchema({ rafraichir = false } = {}) {
 function completerDictionnaire(schema) {
   const dico = lireDictionnaire()
   const liensDico = lireLiensDictionnaire()
+  const typesChoisis = lireTypesChoisis()
   for (const t of schema.tables) {
     const d = dico.tables.get(t.nom.toLowerCase()) || {}
     t.libelle = d.libelle || ''
     t.description = d.description || ''
     t.exclue = Boolean(d.exclue)
+    t.typeChoisi = typesChoisis[t.nom.toLowerCase()] || '' // le type corrigé par l'administrateur (interface/types.js)
     for (const c of t.colonnes) {
       const dc = dico.colonnes.get(`${t.nom}.${c.nom}`.toLowerCase()) || {}
       c.libelle = dc.libelle || ''
@@ -50,6 +53,9 @@ function completerDictionnaire(schema) {
   }
   return schema
 }
+
+// Les types de tables corrigés à la main : { nom en minuscules: type }.
+export const lireTypesChoisis = () => lireInfo('types_tables', {}) || {}
 
 function completerLiens(schema) {
   const parTable = new Map(schema.tables.map((t) => [t.nom.toLowerCase(), t]))
@@ -195,18 +201,20 @@ export function tablesDesConventions(notes, question, schema) {
 // ---------------------------------------------------------------- chemins de jointure
 
 // Les chemins de jointure les plus courts entre les tables principales de la question, calculés sur les
-// liens connus (déclarés, déduits, importés ou saisis). Un lien nommé dans le dictionnaire, ou vers une
-// table « fille » (ot_equipement pour ot), coûte moins : c'est le chemin habituel du site.
+// liens connus (déclarés, déduits, importés ou saisis). Un lien nommé dans le dictionnaire, une table de liaison
+// qui réunit justement les deux tables (« artmac » pour « article » et « machine »), ou une table « fille » coûtent moins
+// (interface/types.js) : c'est le chemin habituel du site.
 // Renvoie des lignes du genre : « ot → equipement : ot_equipement.ID_OT = ot.ID_OT ; ot_equipement.ID_EQUIPEMENT = equipement.ID_EQUIPEMENT »
 export function cheminsDeJointure(noms, schema, longueurMax = 3) {
   const tables = new Map(schema.tables.filter((t) => !t.exclue).map((t) => [t.nom.toLowerCase(), t]))
   const voisins = new Map([...tables.keys()].map((n) => [n, []]))
+  const { composees } = devinerTypes(schema.tables, lireTypesChoisis())
   for (const t of tables.values()) {
     for (const l of t.liens) {
       const a = t.nom.toLowerCase()
       const b = l.versTable.toLowerCase()
       if (!tables.has(b) || a === b) continue
-      const cout = l.libelle ? 0.6 : a.startsWith(b) || b.startsWith(a) ? 0.8 : 1
+      const cout = coutLien(a, b, { nomme: Boolean(l.libelle), composees })
       const jointure = `${t.nom}.${l.colonne} = ${tables.get(b).nom}.${l.versColonne}`
       voisins.get(a).push({ vers: b, cout, jointure })
       voisins.get(b).push({ vers: a, cout, jointure })

@@ -24,7 +24,7 @@
 //
 // options.sansRegroupement : une synthèse sans « regrouper par » donne une seule ligne (chiffre clé).
 //
-// options.aliasSujet : alias de la table du sujet (par défaut t0). Pour un indicateur ITM, c'est le nom de la
+// options.aliasSujet : alias de la table du sujet (par défaut t0). Pour un indicateur GMAO, c'est le nom de la
 // table lui-même, car les variables de la GMAO ({{ARBO_FILTRE_…}}) s'écrivent avec ce nom.
 
 const FORMAT_PAR_NATURE = { nombre: 'decimal', date: 'date', date8: 'date', texte: 'texte' }

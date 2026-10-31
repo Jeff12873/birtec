@@ -5,7 +5,8 @@ import { ErreurHttp, envoyerOctets } from 'ktec/http.js'
 import { creerZip } from 'ktec/zip.js'
 import { executerRequete, etatConnexion } from 'ktec/mysql.js'
 import { enregistrerDictionnaire, enregistrerLienDictionnaire, ajouterLien, lireInfo, ecrireInfo } from 'ktec/ktec.js'
-import { obtenirSchema } from './schema.js'
+import { obtenirSchema, lireTypesChoisis } from './schema.js'
+import { TYPES } from '../../interface/types.js'
 import { lirePreference, ecrirePreference } from 'ktec/preferences.js'
 
 // Réglages et SQL : réservés à l'administrateur (ctx.exigerModeAdmin, KTEC 0.6 et plus).
@@ -88,6 +89,18 @@ export function routes(r) {
     const entree = await ctx.json()
     if (!entree.table) throw new ErreurHttp(400, 'Table manquante.')
     enregistrerDictionnaire(entree)
+  })
+
+  // POST /api/schema/type { table, type } : corrige le type deviné d'une table ('' : revenir au type deviné).
+  admin.post('/api/schema/type', async (ctx) => {
+    const { table, type = '' } = await ctx.json()
+    if (!table) throw new ErreurHttp(400, 'Table manquante.')
+    if (type && !TYPES.some((t) => t.id === type)) throw new ErreurHttp(400, 'Type inconnu.')
+    const choisis = { ...lireTypesChoisis() }
+    if (type) choisis[String(table).toLowerCase()] = type
+    else delete choisis[String(table).toLowerCase()]
+    ecrireInfo('types_tables', choisis)
+    return { type }
   })
 
   // POST /api/dictionnaire/lien { deTable, deColonne, versTable, versColonne?, libelle, description, nouveau? }

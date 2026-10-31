@@ -47,6 +47,10 @@ canvas.toile-schema { position: relative; display: block; width: 100%; height: c
 @media (prefers-reduced-motion: reduce) { .pluie-constellation { display: none; } }
 .zone-motif { display: flex; gap: 6px; align-items: center; }
 canvas.ciel-schema { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.voile-arrivee { position: absolute; inset: 0; background: #04070f; pointer-events: none; animation: voile-arrivee 1.8s ease-out forwards; }
+.voile-arrivee.rapide { animation-duration: .6s; }
+@keyframes voile-arrivee { to { opacity: 0; visibility: hidden; } }
+@media (prefers-reduced-motion: reduce) { .voile-arrivee { animation-duration: .01s; } }
 .reglages-schema { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: 12px; color: var(--texte-2); background: color-mix(in srgb, var(--carte) 88%, transparent); padding: 6px 10px; border-radius: 10px; border: 1px solid var(--bord); }
 .curseur-schema { display: flex; gap: 6px; align-items: center; }
 .curseur-schema input[type=range] { width: 110px; padding: 0; accent-color: var(--accent); }
@@ -118,7 +122,7 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 .deux-panneaux .grille > *, .deux-panneaux .carte > * { min-width: 0; }
 .deux-panneaux .grille { grid-template-columns: minmax(0, 1fr); }
 
-/* Requête dans sa propre case (indicateur ITM) */
+/* Requête dans sa propre case (indicateur GMAO) */
 .case-requete { margin-top: 12px; border: 1px solid var(--bord); border-radius: var(--rayon); padding: 10px 12px; background: var(--carte-2); }
 .case-requete h3 { margin: 0; font-size: 15px; }
 .case-requete pre.code { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; }
@@ -188,3 +192,8 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 .menu-theme-choix small { color: var(--texte-3); font-variant-numeric: tabular-nums; }
 .menu-theme-choix:hover, .menu-theme-choix.vise { background: var(--carte-2); }
 .menu-theme-choix.on { background: var(--accent-doux); color: var(--accent); font-weight: 600; }
+
+/* Constellation : légende des types de tables */
+.legende-types { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13px; }
+.legende-types li { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.point-type { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: 0 0 6px currentColor; vertical-align: middle; }

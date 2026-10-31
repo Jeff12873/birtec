@@ -1,4 +1,4 @@
-// L'assistant : le point d'entrée unique pour les requêtes SQL, les rapports BIRT et les indicateurs ITM,
+// L'assistant : le point d'entrée unique pour les requêtes SQL, les rapports BIRT et les indicateurs GMAO,
 // à partir de la vraie structure de la base MySQL et des connaissances du site (fichier .ktec).
 //
 // À chaque question : on choisit les tables utiles (blocs/base/schema.js), on les décrit à l'IA avec
@@ -12,8 +12,8 @@ import { discuter, iaInstallee } from 'ktec/ia.js'
 import { obtenirSchema, tablesUtiles, decrireTables, connaissancesUtiles, tablesDesRequetes, tablesDesConventions, cheminsDeJointure } from '../base/schema.js'
 import { verifierSQL, requetesDeLaReponse } from '../base/verification.js'
 import { listerNotes, listerRequetes, listerIndicateurs, lireInfo, ecrireInfo } from 'ktec/ktec.js'
-import { reglagesITM, reglesIndicateur } from '../itm/serveur.js'
-import { verifierDefinition, assembler } from '../itm/indicateur.js'
+import { reglagesIndicateurs, reglesIndicateur } from '../indicateurs/serveur.js'
+import { verifierDefinition, assembler } from '../indicateurs/indicateur.js'
 import { THEMES } from '../rapports/generateur.js'
 
 const CORRECTIONS_MAX = 2
@@ -34,7 +34,7 @@ Règles :
 - Donne des alias de colonnes lisibles en français (AS nb_ot, AS heures_totales…).
 - Pour une période relative (« mois en cours »…), calcule les dates dans la requête (CURDATE(), DATE_FORMAT, INTERVAL) au lieu d'écrire des dates fixes.
 - Respecte les CONVENTIONS DU SITE et inspire-toi des REQUÊTES DÉJÀ ÉCRITES SUR CE SITE.
-- Seulement quand tu poses une question : tu peux terminer par une ligne qui commence par « CHOIX : » suivie des réponses possibles séparées par « | » (ex. « CHOIX : Rapport BIRT | Indicateur ITM »). N'écris jamais de réponses vides ou génériques.
+- Seulement quand tu poses une question : tu peux terminer par une ligne qui commence par « CHOIX : » suivie des réponses possibles séparées par « | » (ex. « CHOIX : Rapport BIRT | Indicateur GMAO »). N'écris jamais de réponses vides ou génériques.
 - Seulement quand tu proposes des compléments : une ligne qui commence par « OPTIONS : » suivie des compléments concrets séparés par « | » (ex. « OPTIONS : Ajouter le temps d'arrêt | Grouper par ETH »).
 - Quand la demande commence par « combien », la requête renvoie un nombre (COUNT).
 - Utilise les CHEMINS DE JOINTURE fournis et les indications du dictionnaire (« ATTENTION », « → ») plutôt que d'inventer tes propres jointures.
@@ -48,7 +48,7 @@ RAPPORT BIRT — quand la demande est claire, termine par sa description dans un
  "description": "texte expliquant le rapport, ou vide", "positionDescription": "entete|pied", "logo": true, "theme": "{themes}"}
 « liaisons » donne, dans l'ordre, le paramètre de chaque « ? » de la requête. « total », « groupes », « description » sont facultatifs. Trie la requête par les champs de groupe.
 
-INDICATEUR ITM — quand la demande est claire, termine par sa définition dans un bloc \`\`\`indicateur … \`\`\` (BiRTEC en tire la requête indicateur et la requête liste) :
+INDICATEUR GMAO — quand la demande est claire, termine par sa définition dans un bloc \`\`\`indicateur … \`\`\` (BiRTEC en tire la requête indicateur et la requête liste) :
 {indicateur}
 
 Aujourd'hui, nous sommes le {date}.`
@@ -111,7 +111,7 @@ export function routes(r) {
       if (indicateurs) structure = `${indicateurs}\n\n${structure}`
       if (site.texte) structure = `${site.texte}\n\n${structure}`
 
-      const reglages = await reglagesITM()
+      const reglages = await reglagesIndicateurs()
       const systeme = REGLES
         .replace('{date}', new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }))
         .replace('{themes}', Object.keys(THEMES).join('|'))

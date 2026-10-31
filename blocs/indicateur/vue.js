@@ -1,4 +1,4 @@
-// Nouvel indicateur ITM : trois étapes avec les mêmes sélections que le rapport, et le chiffre du jour en direct.
+// Nouvel indicateur GMAO : trois étapes avec les mêmes sélections que le rapport, et le chiffre du jour en direct.
 //   1. Ce qu'on compte (une table de la GMAO : interventions, demandes…)
 //   2. Les conditions (filtres)
 //   3. Le nom (catégorie + nom court), la date affichée dans la liste, l'arborescence de la personne connectée
@@ -21,7 +21,7 @@ export default {
   titre: 'Nouvel indicateur',
   icone: 'graphique',
   menu: false,
-  aide: 'itm',
+  aide: 'indicateurs',
   rafraichir: false,
 
   async afficher(zone) {
@@ -45,7 +45,7 @@ export default {
     brouillon ||= nouveau()
     const b = brouillon
     const e = b.etat
-    const [sujets, indicateurs] = await Promise.all([api('/api/constructeur/sujets'), api('/api/itm/indicateurs').catch(() => [])])
+    const [sujets, indicateurs] = await Promise.all([api('/api/constructeur/sujets'), api('/api/indicateurs/indicateurs').catch(() => [])])
     const categories = [...new Set(indicateurs.map((i) => i.nom.match(/^\[([^\]]+)\]/)?.[1]).filter(Boolean))].sort()
     let catalogue = e.sujet ? await api(`/api/constructeur/champs/${encodeURIComponent(e.sujet)}`).catch(() => null) : null
     let aApprendre = []
@@ -117,7 +117,7 @@ export default {
           aActif ? h('div', { class: 'actions' }, choixFiches(e, changer)) : null,
         ]))
 
-        const categorie = h('input', { type: 'text', value: b.categorie, list: 'categories-itm', style: { width: '160px' } })
+        const categorie = h('input', { type: 'text', value: b.categorie, list: 'categories-indicateurs', style: { width: '160px' } })
         categorie.addEventListener('change', () => { b.categorie = categorie.value.trim(); changer() })
         const nomCourt = h('input', { type: 'text', value: b.nomCourt, placeholder: 'Ex. : DI en retard', style: { flex: 1 } })
         nomCourt.addEventListener('change', () => { b.nomCourt = nomCourt.value.trim(); changer() })
@@ -125,7 +125,7 @@ export default {
         etapes.push(section(numero(3), 'Le nom et l’affichage', [
           h('div', { class: 'champ' }, h('span', {}, 'Nom dans la GMAO'),
             h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, '[', categorie, '] -', nomCourt),
-            h('datalist', { id: 'categories-itm' }, categories.map((c) => h('option', { value: c })))),
+            h('datalist', { id: 'categories-indicateurs' }, categories.map((c) => h('option', { value: c })))),
           h('label', { class: 'champ' }, h('span', {}, 'Date affichée dans la liste (facultatif)'),
             h('select', { onchange: (ev) => { b.dateIndicateur = ev.target.value; changer() } }, h('option', { value: '' }, '— Aucune —'), dates.map((c) => h('option', { value: c.id, selected: b.dateIndicateur === c.id }, c.libelle)))),
           caseACocher(b.arborescence, 'Limiter à l’arborescence de la personne connectée (si la GMAO a une variable pour cette fenêtre)', (v) => { b.arborescence = v; changer() }),
@@ -179,7 +179,7 @@ export default {
           location.hash = '#/constructeur/rapport'
           return
         }
-        location.hash = `#/itm/${r.id}`
+        location.hash = `#/indicateurs/${r.id}`
       } catch (erreur) {
         notifier(erreur.message, 'erreur')
       }
@@ -187,7 +187,7 @@ export default {
 
     vider(zone,
       h('div', { class: 'entete-page' },
-        h('div', {}, h('h1', {}, b.id ? 'Modifier l’indicateur' : 'Nouvel indicateur ITM'), h('p', { class: 'sous-titre' }, 'Ce qu’on compte et les conditions : BiRTEC écrit les deux requêtes de la GMAO.')),
+        h('div', {}, h('h1', {}, b.id ? 'Modifier l’indicateur' : 'Nouvel indicateur GMAO'), h('p', { class: 'sous-titre' }, 'Ce qu’on compte et les conditions : BiRTEC écrit les deux requêtes de la GMAO.')),
         h('div', { class: 'actions' },
           h('a', { class: 'bouton discret', href: '#/constructeur' }, ic('retour', 16), 'Rapport ou indicateur'),
           h('button', { class: 'discret', onclick: () => { brouillon = nouveau(); window.ktec.recharger() } }, ic('rafraichir', 16), 'Recommencer'))),

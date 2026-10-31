@@ -1,5 +1,5 @@
 // L'assistant : une discussion avec l'IA, qui connaît la structure de la base MySQL et le site.
-// C'est le point d'entrée unique : requêtes SQL, rapports BIRT et indicateurs ITM.
+// C'est le point d'entrée unique : requêtes SQL, rapports BIRT et indicateurs GMAO.
 // Sous chaque requête SQL proposée : Exécuter (résultat affiché sous la requête), Console, Copier.
 // Sous une description de rapport : « Créer le rapport » ; sous une définition d'indicateur : « Créer l'indicateur ».
 // La conversation est gardée sur ce poste.
@@ -27,7 +27,7 @@ export default {
   chemin: 'assistant',
   titre: 'Question libre',
   icone: 'etincelle',
-  menu: false, // la question libre est sur l'accueil
+  menu: false, // la question libre s'ouvre depuis l'aide et les autres écrans
   aide: 'assistant',
   rafraichir: false, // ne pas recharger l'écran pendant une discussion
 
@@ -197,7 +197,7 @@ export async function afficherQuestion(zone, { compact = false } = {}) {
             h('li', {}, 'Sous chaque requête : « Exécuter » pour voir le résultat, « Console » pour la retoucher.'),
             h('li', {}, 'Les requêtes ne peuvent que lire la base : rien n’est jamais modifié.'),
             h('li', {}, 'Chaque requête est contrôlée sur la vraie structure ; une colonne inexistante fait réécrire la réponse.'),
-            h('li', {}, 'Les rapports et indicateurs créés sont gardés dans les onglets Rapports et Indicateurs ITM.'),
+            h('li', {}, 'Les rapports et indicateurs créés sont gardés dans les onglets Rapports et Indicateurs GMAO.'),
           ),
         ),
       ),
@@ -347,13 +347,13 @@ function ajouterActionsIndicateur(bloc) {
     if (!etat.connexion.ouverte) notifier('Connexion à la GMAO indisponible : l’indicateur ne pourra pas être essayé sur la base.', 'erreur')
     vider(resultat, h('p', { class: 'discret curseur' }, 'BiRTEC assemble les deux requêtes et les essaie sur la base'))
     try {
-      const r = await api('/api/itm/creer', { methode: 'POST', corps: { definition, demande: definition.explication || '', forcer } })
+      const r = await api('/api/indicateurs/creer', { methode: 'POST', corps: { definition, demande: definition.explication || '', forcer } })
       vider(resultat,
         r.corrections?.length ? h('p', { class: 'discret', style: { fontSize: '12px' } }, `Corrigé automatiquement ${r.corrections.length} fois.`) : null,
         r.erreurs.map((e) => h('div', { class: 'bandeau' }, ic('alerte'), e)),
         r.valeur !== undefined && r.valeur !== null ? h('p', {}, h('strong', {}, String(r.valeur)), ` fiche(s) aujourd’hui — liste de ${r.liste?.total ?? '?'} ligne(s).`) : null,
         r.id
-          ? h('div', { class: 'actions' }, h('a', { class: 'bouton petit principal', href: `#/itm/${r.id}` }, ic('graphique', 14), 'Ouvrir l’indicateur (requêtes à copier)'))
+          ? h('div', { class: 'actions' }, h('a', { class: 'bouton petit principal', href: `#/indicateurs/${r.id}` }, ic('graphique', 14), 'Ouvrir l’indicateur (requêtes à copier)'))
           : h('div', { class: 'actions' }, h('button', { class: 'petit', onclick: () => creer(true) }, 'Enregistrer quand même')),
       )
       if (r.id) notifier(`Indicateur « ${r.definition.nom} » enregistré`)

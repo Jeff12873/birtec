@@ -1,4 +1,4 @@
-// Nouveau : on choisit d'abord ce qu'on crée, un rapport ou un indicateur ITM.
+// Nouveau : on choisit d'abord ce qu'on crée, un rapport ou un indicateur GMAO.
 //   #/constructeur          → le choix
 //   #/constructeur/rapport  → l'éditeur de rapport : une page faite de blocs (tableau, graphique, tableau croisé,
 //                             chiffre clé, texte, saut de page), chacun construit avec les champs ou en SQL libre
@@ -105,7 +105,7 @@ function choix(zone) {
       carte('#/constructeur/rapport', 'document', 'Un rapport',
         'Une ou plusieurs pages : tableaux, graphiques, tableaux croisés, chiffres clés, textes. Construit avec les champs, ou en SQL libre. Exporté en PDF, Excel, Word…',
         'Ex. : les dépannages du mois par ligne, avec un graphique par semaine et le détail.'),
-      carte('#/indicateur', 'graphique', 'Un indicateur ITM',
+      carte('#/indicateur', 'graphique', 'Un indicateur GMAO',
         'Un chiffre à suivre dans la GMAO : ce qu’on compte et les conditions. BiRTEC écrit la requête indicateur et la requête liste, et vérifie qu’elles concordent.',
         'Ex. : les demandes d’intervention en retard.')),
     brouillon ? h('p', { class: 'discret', style: { marginTop: '14px' } }, ic('crayon', 14), ' Un rapport est en cours : ', h('a', { href: '#/constructeur/rapport' }, 'le reprendre'), '.') : null)
@@ -593,7 +593,7 @@ async function editeurRapport(zone) {
       const source = rapport.blocs.find((b) => b.source !== 'sql' && b.etat?.sujet)
       const titre = rapport.aspect.titre
       brouillon = null
-      if (source && await confirmer('Le rapport est prêt. En faire aussi un indicateur ITM (le même sujet et les mêmes filtres, comptés dans la GMAO) ?', { texte: 'Créer l’indicateur' })) {
+      if (source && await confirmer('Le rapport est prêt. En faire aussi un indicateur GMAO (le même sujet et les mêmes filtres, comptés dans la GMAO) ?', { texte: 'Créer l’indicateur' })) {
         sessionStorage.setItem('birtec-indicateur', JSON.stringify({ etat: { sujet: source.etat.sujet, filtres: sansLancement(source.etat.filtres), etat: source.etat.etat }, nom: titre }))
         location.hash = '#/indicateur'
         return

@@ -2,5 +2,5 @@
   "name": "birtec",
   "private": true,
   "type": "module",
-  "description": "BiRTEC, application KTEC : rapports BIRT et indicateurs ITM sur la base de la GMAO. Lancée par le portail KTEC."
+  "description": "BiRTEC, application KTEC : rapports BIRT et indicateurs GMAO sur la base de la GMAO. Lancée par le portail KTEC."
 }

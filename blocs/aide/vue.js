@@ -8,7 +8,7 @@ const PAGES = [
   ['assistant', 'Question libre (IA)'],
   ['constructeur', 'Nouveau rapport (formulaire)'],
   ['rapports', 'Rapports : voir, exporter'],
-  ['itm', 'Indicateurs ITM'],
+  ['indicateurs', 'Indicateurs GMAO'],
   ['base', 'Base de données et dictionnaire'],
   ['schema', 'Constellation des tables'],
   ['connaissances', 'Connaissances (fichier .ktec)'],

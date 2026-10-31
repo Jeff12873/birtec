@@ -11,8 +11,8 @@ import { sujets, champsDuSujet } from './catalogue.js'
 import { construire } from './requete.js'
 import { genererRapport, sqlAvecValeurs, extraireJson, apercuBrouillon } from '../rapports/serveur.js'
 import { lectureSeule, BLOCS_DONNEES } from '../rapports/generateur.js'
-import { reglagesITM, tester } from '../itm/serveur.js'
-import { trouverFenetre, formaterNom } from '../itm/indicateur.js'
+import { reglagesIndicateurs, tester } from '../indicateurs/serveur.js'
+import { trouverFenetre, formaterNom } from '../indicateurs/indicateur.js'
 import { lireInfo, ecrireInfo } from 'ktec/ktec.js'
 import { enregistrerIndicateur } from 'ktec/ktec.js'
 
@@ -286,12 +286,12 @@ export function routes(r) {
   })
 
   // POST /api/constructeur/indicateur { etat, nom, dateIndicateur?, arborescence?, enregistrer? }
-  // Le même formulaire donne un indicateur ITM : le sujet est la table comptée, les filtres font le WHERE.
+  // Le même formulaire donne un indicateur GMAO : le sujet est la table comptée, les filtres font le WHERE.
   // BiRTEC écrit la requête indicateur et la requête liste, les essaie, et les range dans le .ktec.
   admin.post('/api/constructeur/indicateur', async (ctx) => {
     const { etat, nom, dateIndicateur = null, arborescence = true, enregistrer = false, id: idExistant = null } = await ctx.json()
     const cat = await catalogue(etat.sujet)
-    const reglages = await reglagesITM()
+    const reglages = await reglagesIndicateurs()
     const fenetre = trouverFenetre(reglages, cat.sujet.table)
     if (!fenetre) throw new ErreurHttp(400, `« ${cat.sujet.libelle} » ne peut pas être compté par un indicateur : la table doit avoir un identifiant, un code, une désignation et un état (ACTIF).`)
     if (toutesConditions(etat.filtres).some((f) => (f.operateur === 'periode' && f.valeurs?.[0] === 'demandee') || f.operateur === 'demande')) {

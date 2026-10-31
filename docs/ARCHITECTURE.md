@@ -35,10 +35,10 @@ navigateur ──► KTEC (127.0.0.1:47700) ──► /api/birtec/…  (routes d
   (format BIRT 4.8 ; aspect, source de données, profil de connexion et paramètres cachés selon la « charte » du .ktec) ; `serveur.js` le
   vérifie, le fait tourner, demande à l'IA de corriger la description en cas d'erreur (2 essais), puis aperçu et exports.
 
-- **Indicateurs ITM** (`blocs/itm/`) : `indicateur.js` assemble la requête indicateur et la requête liste à partir d'une
+- **Indicateurs GMAO** (`blocs/indicateurs/`) : `indicateur.js` assemble la requête indicateur et la requête liste à partir d'une
   définition (jointures, conditions, date, tri) ; `serveur.js` fait écrire la définition par l'IA, essaie les deux
   requêtes (variables de la GMAO remplacées par leurs valeurs d'essai) et fait corriger en cas d'écart.
-  Fenêtres et variables de la GMAO : réglage « itm » du .ktec.
+  Fenêtres et variables de la GMAO : un réglage du .ktec.
 
 Réglages du poste (`reglages-poste.json` de KTEC) : connexion MySQL sans mot de passe, dossier de travail, fichier .ktec.
 Dossier de travail (par défaut `Documents/KTEC`) : `rapports/` (avec la description `<nom>.birtec.json` de chaque

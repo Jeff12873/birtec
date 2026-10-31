@@ -14,13 +14,13 @@ rien ne sort de l'entreprise.
   présentation) avec aperçu en direct ; BiRTEC écrit lui-même le SQL à partir du dictionnaire et des liens.
   « Remplir avec l'IA » pré-remplit le formulaire d'après une phrase (l'IA comprend, BiRTEC choisit les champs
   et cherche la valeur exacte des filtres dans la base). Filtres : valeurs, périodes, comparaison entre deux colonnes.
-  Le même formulaire crée les **indicateurs ITM** (requête indicateur + requête liste, essayées et concordantes).
+  Le même formulaire crée les **indicateurs GMAO** (requête indicateur + requête liste, essayées et concordantes).
 - **Question libre** : l'IA explique la base ou écrit une requête inhabituelle (calcul, sous-requête). Chaque
   requête est contrôlée sur la vraie structure (tables, colonnes, alias) et réécrite en cas d'erreur ; l'IA raisonne
   avant d'écrire du SQL et reçoit les chemins de jointure calculés.
 - **Rapports** : fichiers `.rptdesign` vérifiés dans le moteur BIRT, aperçu avec paramètres, export PDF, Excel, Word,
   HTML, LibreOffice ou PowerPoint.
-- **Indicateurs ITM** : requête indicateur (`VAL`) et requête liste associée, tirées d'une même définition, essayées
+- **Indicateurs GMAO** : requête indicateur (`VAL`) et requête liste associée, tirées d'une même définition, essayées
   sur la base (chiffre = nombre de lignes, pas de doublon, état filtré), à coller dans la GMAO.
 - **Connaissances** : tout ce que BiRTEC sait du site (conventions, structure de la base, liens, requêtes, rapports
   modèles, bibliothèques) est rangé dans **le fichier `.ktec`** (commun aux applications KTEC), hors du programme. Ce dépôt ne contient aucune donnée
@@ -56,7 +56,7 @@ puis `node serveur/demarrer.js` dans KTEC, et ouvrir http://127.0.0.1:47700/birt
 | Dossier | Contenu |
 |---|---|
 | `app.json` | Nom, description, icône, composants nécessaires (Java, BIRT, IA) |
-| `blocs/<écran>/` | `serveur.js` (routes), `vue.js` (écran) : accueil, constructeur, rapports, itm, base, schema, connaissances, assistant, configuration, aide |
+| `blocs/<écran>/` | `serveur.js` (routes), `vue.js` (écran) : schema (constellation), constructeur, rapports, indicateurs, base, connaissances, assistant, configuration, aide |
 | `interface/` | Menu (`menu.js`), styles propres (`app.css`), icône, pages d'aide |
 
 Voir [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

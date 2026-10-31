@@ -1,5 +1,14 @@
 <h1>Constellation des tables</h1>
-<p>Toutes les tables en bulles, reliées par leurs liens, qui se placent toutes seules (les bulles se repoussent, les liens les rapprochent). Plus une bulle est grosse, plus la table a de liens, et sa couleur le dit aussi : rouge = carrefour, violet = très reliée, bleu = reliée, gris = simple table de passage (1 ou 2 liens). Les seuils s'adaptent à la base affichée (de 3 liens jusqu'à la table la plus reliée, l'écart est coupé en trois) et sont rappelés sous le graphe. Orange : le chemin choisi.</p>
+<p>Le premier écran de BiRTEC : toutes les tables en bulles, reliées par leurs liens, qui se placent toutes seules (les bulles se repoussent, les liens les rapprochent). À l'arrivée, la vue dézoome pendant que les étoiles s'allument et que les liens se tracent (en raccourci aux visites suivantes).</p>
+<p>Plus une bulle est grosse, plus la table a de liens. Sa <b>couleur</b> dit son type :</p>
+<ul>
+<li><b>Principale</b> (jaune) : un objet métier, ce qu'on veut voir — RI, DI, FI, machine, pièce, personne.</li>
+<li><b>Secondaire</b> (bleu) : le détail rattaché à une principale.</li>
+<li><b>Intermédiaire</b> (violet) : une table de liaison entre deux tables ; son nom les réunit souvent (ARTMAC = ARTicle + MAChine).</li>
+<li><b>Référentiel</b> (turquoise) : une liste de codes (types, familles…).</li>
+<li><b>Technique</b> (gris) : journaux, exports, paramètres.</li>
+</ul>
+<p>BiRTEC devine le type ; l'administrateur le corrige dans le panneau d'une table (« Type de table »). Orange : le chemin choisi.</p>
 <ul>
 <li><b>Molette</b> : zoomer et dézoomer. <b>Glisser le fond</b> : se déplacer. <b>Glisser une bulle</b> : la déplacer. <b>Tout voir</b> : recadrer.</li>
 <li><b>Organiser à la main</b> : avec « Figer en lâchant » (coché par défaut), une bulle déplacée reste là où on la lâche (un point sombre la marque) ; les autres s'arrangent autour. <b>Double-clic</b> sur une bulle figée : la libérer. « Tout libérer » : toutes repartent.</li>
@@ -7,7 +16,9 @@
 <li><b>Survol</b> d'une bulle : ses tables liées s'éclairent. Les noms apparaissent en zoomant.</li>
 <li><b>Clic sur une bulle</b> : c'est la source ; son nom clair, sa description, sa prise en compte par l'IA, ses tables liées.</li>
 <li><b>Ctrl + Maj + clic</b> : construire le chemin soi-même, table par table (la première table cliquée est le départ). Si une table n'est pas directement liée à la précédente, le plus court passage entre les deux est ajouté. « Retirer la dernière » revient en arrière.</li>
-<li><b>Ctrl + clic</b> sur une autre bulle : le <b>chemin le plus court</b> entre les deux, tracé en orange, avec les tables traversées, les clés de chaque jointure et le SQL à copier.</li>
+<li><b>Ctrl + clic</b> sur une autre bulle : le <b>chemin le plus court</b> entre les deux, tracé en orange, avec les tables traversées, les clés de chaque jointure et le SQL à copier. Les tables voisines du chemin restent nettes et nommées : ce sont celles qu'on peut y ajouter.</li>
+<li><b>Le chemin préféré</b> : un lien nommé, puis une table de liaison qui réunit justement les deux tables (ARTMAC, faite pour relier ARTICLE et MACHINE, plutôt qu'une autre table qui touche aussi les deux), puis une table « fille ». Quand un autre chemin est presque aussi court, le panneau le propose : « Autre chemin : par … ».</li>
+<li><b>Le SQL</b> part toujours de la première table (<code>SELECT * FROM …</code>) et ajoute les jointures dans un ordre que BIRT accepte : chaque jointure ne cite que des tables déjà jointes.</li>
 <li><b>Clic sur un lien</b> : le nommer et le décrire. Un lien nommé est préféré pour les chemins (ceux du schéma comme ceux donnés à l'IA).</li>
 <li><b>Ajouter un lien manquant</b> (dans le panneau d'une table) : quand une colonne pointe vers une autre table sans suivre la convention ID_XXX.</li>
 <li>Le cadre <b>Raccourcis</b>, en haut à droite du graphe, les rappelle ; un clic sur son titre le replie.</li>

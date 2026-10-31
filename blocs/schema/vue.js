@@ -18,11 +18,12 @@
 
 import { h, vider, ic, notifier } from '/socle/ui.js'
 import { api } from '/socle/api.js'
-import { etat } from '/socle/etat.js'
+import { etat, modeAdmin } from '/socle/etat.js'
 import { extraireTables } from '../base/vue.js'
 import { pdfDepuisJpeg } from '/socle/pdf.js'
 import { MOTIFS, disposer } from '../../interface/motifs.js'
 import { menuDeroulant } from '../../interface/menu-deroulant.js'
+import { TYPES, typeParId, devinerTypes, coutLien } from '../../interface/types.js'
 
 let voirEcartees = false
 // Positions des bulles { x, y, fige } : chargées du .ktec, gardées d'une visite à l'autre.
@@ -62,7 +63,6 @@ export default {
   titre: 'Constellation',
   icone: 'reseau',
   menu: true,
-  groupe: 'Ma base',
   aide: 'schema',
   rafraichir: false,
 
@@ -76,6 +76,12 @@ export default {
     if (!schema.tables.length) return vider(zone, h('div', { class: 'carte vide' }, 'Structure de la base inconnue : connectez-vous à MySQL ou importez un export de structure.'))
 
     const graphe = construireGraphe(schema)
+    // L'arrivée complète à la première visite de la session ; ensuite, en raccourci.
+    let premiereVisite = true
+    try {
+      premiereVisite = !sessionStorage.getItem('birtec-constellation-vue')
+      sessionStorage.setItem('birtec-constellation-vue', '1')
+    } catch {}
     const panneau = h('div', { class: 'carte panneau-schema' })
     const toile = h('canvas', { class: 'toile-schema' })
     const ciel = h('canvas', { class: 'ciel-schema' })
@@ -123,6 +129,8 @@ export default {
       h('div', { class: 'schema-grille' },
         h('div', { class: 'carte carte-ciel', style: { padding: '0', overflow: 'hidden', position: 'relative' } },
           ciel,
+          // L'arrivée : le fond (nébuleuse et étoiles) apparaît en fondu, pendant que la vue dézoome.
+          h('div', { class: `voile-arrivee${premiereVisite ? '' : ' rapide'}`, 'aria-hidden': 'true' }),
           pluie,
           toile,
           cadreRaccourcis(),
@@ -131,7 +139,7 @@ export default {
         panneau,
       ),
     )
-    vue.demarrer()
+    vue.demarrer({ rapide: !premiereVisite })
     animerCiel(ciel, vue)
     const choisi = graphe.parNom.get(String(id || '').toLowerCase())
     if (choisi) setTimeout(() => vue.centrerSur(choisi, true), 400)
@@ -169,12 +177,14 @@ function construireGraphe(schema) {
     l.a.voisins.add(l.b)
     l.b.voisins.add(l.a)
   }
-  const niveaux = niveauxDu(noeuds)
+  // Le type de chaque table (deviné, ou corrigé par l'administrateur) donne sa couleur ; la taille suit ses liens.
+  const choisis = Object.fromEntries(schema.tables.filter((t) => t.typeChoisi).map((t) => [t.nom.toLowerCase(), t.typeChoisi]))
+  const { types, composees } = devinerTypes(schema.tables, choisis)
   for (const n of noeuds) {
     n.rayon = 4 + Math.sqrt(n.degre) * 2.6
-    n.niveau = niveaux.find((v) => n.degre >= v.min)
+    n.type = typeParId(types.get(n.table.nom.toLowerCase()))
   }
-  return { noeuds, liens, parNom, niveaux }
+  return { noeuds, liens, parNom, composees }
 }
 
 // La clé de liaison d'un lien : « ID_DI », ou « ID_PERE = ID_ARTICLE » quand les deux colonnes diffèrent.
@@ -192,15 +202,11 @@ function depart(nom, i, total) {
   return { x: Math.cos(angle) * rayon, y: Math.sin(angle) * rayon }
 }
 
-// Chemin le plus court : un lien nommé dans le dictionnaire, ou vers une table « fille », coûte moins
-// (mêmes règles que les chemins donnés à l'IA).
-function cheminLePlusCourt(graphe, depart, arrivee) {
-  const cout = (lien) => {
-    const nomme = lien.jointures.some((j) => j.libelle)
-    const a = lien.a.table.nom.toLowerCase()
-    const b = lien.b.table.nom.toLowerCase()
-    return nomme ? 0.6 : a.startsWith(b) || b.startsWith(a) ? 0.8 : 1
-  }
+// Chemin le plus court : un lien nommé dans le dictionnaire, une table de liaison qui réunit justement ses deux
+// voisines (« artmac » entre « article » et « machine »), ou une table « fille » coûtent moins (mêmes règles que les chemins donnés
+// à l'IA, interface/types.js). bannis : des tables à éviter (pour proposer un autre chemin).
+function cheminLePlusCourt(graphe, depart, arrivee, bannis = new Set()) {
+  const cout = (lien) => coutLien(lien.a.table.nom.toLowerCase(), lien.b.table.nom.toLowerCase(), { nomme: lien.jointures.some((j) => j.libelle), composees: graphe.composees })
   const parNoeud = new Map(graphe.noeuds.map((n) => [n, []]))
   for (const l of graphe.liens) {
     parNoeud.get(l.a).push({ vers: l.b, lien: l })
@@ -216,7 +222,7 @@ function cheminLePlusCourt(graphe, depart, arrivee) {
     faits.add(courant)
     if (courant === arrivee) break
     for (const { vers, lien } of parNoeud.get(courant)) {
-      if (faits.has(vers)) continue
+      if (faits.has(vers) || bannis.has(vers)) continue
       const c = meilleurs.get(courant).cout + cout(lien)
       if (!meilleurs.has(vers) || meilleurs.get(vers).cout > c) {
         meilleurs.set(vers, { cout: c, precedent: courant, lien })
@@ -227,7 +233,18 @@ function cheminLePlusCourt(graphe, depart, arrivee) {
   if (!meilleurs.has(arrivee)) return null
   const etapes = []
   for (let n = arrivee; meilleurs.get(n).precedent; n = meilleurs.get(n).precedent) etapes.unshift({ de: meilleurs.get(n).precedent, vers: n, lien: meilleurs.get(n).lien })
-  return { depart, arrivee, etapes }
+  return { depart, arrivee, etapes, cout: meilleurs.get(arrivee).cout }
+}
+
+// Un autre chemin presque aussi court, qui évite une des tables du milieu (deux tables de liaison possibles entre les mêmes tables) :
+// proposé dans le panneau, en un clic.
+function autreChemin(graphe, chemin) {
+  if (!chemin?.etapes?.length) return null
+  for (const e of chemin.etapes.slice(0, -1)) {
+    const autre = cheminLePlusCourt(graphe, chemin.depart, chemin.arrivee, new Set([e.vers]))
+    if (autre && autre.cout <= chemin.cout * 1.3 + 0.01) return { ...autre, evite: e.vers }
+  }
+  return null
 }
 
 // ---------------------------------------------------------------- dessin interactif
@@ -258,7 +275,7 @@ class VueGraphe {
     this.ecouter()
   }
 
-  demarrer() {
+  demarrer({ rapide = false } = {}) {
     const ajuster = () => {
       const r = this.toile.getBoundingClientRect()
       const ratio = window.devicePixelRatio || 1
@@ -274,8 +291,23 @@ class VueGraphe {
     if (premiere) for (let i = 0; i < 120; i++) this.simuler()
     if (this.allumage) this.preparerAllumage()
     this.toutVoir()
+    // L'arrivée : la vue part de tout près et dézoome jusqu'à tout montrer, pendant que les étoiles s'allument
+    // et que les chemins se tracent. En raccourci aux visites suivantes (l'allumage est déjà bien avancé).
+    if (this.allumage) {
+      if (rapide) this.allumage.debut -= 2000
+      this.arrivee = { debut: performance.now(), duree: rapide ? 900 : 3000, k: this.vue.k }
+      this.vue = { ...this.vue, k: this.vue.k * (rapide ? 1.6 : 4.5) }
+    }
     const boucle = () => {
       if (!this.toile.isConnected) return // écran quitté
+      if (this.arrivee) {
+        const p = Math.min(1, (performance.now() - this.arrivee.debut) / this.arrivee.duree)
+        const e = 1 - Math.pow(1 - p, 3)
+        const depart = this.arrivee.depart ??= this.vue.k
+        this.vue = { ...this.vue, k: depart + (this.arrivee.k - depart) * e }
+        if (p >= 1) this.arrivee = null
+        if (!(this.chaleur > 0.004 && !this.motif)) this.dessiner()
+      }
       if (this.transition) {
         this.avancerTransition()
         this.dessiner()
@@ -542,6 +574,7 @@ class VueGraphe {
           this.ajouterAuChemin(g.noeud)
         } else if ((e.ctrlKey || e.metaKey) && this.source && this.source !== g.noeud) {
           this.chemin = cheminLePlusCourt(this.graphe, this.source, g.noeud)
+          if (this.chemin) this.chemin.autre = autreChemin(this.graphe, this.chemin)
           this.rappels.surChemin(this.chemin || { depart: this.source, arrivee: g.noeud, etapes: null })
         } else {
           this.source = g.noeud
@@ -575,7 +608,7 @@ class VueGraphe {
       let morceau = direct ? [{ de: derniere, vers: n, lien: direct }] : null
       if (!morceau) {
         // Pas de lien direct : on part de la table du chemin la plus proche, pas forcément la dernière,
-        // pour ne pas repasser par des tables déjà prises (aller-retour ri → riperso → ri…).
+        // pour ne pas repasser par des tables déjà prises (aller-retour a → b → a…).
         const presentes = actuel ? [actuel.depart, ...actuel.etapes.map((e) => e.vers)] : [derniere]
         for (const depart of new Set(presentes)) {
           const essai = cheminLePlusCourt(this.graphe, depart, n)?.etapes
@@ -677,7 +710,10 @@ class VueGraphe {
       }
     }
     const focus = this.survol
-    const attenue = (n) => (focus ? n !== focus && !focus.voisins.has(n) : surChemin.size > 0 && !surChemin.has(n))
+    // Les voisines du chemin : les tables qu'on peut lui ajouter, gardées nettes et nommées.
+    const voisinesChemin = new Set()
+    for (const n of surChemin) for (const v of n.voisins) if (!surChemin.has(v)) voisinesChemin.add(v)
+    const attenue = (n) => (focus ? n !== focus && !focus.voisins.has(n) : surChemin.size > 0 && !surChemin.has(n) && !voisinesChemin.has(n))
 
     // Image du motif, légèrement transparente, qui apparaît en fondu une fois les bulles en place.
     if (this.image && !this.transition && imageConcombre?.complete) {
@@ -721,7 +757,8 @@ class VueGraphe {
       const surLeChemin = liensChemin.has(l)
       const actif = surLeChemin || l === this.lienChoisi || (focus && (l.a === focus || l.b === focus))
       c.strokeStyle = surLeChemin ? couleurs.chemin : actif ? couleurs.accent : couleurs.lien
-      c.globalAlpha = (actif ? 1 : focus || surChemin.size ? 0.1 : l.jointures.some((j) => j.libelle) ? 0.7 : 0.4) * (this.liensDiscrets && !actif ? 0.3 : 1)
+      const versVoisine = surChemin.size && ((surChemin.has(l.a) && voisinesChemin.has(l.b)) || (surChemin.has(l.b) && voisinesChemin.has(l.a)))
+      c.globalAlpha = (actif ? 1 : versVoisine ? 0.45 : focus || surChemin.size ? 0.18 : l.jointures.some((j) => j.libelle) ? 0.7 : 0.4) * (this.liensDiscrets && !actif ? 0.3 : 1)
       c.lineWidth = surLeChemin ? 3 : actif ? 1.6 : 0.8
       c.beginPath()
       c.moveTo(a.x, a.y)
@@ -776,7 +813,7 @@ class VueGraphe {
       const rayon = Math.max(2.5, n.rayon * Math.sqrt(k))
       if (p.x < -rayon - 80 || p.y < -rayon - 40 || p.x > r.width + rayon + 80 || p.y > r.height + rayon + 40) continue
       const pale = attenue(n)
-      let couleur = n === this.source ? couleurs.accent : surChemin.has(n) ? couleurs.chemin : n.niveau.ecran
+      let couleur = n === this.source ? couleurs.accent : surChemin.has(n) ? couleurs.chemin : n.type.ecran
       let eclat = 1
       let rayonVu = rayon
       if (this.allumage) {
@@ -786,7 +823,7 @@ class VueGraphe {
         couleur = melange('#ffffff', couleur, borne((t - n.allumage - 0.35) / 0.7))
         rayonVu = rayon * (0.4 + 0.6 * eclat)
       }
-      const opacite = (pale ? 0.15 : n.table.exclue ? 0.4 : 1) * eclat
+      const opacite = (pale ? (surChemin.size && !focus ? 0.5 : 0.3) : n.table.exclue ? 0.4 : 1) * eclat
       // Halo : la lueur douce d'une étoile.
       if (!pale && /^#[0-9a-f]{6}$/i.test(couleur)) {
         const halo = c.createRadialGradient(p.x, p.y, rayonVu * 0.6, p.x, p.y, rayonVu * 2.6)
@@ -816,7 +853,7 @@ class VueGraphe {
         c.fill()
       }
       // Noms : en zoomant, ou pour les tables importantes, survolées, choisies, sur le chemin.
-      const visible = k > 1.1 || n === focus || n === this.source || surChemin.has(n) || (focus && focus.voisins.has(n)) || (k > 0.45 && grands.has(n))
+      const visible = k > 1.1 || n === focus || n === this.source || surChemin.has(n) || voisinesChemin.has(n) || (focus && focus.voisins.has(n)) || (k > 0.45 && grands.has(n))
       if (visible && !pale && t > DUREE_ALLUMAGE - 1) {
         c.globalAlpha = (n.table.exclue ? 0.5 : 1) * borne(t - (DUREE_ALLUMAGE - 1))
         c.fillStyle = couleurs.texte
@@ -832,26 +869,6 @@ class VueGraphe {
     }
     c.globalAlpha = 1
   }
-}
-
-// Couleur d'une bulle selon son nombre de liens : les carrefours ressortent, les tables de passage
-// (1 ou 2 liens) restent discrètes. Les seuils suivent la base affichée : de 3 liens jusqu'au plus relié,
-// l'écart est coupé en trois. « ecran » pour le fond sombre, « papier » pour le PDF.
-function niveauxDu(noeuds) {
-  const max = Math.max(3, ...noeuds.map((n) => n.degre))
-  const pas = Math.max(1, Math.ceil((max - 2) / 3))
-  const fourchette = (de, a) => (de >= a ? `${de}` : `${de} à ${a}`)
-  const niveaux = [
-    { min: 3 + 2 * pas, nom: 'carrefour', ecran: '#ff4d4d', papier: '#e00000' },
-    { min: 3 + pas, nom: 'très reliée', ecran: '#c45bff', papier: '#9000d8' },
-    { min: 3, nom: 'reliée', ecran: '#3d9bff', papier: '#0066ff' },
-    { min: 0, nom: 'passage', ecran: '#8b95a7', papier: '#a3a9b4' },
-  ].filter((v, i, liste) => i === 0 || v.min < liste[i - 1].min) // petites bases : pas de niveau vide
-  niveaux.forEach((v, i) => {
-    const haut = i ? niveaux[i - 1].min - 1 : max
-    v.nom += ` (${v.min ? fourchette(v.min, haut) : fourchette(1, Math.min(2, haut))} liens)`
-  })
-  return niveaux
 }
 
 // La pluie de concombres derrière les bulles, tant que le motif « Concombre masqué » est affiché.
@@ -1003,18 +1020,14 @@ function reglagesSchema(vue, caseEcartees) {
 // ---------------------------------------------------------------- panneau de droite
 
 function aideSchema(graphe) {
+  // Les gestes sont dans le cadre « Raccourcis », sur le ciel : ici, seulement la légende.
+  const compte = (id) => graphe.noeuds.filter((n) => n.type.id === id).length
   return [
-    h('h2', { style: { marginBottom: '8px' } }, 'Mode d’emploi'),
-    h('ul', { class: 'texte-2', style: { paddingLeft: '18px', fontSize: '14px', margin: 0 } },
-      h('li', {}, 'Molette : zoomer. Glisser le fond : se déplacer. Glisser une bulle : la déplacer (elle reste là si « Figer en lâchant » est coché ; double-clic pour la libérer).'),
-      h('li', {}, 'Curseurs sous le graphe : force des liens et écartement des bulles. « Clés de liaison » : la clé écrite le long de chaque ligne.'),
-      h('li', {}, 'Clic sur une bulle : la décrire (c’est la source).'),
-      h('li', {}, 'Ctrl + clic sur une autre bulle : chemin le plus court, avec les clés de jointure.'),
-      h('li', {}, 'Ctrl + Maj + clic : construire le chemin soi-même, table par table.'),
-      h('li', {}, 'Clic sur un lien : le nommer et le décrire.'),
-    ),
-    h('p', { class: 'discret', style: { fontSize: '13px', marginTop: '12px' } },
-      'Taille et couleur d’une bulle : nombre de liens. ', graphe.niveaux.map((v, i) => [i ? ', ' : '', h('span', { style: { color: v.ecran, fontWeight: 600 } }, '● ', v.nom)]), '.'),
+    h('h2', { style: { marginBottom: '6px' } }, 'Constellation'),
+    h('p', { class: 'texte-2', style: { marginTop: 0, fontSize: '14px' } }, 'Cliquez une table pour la décrire, puis Ctrl + clic sur une autre pour le chemin qui les relie, avec ses jointures dans l’ordre.'),
+    h('h3', { style: { margin: '14px 0 6px', fontSize: '14px' } }, 'Couleur : le type de la table'),
+    h('ul', { class: 'legende-types' }, TYPES.map((v) => h('li', {}, h('span', { class: 'point-type', style: { background: v.ecran } }), h('b', {}, v.nom), h('span', { class: 'discret' }, ` · ${compte(v.id)} — ${v.aide}`)))),
+    h('p', { class: 'discret', style: { fontSize: '13px', marginTop: '10px' } }, 'Taille : le nombre de liens. Le type est deviné par BiRTEC ; l’administrateur le corrige dans le panneau d’une table.'),
   ]
 }
 
@@ -1049,6 +1062,7 @@ function panneauTable(n, vue) {
     h('label', { class: 'champ' }, h('span', {}, 'Nom clair'), enregistreur(h('input', { type: 'text', value: t.libelle || '', placeholder: 'ex. Rapport d’intervention' }), dico('libelle'))),
     h('label', { class: 'champ', style: { marginTop: '10px' } }, h('span', {}, 'Description (pour l’IA)'), enregistreur(h('textarea', { rows: 4 }, t.description || ''), dico('description'))),
     h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', marginTop: '10px' } }, coche, 'Prise en compte par l’IA'),
+    choixType(n, vue),
     h('p', { class: 'discret', style: { fontSize: '13px' } }, `${t.colonnes.length} colonnes, ${n.degre} table(s) liée(s) :`),
     h('div', { class: 'liste-voisins' }, [...n.voisins].sort((a, b) => a.table.nom.localeCompare(b.table.nom)).map((v) =>
       h('a', { href: '#', class: 'mono', title: v.table.libelle || '', onclick: (e) => { e.preventDefault(); vue.centrerSur(v, true) } }, v.table.nom))),
@@ -1057,6 +1071,20 @@ function panneauTable(n, vue) {
       h('a', { class: 'bouton petit discret', href: `#/base/${encodeURIComponent(t.nom)}` }, ic('table', 14), 'Colonnes')),
     ajoutLien(t),
   ]
+}
+
+// Le type de la table (sa couleur) : deviné par BiRTEC, corrigé ici par l'administrateur.
+function choixType(n, vue) {
+  const choisi = n.table.typeChoisi || ''
+  const liste = h('select', { disabled: !modeAdmin(), title: modeAdmin() ? '' : 'Modifiable en mode administrateur' },
+    h('option', { value: '', selected: !choisi }, `Deviné : ${n.type.nom}`),
+    TYPES.map((v) => h('option', { value: v.id, selected: choisi === v.id }, v.nom)))
+  liste.addEventListener('change', async () => {
+    await api('/api/schema/type', { methode: 'POST', corps: { table: n.table.nom, type: liste.value } })
+    notifier('Type enregistré : la constellation se recharge')
+    window.ktec.recharger()
+  })
+  return h('label', { class: 'champ', style: { marginTop: '10px' } }, h('span', {}, h('span', { class: 'point-type', style: { background: n.type.ecran } }), ' Type de table'), liste)
 }
 
 function panneauChemin(chemin, vue, panneau) {
@@ -1068,16 +1096,7 @@ function panneauChemin(chemin, vue, panneau) {
     return [h('h2', {}, 'Chemin'), h('p', { class: 'texte-2' }, `Aucun lien connu ne relie ${chemin.depart.table.nom} à ${chemin.arrivee.table.nom}. Ajoutez le lien manquant depuis l’une des deux tables.`)]
   }
   const tables = [chemin.depart, ...chemin.etapes.map((e) => e.vers)]
-  // Un chemin construit à la main peut repasser par une table (aller-retour) : elle n'est jointe
-  // et téléchargée qu'une fois, sinon le SQL joindrait deux fois la même table sans alias.
-  const vues = new Set([chemin.depart.table.nom])
-  const utiles = chemin.etapes.filter((e) => !vues.has(e.vers.table.nom) && vues.add(e.vers.table.nom))
-  const distinctes = [...vues]
-  const jointures = utiles.map((e) => e.lien.jointures[0])
-  const sql = `FROM ${chemin.depart.table.nom}\n${utiles.map((e) => {
-    const j = e.lien.jointures[0]
-    return `JOIN ${e.vers.table.nom} ON ${j.de}.${j.colonne} = ${j.vers}.${j.versColonne}`
-  }).join('\n')}`
+  const { sql, jointures, distinctes, erreur } = sqlDuChemin(chemin)
   const dejaVue = (n, i) => tables.findIndex((t) => t.table.nom === n.table.nom) < i
   return [
     h('h2', { style: { marginBottom: '4px' } }, chemin.manuel ? 'Chemin construit' : 'Chemin le plus court'),
@@ -1088,7 +1107,14 @@ function panneauChemin(chemin, vue, panneau) {
       dejaVue(n, i) ? h('span', { class: 'discret' }, ' — déjà dans le chemin') : n.table.libelle ? h('span', { class: 'discret' }, ` — ${n.table.libelle}`) : null))),
     h('h3', { style: { margin: '12px 0 6px' } }, 'Clés'),
     h('ul', { class: 'chemin-cles' }, jointures.map((j) => h('li', {}, h('span', { class: 'mono' }, `${j.de}.${j.colonne} = ${j.vers}.${j.versColonne}`), j.libelle ? h('div', { class: 'discret', style: { fontSize: '12px' } }, j.libelle) : null))),
+    erreur ? h('div', { class: 'bandeau', style: { marginTop: '8px' } }, ic('alerte'), erreur) : null,
     h('pre', { class: 'code', 'data-langue': 'sql', style: { marginTop: '10px' } }, h('code', {}, sql)),
+    chemin.autre ? h('button', { class: 'petit discret', title: 'Un chemin presque aussi court, par d’autres tables', onclick: () => {
+      const autre = { ...chemin.autre, autre: { ...chemin, autre: null } }
+      vue.chemin = autre
+      vue.rappels.surChemin(autre)
+      vue.dessiner()
+    } }, ic('reseau', 14), `Autre chemin : par ${chemin.autre.etapes.slice(0, -1).map((e) => e.vers.table.nom).join(', ') || 'un lien direct'}`) : null,
     h('div', { class: 'actions' },
       h('button', { class: 'petit', onclick: () => navigator.clipboard.writeText(sql).then(() => notifier('Jointures copiées')) }, ic('copier', 14), 'Copier'),
       h('button', { class: 'petit', title: 'Les données de toutes les tables du chemin', onclick: () => extraireTables(distinctes) }, ic('telecharger', 14), `Télécharger les ${distinctes.length} tables`),
@@ -1096,6 +1122,33 @@ function panneauChemin(chemin, vue, panneau) {
       h('button', { class: 'petit discret', onclick: () => { vue.effacerChemin(); vider(panneau, panneauTable(chemin.depart, vue)) } }, ic('x', 14), 'Effacer'),
     ),
   ]
+}
+
+// Le SQL d'un chemin, dans un ordre que BIRT accepte : on part de la première table, et une jointure n'ajoute sa
+// table que quand l'autre table de son lien est déjà jointe (sinon elle attend son tour). Une table déjà jointe
+// n'est pas jointe une deuxième fois (aller-retour d'un chemin construit à la main).
+export function sqlDuChemin(chemin) {
+  const depart = chemin.depart.table.nom
+  const jointes = new Set([depart])
+  const restants = [...new Set(chemin.etapes.map((e) => e.lien))]
+  const ordre = []
+  while (restants.length) {
+    const i = restants.findIndex((l) => jointes.has(l.a.table.nom) !== jointes.has(l.b.table.nom))
+    if (i < 0) break
+    const [lien] = restants.splice(i, 1)
+    const table = jointes.has(lien.a.table.nom) ? lien.b.table.nom : lien.a.table.nom
+    jointes.add(table)
+    ordre.push({ table, j: lien.jointures[0] })
+    // Les liens dont les deux tables sont déjà jointes ne servent plus.
+    for (let k = restants.length - 1; k >= 0; k--) if (jointes.has(restants[k].a.table.nom) && jointes.has(restants[k].b.table.nom)) restants.splice(k, 1)
+  }
+  const sql = `SELECT *\nFROM ${depart}\n${ordre.map(({ table, j }) => `LEFT JOIN ${table} ON ${j.de}.${j.colonne} = ${j.vers}.${j.versColonne}`).join('\n')}`
+  return {
+    sql,
+    jointures: ordre.map((o) => o.j),
+    distinctes: [...jointes],
+    erreur: restants.length ? `${restants.length} lien(s) sans table déjà jointe : le chemin n’est pas d’un seul tenant.` : null,
+  }
 }
 
 function panneauLien(l) {
@@ -1171,7 +1224,7 @@ function pageConstellation(graphe, vue, schema) {
   const bulles = noeuds.map((n) => {
     const classe = surChemin.has(n) ? 'chemin' : n.table.exclue ? 'ecartee' : ''
     const grand = n.degre > 8 ? 1.25 : 1
-    return `<g class="${classe}"><circle cx="${n.x}" cy="${n.y}" r="${rayon(n)}" fill="${n.niveau.papier}"/>`
+    return `<g class="${classe}"><circle cx="${n.x}" cy="${n.y}" r="${rayon(n)}" fill="${n.type.papier}"/>`
       + `<text x="${n.x}" y="${n.y + rayon(n) + taille * 1.1}" font-size="${grand * taille}">${x(n.table.nom)}</text>`
       + (n.table.libelle && n.degre > 3 ? `<text class="libelle" x="${n.x}" y="${n.y + rayon(n) + taille * 2}" font-size="${taille * 0.7}">${x(n.table.libelle)}</text>` : '')
       + '</g>'
@@ -1217,11 +1270,11 @@ function pageConstellation(graphe, vue, schema) {
 <g class="pied">
   ${legendeChemin}
   <line x1="10" y1="277" x2="410" y2="277" stroke="#e5e7eb" stroke-width="0.3"/>
-  <text x="10" y="283.2">Nombre de liens :</text>
-  ${graphe.niveaux.map((v, i) => pastille(40 + i * 50, v.papier, v.nom)).join('')}
-  ${pastille(244, '#e5e7eb', 'écartée de l’IA')}
-  ${pastille(280, '#f59e0b', 'chemin choisi')}
-  <text x="318" y="283.2">Trait vert : lien nommé.</text>
+  <text x="10" y="283.2">Type de table :</text>
+  ${TYPES.map((v, i) => pastille(36 + i * 34, v.papier, v.nom)).join('')}
+  ${pastille(212, '#e5e7eb', 'écartée de l’IA')}
+  ${pastille(250, '#f59e0b', 'chemin choisi')}
+  <text x="290" y="283.2">Taille : nombre de liens. Trait vert : lien nommé.</text>
 </g>
 </svg>`
   return { svg, base }

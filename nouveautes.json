@@ -1,6 +1,18 @@
 {
   "versions": [
     {
+      "version": "0.9.8",
+      "date": "2026-10-31",
+      "points": [
+        "BiRTEC s'ouvre sur la constellation (l'accueil est retiré), avec une arrivée animée : dézoom, fond en fondu, liens qui se tracent",
+        "Les tables sont colorées par type : principale, secondaire, intermédiaire, référentiel, technique ; l'administrateur corrige le type",
+        "Chemins : la table de liaison qui réunit les deux tables passe avant (la table faite pour relier les deux tables plutôt qu'une autre), un autre chemin proche est proposé",
+        "Le SQL d'un chemin part de la première table (SELECT * FROM …) et ses jointures sont toujours dans un ordre accepté par BIRT",
+        "Pendant un chemin, les tables voisines restent nettes et nommées ; le mode d'emploi est fusionné avec les raccourcis",
+        "Les indicateurs s'appellent désormais « Indicateurs GMAO »"
+      ]
+    },
+    {
       "version": "0.9.7",
       "date": "2026-10-28",
       "points": [
@@ -59,7 +71,7 @@
       "points": [
         "Rapports en blocs : tableaux, graphiques, tableaux croisés, chiffres clés",
         "SQL libre, colonnes calculées, mises en évidence",
-        "Indicateur ITM sur un écran à part, conversion rapport ↔ indicateur",
+        "Indicateur GMAO sur un écran à part, conversion rapport ↔ indicateur",
         "Conditions ET / OU en groupes"
       ]
     },
