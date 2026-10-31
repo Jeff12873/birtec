@@ -10,7 +10,8 @@ import { journal } from 'ktec/installation.js'
 import { lireInfo, ecrireInfo, listerIndicateurs, enregistrerIndicateur, supprimerIndicateur, listerNotes, listerRequetes } from 'ktec/ktec.js'
 import { obtenirSchema, tablesUtiles, decrireTables, connaissancesUtiles, tablesDesConventions } from '../base/schema.js'
 import { verifierSQL } from '../base/verification.js'
-import { extraireJson } from '../rapports/serveur.js'
+import { extraireJson, resumerParIA, tablesDuSql } from '../rapports/serveur.js'
+import { lirePreference, ecrirePreference } from 'ktec/preferences.js'
 import { REGLAGES_VIDES, verifierDefinition, assembler, remplacerVariables, trouverFenetre, normaliser, deduireFenetres } from './indicateur.js'
 
 // Le nom de la clé des réglages dans les fichiers .ktec déjà existants (on ne la renomme pas).
@@ -43,6 +44,34 @@ export function routes(r) {
   })
 
   r.get('/api/indicateurs/indicateurs', () => listerIndicateurs())
+
+  // Les vignettes : chaque indicateur avec sa description courte et son chemin dans la constellation (enregistré
+  // à la création, sinon retrouvé dans ses requêtes). La description corrigée par l'administrateur est dans le
+  // .ktec ; celle écrite par l'IA est gardée sur le poste.
+  r.get('/api/indicateurs/vignettes', () => {
+    const corrigees = lireInfo('resumes_indicateurs', {}) || {}
+    const ecrites = lirePreference('resumes_indicateurs', {}) || {}
+    return listerIndicateurs().map((i) => ({
+      id: i.id, nom: i.nom, fenetre: i.fenetre, modifie: i.modifie, source: i.source,
+      resume: corrigees[i.id] || (ecrites[i.id]?.modifie === i.modifie ? ecrites[i.id].texte : ''),
+      constellation: i.definition?.constellation || tablesDuSql([i.requeteIndicateur, i.requeteListe]),
+    }))
+  })
+
+  // { texte? } : sans texte, l'IA écrit la description (gardée sur le poste) ; avec, l'administrateur la corrige.
+  r.post('/api/indicateurs/indicateurs/:id/resume', async (ctx) => {
+    const i = listerIndicateurs().find((x) => String(x.id) === ctx.params.id)
+    if (!i) throw new ErreurHttp(404, 'Indicateur introuvable.')
+    const { texte } = await ctx.json().catch(() => ({}))
+    if (texte !== undefined) {
+      ctx.exigerModeAdmin?.()
+      ecrireInfo('resumes_indicateurs', { ...(lireInfo('resumes_indicateurs', {}) || {}), [i.id]: String(texte).trim().slice(0, 400) })
+      return { resume: String(texte).trim() }
+    }
+    const resume = (await resumerParIA('indicateur', `NOM : ${i.nom}\nFENÊTRE DE LA GMAO : ${i.fenetre || ''}\nDEMANDE : ${i.demande || ''}\nREQUÊTE : ${String(i.requeteIndicateur || '').slice(0, 1200)}`)) || `${i.nom}${i.fenetre ? ` — fenêtre ${i.fenetre}` : ''}.`
+    ecrirePreference('resumes_indicateurs', { ...(lirePreference('resumes_indicateurs', {}) || {}), [i.id]: { texte: resume, modifie: i.modifie } })
+    return { resume }
+  })
 
   r.post('/api/indicateurs/indicateurs', async (ctx) => {
     const indicateur = await ctx.json()

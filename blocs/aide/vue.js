@@ -6,7 +6,7 @@ import { h, vider } from '/socle/ui.js'
 const PAGES = [
   ['premiers-pas', 'Premiers pas'],
   ['assistant', 'Question libre (IA)'],
-  ['constructeur', 'Nouveau rapport (formulaire)'],
+  ['constructeur', 'Le formulaire (rapport, indicateur)'],
   ['rapports', 'Rapports : voir, exporter'],
   ['indicateurs', 'Indicateurs GMAO'],
   ['base', 'Base de données et dictionnaire'],

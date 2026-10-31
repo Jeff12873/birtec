@@ -1,9 +1,9 @@
 <h1>Rapports : créer, voir, exporter</h1>
-<h2>Créer un rapport</h2>
-<ul>
-<li><b>Avec l'assistant</b> : décrivez le rapport (contenu, période, regroupements, totaux). Quand tout est clair, l'IA termine par une description du rapport ; le bouton <b>Créer le rapport</b> la transforme en fichier .rptdesign.</li>
-<li><b>En le décrivant avec vos mots</b> (bouton « Décrire un rapport » de l’écran Rapports) : l'éditeur de rapport se remplit tout seul. Une description technique (JSON) y est aussi acceptée. « Modifier » rouvre l'éditeur (blocs, champs ou SQL libre).</li>
-</ul>
+<h2>Les vignettes</h2>
+<p>Chaque rapport est une vignette : son titre, deux lignes de description (écrites une fois par l'IA, corrigeables par l'administrateur avec le crayon), son contenu et sa date. Un clic ouvre le rapport à droite : paramètres, aperçu, export.</p>
+<p>La <b>petite constellation</b> d'une vignette montre les tables du rapport (enregistrées s'il vient de la constellation, sinon lues dans son SQL). En mode administrateur, un clic dessus propose de le <b>rouvrir dans la constellation</b> : son chemin et ses filtres s'allument, et « Et maintenant ? › Mettre à jour » rouvre son formulaire avec le chemin du jour.</p>
+<h2>Créer un rapport (administrateur)</h2>
+<p>On part de la <b>constellation</b> : construisez le chemin (avec LA PHRASE ou à la main), puis <b>Et maintenant ? › Créer un rapport</b>. Le formulaire s'ouvre déjà rempli d'après la phrase ; choisissez la présentation (tableau, graphique, tableau croisé) et enregistrez. « Modifier » rouvre le formulaire d'un rapport existant.</p>
 <p>BiRTEC vérifie le fichier dans le moteur BIRT puis le fait tourner avec les valeurs par défaut des paramètres. En cas d'erreur (colonne inconnue, faute dans la requête…), l'IA corrige la description, deux fois au plus.</p>
 <h2>Description d'un rapport</h2>
 <pre class="code"><code>{

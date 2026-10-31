@@ -1,10 +1,10 @@
-// Rapports : la liste des rapports créés par BiRTEC, leur aperçu (avec les paramètres) et leur export
-// au format choisi. Un rapport se crée depuis l'assistant (bouton « Créer le rapport ») ou ici, en
-// collant sa description.
+// Rapports : les rapports créés par BiRTEC en vignettes (interface/creations.js), leur aperçu (avec les
+// paramètres) et leur export au format choisi. Un rapport se crée depuis la constellation (« Et maintenant ? »).
 
-import { h, vider, ic, essayer, notifier, confirmer, fenetre, dateHeureFr, deuxPanneaux } from '/socle/ui.js'
+import { h, vider, ic, essayer, notifier, confirmer, fenetre, dateHeureFr } from '/socle/ui.js'
 import { api, adresse } from '/socle/api.js'
-import { etat } from '/socle/etat.js'
+import { etat, modeAdmin } from '/socle/etat.js'
+import { ecranCreations, texteContenu, rouvrirDansLaConstellation } from '../../interface/creations.js'
 import { demanderMotDePasse } from '../configuration/vue.js'
 
 let formatChoisi = 'pdf'
@@ -24,32 +24,23 @@ export default {
 
   async afficher(zone, { id }) {
     const rapports = await api('/api/rapports')
-    const liste = h('div', { class: 'liste-tables' },
-      rapports.length
-        ? rapports.map((r) => h('a', { href: `#/rapports/${encodeURIComponent(r.nom)}`, class: r.nom === id ? 'actif' : '', title: `Modifié ${dateHeureFr(r.modifie)}` }, ic('document', 14), ' ', r.titre))
-        : h('p', { class: 'discret' }, 'Aucun rapport pour l’instant.'))
-    const detail = h('div', { class: 'grille' })
-
-    vider(
-      zone,
-      h('div', { class: 'entete-page' },
-        h('div', {}, h('h1', {}, 'Rapports'), h('p', { class: 'sous-titre' }, 'Rapports BIRT créés par BiRTEC : aperçu, export, fichier .rptdesign')),
-        h('div', { class: 'actions' },
-          h('a', { class: 'bouton principal', href: '#/constructeur/rapport' }, ic('plus', 16), 'Nouveau rapport'),
-          h('button', { class: 'discret', onclick: () => { sessionStorage.setItem('birtec-question', 'Je veux créer un rapport BIRT. Pose-moi les questions utiles (contenu, période, regroupements, totaux), puis donne sa description.'); location.hash = '#/assistant' } }, ic('etincelle', 16), 'Avec l’assistant'),
-          h('button', { class: 'discret', onclick: () => creerDepuisDescription(), title: 'Décrire le rapport en quelques phrases : le formulaire se remplit tout seul' }, ic('plus', 16), 'Décrire un rapport'),
-        ),
-      ),
-      deuxPanneaux(
-        h('div', { class: 'carte', style: { padding: '12px' } }, liste),
-        detail,
-        { cle: 'rapports', largeur: 380 },
-      ),
-    )
-
-    if (id && rapports.some((r) => r.nom === id)) await afficherRapport(detail, id)
-    else vider(detail, h('div', { class: 'carte' }, h('p', { class: 'texte-2' },
-      rapports.length ? 'Choisissez un rapport à gauche.' : 'Aucun rapport pour l’instant : « Nouveau rapport » pour en créer un en quelques clics.')))
+    const elements = rapports.map((r) => ({ id: r.nom, titre: r.titre, resume: r.resume, meta: texteContenu(r.contenu), modifie: r.modifie, constellation: r.constellation }))
+    await ecranCreations(zone, {
+      titre: 'Rapports',
+      sousTitre: 'Les rapports BIRT du site : aperçu, export, fichier .rptdesign',
+      elements,
+      choisi: elements.find((e) => e.id === id) || null,
+      lien: (e) => `#/rapports/${encodeURIComponent(e.id)}`,
+      detail: async (e) => {
+        const div = h('div', { class: 'grille' })
+        await afficherRapport(div, e.id)
+        return div
+      },
+      ecrireResume: (e) => api(`/api/rapports/${encodeURIComponent(e.id)}/resume`, { methode: 'POST', corps: {} }).then((r) => r.resume),
+      corrigerResume: (e, texte) => api(`/api/rapports/${encodeURIComponent(e.id)}/resume`, { methode: 'POST', corps: { texte } }).then((r) => r.resume),
+      rouvrir: (e) => rouvrirDansLaConstellation(e.constellation, { type: 'rapport', nom: e.id, titre: e.titre }),
+      vide: modeAdmin() ? 'Aucun rapport pour l’instant : construisez un chemin dans la constellation, puis « Et maintenant ? › Créer un rapport ».' : 'Aucun rapport pour l’instant.',
+    })
   },
 }
 
@@ -116,14 +107,14 @@ async function afficherRapport(zone, nom) {
         h('h2', {}, ic('document', 18), rapport.titre || nom),
         h('div', { class: 'actions' },
           h('a', { class: 'bouton petit discret', href: adresse(`/api/rapports/${encodeURIComponent(nom)}/fichier`), title: 'Le fichier à ouvrir dans BIRT ou à déposer dans la GMAO' }, ic('telecharger', 14), '.rptdesign'),
-          rapport.description?.constructeur
+          !modeAdmin() ? null : rapport.description?.constructeur
             ? h('button', { class: 'petit discret', onclick: () => modifier(rapport.description, nom) }, ic('crayon', 14), 'Modifier')
             : rapport.description ? h('button', { class: 'petit discret', onclick: () => creerDepuisDescription(rapport.description, nom) }, ic('crayon', 14), 'Modifier') : null,
-          h('button', { class: 'petit discret danger', onclick: () => supprimer(nom) }, ic('poubelle', 14), 'Supprimer'),
+          modeAdmin() ? h('button', { class: 'petit discret danger', onclick: () => supprimer(nom) }, ic('poubelle', 14), 'Supprimer') : null,
         ),
       ),
       champs.length ? h('div', { class: 'parametres-rapport' }, champs.map((c) => c.element)) : null,
-      rapport.description ? await reglagesAspect(nom, rapport.description, apercu) : null,
+      rapport.description && modeAdmin() ? await reglagesAspect(nom, rapport.description, apercu) : null,
       h('div', { class: 'actions', style: { marginTop: '12px' } },
         h('button', { class: 'principal', onclick: apercu }, ic('oeil', 16), 'Aperçu'),
         h('span', { style: { flex: 1 } }),

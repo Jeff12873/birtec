@@ -195,5 +195,52 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 
 /* Constellation : légende des types de tables */
 .legende-types { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13px; }
-.legende-types li { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.legende-types li { display: block; }
+.legende-types .point-type { margin-right: 6px; }
 .point-type { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: 0 0 6px currentColor; vertical-align: middle; }
+
+/* LA PHRASE : le bandeau au-dessus de la constellation */
+.bandeau-phrase { margin-bottom: 14px; display: grid; gap: 10px; }
+.ligne-saisie-phrase { display: flex; align-items: center; gap: 10px; }
+.ligne-saisie-phrase > svg { color: var(--accent); flex: none; }
+.saisie-phrase { flex: 1; font-size: 15px; padding: 10px 14px; }
+.phrase-construite { font-size: 18px; line-height: 2.1; }
+.phrase-construite:empty, .filtres-phrase:empty, .resultat-phrase:empty { display: none; }
+.table-phrase { background: none; border: 0; padding: 0 2px; font: inherit; font-weight: 700; color: var(--accent); cursor: pointer; border-bottom: 2px dotted currentColor; }
+.pastille-choix { font: inherit; font-size: 15px; padding: 3px 12px; border-radius: 99px; border: 1.5px dashed #f59e0b; background: color-mix(in srgb, #f59e0b 10%, transparent); color: var(--texte); cursor: pointer; margin: 0 2px; max-width: 320px; }
+.pastille-choix.choisie { border-style: solid; background: color-mix(in srgb, #f59e0b 22%, transparent); font-weight: 600; }
+.pastille-choix.libre { cursor: text; width: 200px; }
+.filtres-phrase { display: flex; flex-wrap: wrap; gap: 8px; }
+.etiquette-filtre { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: 99px; border: 1px solid #f59e0b; background: color-mix(in srgb, #f59e0b 12%, transparent); font-size: 13px; }
+.etiquette-filtre svg { color: #f59e0b; }
+.compteur-phrase { font-size: 14px; }
+.compteur-phrase b { font-size: 22px; color: var(--accent); margin-right: 4px; }
+.apercu-phrase { margin-top: 8px; max-height: 220px; }
+.sql-phrase summary { cursor: pointer; color: var(--texte-3); font-size: 13px; margin-top: 8px; }
+.et-maintenant { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--bord); }
+.et-maintenant h3 { display: flex; align-items: center; gap: 6px; font-size: 14px; margin: 0 0 8px; }
+.et-maintenant h3 svg { color: var(--accent); }
+
+/* Mes créations (Rapports, Indicateurs GMAO) : vignettes, détail à droite */
+.entete-centree { justify-content: center; text-align: center; }
+.entete-centree h1 { flex: none; }
+.creations { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
+.creations.avec-detail { grid-template-columns: minmax(240px, 300px) 1fr; }
+.grille-creations { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.creations.avec-detail .grille-creations { grid-template-columns: 1fr; max-height: calc(100vh - 180px); overflow: auto; padding-right: 4px; }
+.vignette-creation { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-radius: var(--rayon-carte, 14px); border: 1px solid var(--bord); background: var(--carte); color: var(--texte); text-decoration: none; transition: border-color .15s, transform .15s; }
+.vignette-creation:hover { border-color: var(--accent); transform: translateY(-2px); text-decoration: none; }
+.vignette-creation:hover * { text-decoration: none; }
+.vignette-creation.choisie { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.tete-creation { display: flex; align-items: flex-start; gap: 10px; }
+.tete-creation h3 { flex: 1; margin: 0; font-size: 15px; }
+.resume-creation { margin: 0; font-size: 13px; color: var(--texte-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.6em; }
+.pied-creation { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--texte-3); }
+.pied-creation span { flex: 1; }
+.bouton-constellation { flex: none; padding: 2px; border: 1px solid transparent; border-radius: 10px; background: #04070f; cursor: pointer; line-height: 0; }
+.bouton-constellation:hover { border-color: var(--accent); }
+.mini-constellation { width: 72px; height: 44px; }
+.mini-constellation line { stroke: #6f8c79; stroke-width: .8; opacity: .7; }
+.mini-constellation circle { animation: scintille 2.4s ease-in-out infinite; }
+@keyframes scintille { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .mini-constellation circle { animation: none; } }

@@ -34,12 +34,40 @@ export function routes(r) {
       .filter((f) => f.endsWith('.rptdesign'))
       .map((f) => {
         const xml = fs.readFileSync(path.join(dossier, f), 'utf8')
-        return { nom: f.replace(/\.rptdesign$/, ''), titre: lireTitre(xml) || f, modifie: fs.statSync(path.join(dossier, f)).mtime.toISOString() }
+        const description = lireJson(path.join(dossier, f.replace(/\.rptdesign$/, '.birtec.json')))
+        return {
+          nom: f.replace(/\.rptdesign$/, ''),
+          titre: lireTitre(xml) || f,
+          modifie: fs.statSync(path.join(dossier, f)).mtime.toISOString(),
+          resume: description?.resume || '',
+          contenu: contenuDe(description),
+          // Le chemin de la constellation : enregistré à la création, sinon retrouvé dans le SQL du rapport.
+          constellation: description?.constructeur?.constellation || tablesDuSql(requetesDuXml(xml)),
+        }
       })
       .sort((a, b) => b.modifie.localeCompare(a.modifie))
   })
 
   r.get('/api/rapports/formats', () => FORMATS)
+
+  // La description courte d'un rapport (vignette) : écrite une fois par l'IA puis gardée avec le rapport ;
+  // { texte } la remplace (administrateur).
+  r.post('/api/rapports/:nom/resume', async (ctx) => {
+    const fichier = fichierRapport(ctx.params.nom)
+    const fichierDescription = fichier.replace(/\.rptdesign$/, '.birtec.json')
+    const description = lireJson(fichierDescription) || {}
+    const { texte } = await ctx.json().catch(() => ({}))
+    if (texte !== undefined) {
+      ctx.exigerModeAdmin?.()
+      description.resume = String(texte).trim().slice(0, 400)
+    } else if (!description.resume) {
+      const xml = fs.readFileSync(fichier, 'utf8')
+      description.resume = await resumerParIA('rapport', `TITRE : ${lireTitre(xml) || ctx.params.nom}\n${resumeDesBlocs(description)}\nSQL : ${requetesDuXml(xml).join('\n').slice(0, 1500)}`)
+        || resumeAutomatique(lireTitre(xml) || ctx.params.nom, description)
+    }
+    fs.writeFileSync(fichierDescription, JSON.stringify(description, null, 2) + '\n')
+    return { resume: description.resume }
+  })
 
   r.get('/api/rapports/:nom', (ctx) => {
     const fichier = fichierRapport(ctx.params.nom)
@@ -307,6 +335,50 @@ export function extraireJson(texte) {
 }
 
 // ---------------------------------------------------------------- lecture d'un .rptdesign
+
+// ---------------------------------------------------------------- vignettes des rapports
+
+// Ce que contient un rapport créé par BiRTEC : { tableau: 2, graphique: 1… }.
+function contenuDe(description) {
+  const compte = {}
+  for (const b of description?.constructeur?.blocs || description?.blocs || []) if (b.type && b.type !== 'saut') compte[b.type] = (compte[b.type] || 0) + 1
+  return compte
+}
+
+const resumeDesBlocs = (description) => (description?.constructeur?.blocs || []).map((b) => `- ${b.type}${b.titre ? ` « ${b.titre} »` : ''}${b.etat?.sujet ? ` sur ${b.etat.sujet}` : ''}`).join('\n')
+
+function resumeAutomatique(titre, description) {
+  const c = contenuDe(description)
+  const NOMS = { tableau: 'tableau', graphique: 'graphique', croise: 'tableau croisé', chiffre: 'chiffre clé', texte: 'texte' }
+  const parties = Object.entries(c).map(([type, n]) => `${n} ${NOMS[type] || type}${n > 1 ? 's' : ''}`)
+  return parties.length ? `${titre} : ${parties.join(', ')}.` : titre
+}
+
+// Les requêtes d'un .rptdesign (jeux de données).
+export function requetesDuXml(xml) {
+  return [...String(xml).matchAll(/name="queryText">(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/(?:xml-)?property>/g)].map((m) => m[1].replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'))
+}
+
+// Les tables citées par des requêtes (FROM, JOIN), dans l'ordre : de quoi dessiner la mini constellation.
+export function tablesDuSql(requetes) {
+  const tables = []
+  for (const sql of requetes) for (const m of String(sql).matchAll(/\b(?:FROM|JOIN)\s+`?([A-Za-z_][\w]*)`?/gi)) if (!tables.includes(m[1]) && !/^(select|dual)$/i.test(m[1])) tables.push(m[1])
+  return tables.length ? { tables: tables.slice(0, 10), deduite: true } : null
+}
+
+// Deux phrases courtes sur ce que montre un rapport ou un indicateur, pour sa vignette (null sans IA).
+export async function resumerParIA(quoi, contenu) {
+  if (!iaInstallee()) return null
+  try {
+    const texte = await discuter([
+      { role: 'system', content: `Tu décris en deux phrases courtes (30 mots au plus en tout) ce que montre ce ${quoi} à un agent de maintenance : ce qu'on y voit, pour quoi faire. En français simple, sans nom de table, sans SQL, sans guillemets. Réponds seulement par les deux phrases.` },
+      { role: 'user', content: contenu },
+    ], { temperature: 0.2, maxMots: 60 })
+    return texte.trim().replace(/^["«\s]+|["»\s]+$/g, '').slice(0, 400) || null
+  } catch {
+    return null
+  }
+}
 
 function lireTitre(xml) {
   return decoder(xml.match(/<text-property name="title">([^<]*)<\/text-property>/)?.[1] || '')

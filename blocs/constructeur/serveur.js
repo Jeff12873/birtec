@@ -289,7 +289,7 @@ export function routes(r) {
   // Le même formulaire donne un indicateur GMAO : le sujet est la table comptée, les filtres font le WHERE.
   // BiRTEC écrit la requête indicateur et la requête liste, les essaie, et les range dans le .ktec.
   admin.post('/api/constructeur/indicateur', async (ctx) => {
-    const { etat, nom, dateIndicateur = null, arborescence = true, enregistrer = false, id: idExistant = null } = await ctx.json()
+    const { etat, nom, dateIndicateur = null, arborescence = true, enregistrer = false, id: idExistant = null, constellation = null } = await ctx.json()
     const cat = await catalogue(etat.sujet)
     const reglages = await reglagesIndicateurs()
     const fenetre = trouverFenetre(reglages, cat.sujet.table)
@@ -313,7 +313,7 @@ export function routes(r) {
     const essai = etatConnexion().ouverte ? await tester(requeteIndicateur, requeteListe) : { erreurs: [], avertissements: ['Connexion à la GMAO indisponible : requêtes non essayées.'] }
     let id = null
     if (enregistrer && !essai.erreurs.length) {
-      id = enregistrerIndicateur({ id: idExistant || undefined, nom: nomFinal, fenetre: fenetre.libelle, demande: 'Créé avec le formulaire « Nouvel indicateur »', definition: { constructeur: etat, dateIndicateur, arborescence }, requeteIndicateur, requeteListe, source: 'formulaire' })
+      id = enregistrerIndicateur({ id: idExistant || undefined, nom: nomFinal, fenetre: fenetre.libelle, demande: 'Créé avec le formulaire « Nouvel indicateur »', definition: { constructeur: etat, dateIndicateur, arborescence, ...(constellation ? { constellation } : {}) }, requeteIndicateur, requeteListe, source: 'formulaire' })
     }
     return { id, nom: nomFinal, fenetre: fenetre.libelle, variableArbo: fenetre.variableArbo || null, requeteIndicateur, requeteListe, ...essai }
   })

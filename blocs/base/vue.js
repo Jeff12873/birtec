@@ -127,12 +127,14 @@ function afficherTable(zone, table, console_) {
 
 // Télécharge les tables (données en CSV, structure et lisez-moi) dans un fichier .zip.
 // Réutilisé par la Constellation.
-export async function extraireTables(tables) {
+// L'extraction pour Excel : un zip avec les CSV (dossier sources), le classeur Power Query (analyse.xlsx) et,
+// depuis un chemin de la constellation, son image (image : data:image/png) et son SQL.
+export async function extraireTables(tables, { image = null, sql = '' } = {}) {
   if (!tables.length) return notifier('Aucune table choisie.', 'erreur')
   if (!etat.connexion.ouverte) await demanderMotDePasse().catch(() => {})
   notifier(`Extraction de ${tables.length} table(s)…`)
   try {
-    const reponse = await fetch(adresse('/api/extraction'), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-KTEC': '1' }, body: JSON.stringify({ tables }) })
+    const reponse = await fetch(adresse('/api/extraction'), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-KTEC': '1' }, body: JSON.stringify({ tables, image, sql }) })
     if (!reponse.ok) throw new Error((await reponse.json().catch(() => ({}))).erreur || `Erreur ${reponse.status}`)
     const nom = decodeURIComponent((reponse.headers.get('Content-Disposition') || '').match(/filename\*=UTF-8''([^;]+)/)?.[1] || 'extraction.zip')
     const lien = h('a', { href: URL.createObjectURL(await reponse.blob()), download: nom })

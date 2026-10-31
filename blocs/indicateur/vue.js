@@ -21,6 +21,7 @@ export default {
   titre: 'Nouvel indicateur',
   icone: 'graphique',
   menu: false,
+  admin: true, // créer un indicateur demande d'écrire du SQL
   aide: 'indicateurs',
   rafraichir: false,
 
@@ -40,6 +41,7 @@ export default {
         dateIndicateur: r.dateIndicateur || '',
         arborescence: r.arborescence !== false,
         id: r.id || null,
+        constellation: r.constellation || null, // venu de la constellation : gardé avec l'indicateur
       }
     }
     brouillon ||= nouveau()
@@ -134,7 +136,7 @@ export default {
       vider(formulaire, etapes)
     }
 
-    const corps = (enregistrer) => ({ etat: e, nom: `[${b.categorie || 'Divers'}] - ${b.nomCourt || catalogue?.sujet.libelle || 'Indicateur'}`, dateIndicateur: b.dateIndicateur || null, arborescence: b.arborescence, enregistrer, id: b.id })
+    const corps = (enregistrer) => ({ etat: e, nom: `[${b.categorie || 'Divers'}] - ${b.nomCourt || catalogue?.sujet.libelle || 'Indicateur'}`, dateIndicateur: b.dateIndicateur || null, arborescence: b.arborescence, enregistrer, id: b.id, constellation: b.constellation || null })
 
     async function rafraichir() {
       const entete = h('div', { class: 'carte-entete' },

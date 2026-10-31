@@ -69,7 +69,8 @@ export default {
   chemin: 'constructeur',
   titre: 'Nouveau',
   icone: 'plus',
-  menu: 'admin',
+  menu: false, // on crée depuis la constellation (« Et maintenant ? ») ; « Modifier » rouvre ce formulaire
+  admin: true,
   groupe: 'Créer',
   aide: 'constructeur',
   rafraichir: false,
@@ -116,6 +117,14 @@ function choix(zone) {
 async function editeurRapport(zone) {
   brouillon ||= { rapport: nouveauRapport(), nom: null, choisi: 0 }
   const rapport = brouillon.rapport
+  // Venu de la constellation : le chemin et LA PHRASE sont gardés avec le rapport (pour le rouvrir dans la constellation).
+  const constellation = sessionStorage.getItem('birtec-constellation')
+  if (constellation) {
+    sessionStorage.removeItem('birtec-constellation')
+    try {
+      rapport.constellation = JSON.parse(constellation)
+    } catch {}
+  }
   const [sujets, themes, fichiers] = await Promise.all([
     api('/api/constructeur/sujets'),
     api('/api/rapports-themes').catch(() => Object.keys(THEMES)),

@@ -2,9 +2,10 @@
 // Pour chacun : la requête indicateur et la requête liste à copier dans la GMAO, l'essai sur la base,
 // et la retouche (à la main, ou en le confiant à l'assistant).
 
-import { h, vider, ic, fenetre, notifier, confirmer, dateHeureFr, deuxPanneaux } from '/socle/ui.js'
+import { h, vider, ic, fenetre, notifier, confirmer, dateHeureFr } from '/socle/ui.js'
 import { api } from '/socle/api.js'
-import { etat } from '/socle/etat.js'
+import { etat, modeAdmin } from '/socle/etat.js'
+import { ecranCreations, rouvrirDansLaConstellation } from '../../interface/creations.js'
 import { demanderMotDePasse } from '../configuration/vue.js'
 import { tableauResultats } from '../base/vue.js'
 
@@ -17,35 +18,22 @@ export default {
   aide: 'indicateurs',
 
   async afficher(zone, { id }) {
-    const indicateurs = await api('/api/indicateurs/indicateurs')
-    const choisi = indicateurs.find((i) => String(i.id) === id) || null
-    const filtre = h('input', { type: 'search', placeholder: 'Filtrer…' })
-    const liste = h('div', { class: 'liste-tables' })
-    const dessinerListe = () => {
-      const texte = filtre.value.toLowerCase()
-      vider(liste, indicateurs.filter((i) => !texte || i.nom.toLowerCase().includes(texte)).map((i) =>
-        h('a', { href: `#/indicateurs/${i.id}`, class: i === choisi ? 'actif' : '', title: `${i.fenetre || ''} — ${dateHeureFr(i.modifie)}` }, ic('graphique', 14), ' ', i.nom)))
-      if (!indicateurs.length) liste.append(h('p', { class: 'discret' }, 'Aucun indicateur pour l’instant.'))
-    }
-    filtre.addEventListener('input', dessinerListe)
-    dessinerListe()
-
-    vider(
-      zone,
-      h('div', { class: 'entete-page' },
-        h('div', {}, h('h1', {}, 'Indicateurs GMAO'), h('p', { class: 'sous-titre' }, 'Requête indicateur et requête liste, essayées sur la base, à coller dans la GMAO')),
-        h('div', { class: 'actions' },
-          h('a', { class: 'bouton principal', href: '#/indicateur', title: 'Ce qu’on compte et les conditions : BiRTEC écrit les deux requêtes' }, ic('plus', 16), 'Nouvel indicateur'),
-          h('button', { class: 'discret', onclick: modifierReglages }, ic('reglages', 16), 'Variables'),
-        ),
-      ),
-      deuxPanneaux(
-        h('div', { class: 'carte', style: { padding: '12px' } }, filtre, h('div', { style: { height: '10px' } }), liste),
-        choisi ? detail(choisi) : h('div', { class: 'carte' }, h('p', { class: 'texte-2' },
-          '« Nouvel indicateur » ouvre le formulaire : choisissez ce qu’on compte (étape 1) et les filtres (étape 3), puis « Créer un indicateur GMAO ». BiRTEC écrit les deux requêtes, les essaie et les range ici. Choisissez un indicateur à gauche pour copier ses requêtes.')),
-        { cle: 'indicateurs', largeur: 380 },
-      ),
-    )
+    const [vignettes, indicateurs] = await Promise.all([api('/api/indicateurs/vignettes'), api('/api/indicateurs/indicateurs')])
+    const elements = vignettes.map((v) => ({ id: String(v.id), titre: v.nom, resume: v.resume, meta: v.fenetre ? `fenêtre ${v.fenetre}` : '', modifie: v.modifie, constellation: v.constellation }))
+    await ecranCreations(zone, {
+      titre: 'Indicateurs GMAO',
+      sousTitre: 'Requête indicateur et requête liste, essayées sur la base, à coller dans la GMAO',
+      elements,
+      choisi: elements.find((e) => e.id === id) || null,
+      lien: (e) => `#/indicateurs/${e.id}`,
+      detail: async (e) => detail(indicateurs.find((i) => String(i.id) === e.id)),
+      ecrireResume: (e) => api(`/api/indicateurs/indicateurs/${e.id}/resume`, { methode: 'POST', corps: {} }).then((r) => r.resume),
+      corrigerResume: (e, texte) => api(`/api/indicateurs/indicateurs/${e.id}/resume`, { methode: 'POST', corps: { texte } }).then((r) => r.resume),
+      rouvrir: (e) => rouvrirDansLaConstellation(e.constellation, { type: 'indicateur', id: e.id, titre: e.titre }),
+      vide: modeAdmin() ? 'Aucun indicateur pour l’instant : construisez un chemin dans la constellation, puis « Et maintenant ? › Indicateur GMAO ».' : 'Aucun indicateur pour l’instant.',
+    })
+    // Les variables de la GMAO (administrateur), sous le titre.
+    if (modeAdmin()) zone.querySelector('.entete-page')?.append(h('div', { class: 'actions' }, h('button', { class: 'discret petit', onclick: modifierReglages }, ic('reglages', 14), 'Variables')))
   },
 }
 
@@ -90,10 +78,10 @@ function detail(indicateur) {
         h('h2', {}, ic('graphique', 18), indicateur.nom),
         h('div', { class: 'actions' },
           h('button', { class: 'petit', onclick: tester }, ic('lecture', 14), 'Tester'),
-          indicateur.definition?.constructeur
-            ? h('button', { class: 'petit discret', onclick: () => { sessionStorage.setItem('birtec-indicateur', JSON.stringify({ etat: indicateur.definition.constructeur, nom: indicateur.nom, dateIndicateur: indicateur.definition.dateIndicateur, arborescence: indicateur.definition.arborescence, id: indicateur.id })); location.hash = '#/indicateur' } }, ic('crayon', 14), 'Modifier (formulaire)')
+          !modeAdmin() ? null : indicateur.definition?.constructeur
+            ? h('button', { class: 'petit discret', onclick: () => { sessionStorage.setItem('birtec-indicateur', JSON.stringify({ etat: indicateur.definition.constructeur, nom: indicateur.nom, dateIndicateur: indicateur.definition.dateIndicateur, arborescence: indicateur.definition.arborescence, id: indicateur.id, constellation: indicateur.definition.constellation })); location.hash = '#/indicateur' } }, ic('crayon', 14), 'Modifier (formulaire)')
             : h('button', { class: 'petit discret', onclick: () => demanderALAssistant(`Modifie l’indicateur GMAO « ${indicateur.nom} » : `) }, ic('etincelle', 14), 'Modifier avec l’assistant'),
-          h('button', { class: 'petit discret danger', onclick: supprimer }, ic('poubelle', 14)),
+          modeAdmin() ? h('button', { class: 'petit discret danger', onclick: supprimer }, ic('poubelle', 14)) : null,
         ),
       ),
       h('p', { class: 'texte-2', style: { margin: 0 } },

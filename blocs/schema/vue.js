@@ -16,7 +16,7 @@
 //
 // Tout ce qui est saisi est gardé dans le fichier .ktec (dictionnaire) et sert à l'IA.
 
-import { h, vider, ic, notifier } from '/socle/ui.js'
+import { h, vider, ic, notifier, fenetre, nombreFr } from '/socle/ui.js'
 import { api } from '/socle/api.js'
 import { etat, modeAdmin } from '/socle/etat.js'
 import { extraireTables } from '../base/vue.js'
@@ -88,7 +88,10 @@ export default {
     const pluie = h('div', { class: 'pluie-constellation', 'aria-hidden': 'true' })
     const vue = new VueGraphe(toile, graphe, {
       surSelection: (n) => vider(panneau, panneauTable(n, vue)),
-      surChemin: (chemin) => vider(panneau, panneauChemin(chemin, vue, panneau)),
+      surChemin: (chemin) => {
+        vider(panneau, panneauChemin(chemin, vue, panneau))
+        bandeau?.majCompteur()
+      },
       surLien: (l) => vider(panneau, panneauLien(l)),
       surMotif: () => { dessinerMotif(); faireTomber(pluie, vue.pluie) },
     })
@@ -111,6 +114,9 @@ export default {
     recherche.addEventListener('keydown', (e) => e.key === 'Enter' && chercher())
     const caseEcartees = h('input', { type: 'checkbox', checked: voirEcartees, onchange: () => { voirEcartees = caseEcartees.checked; window.ktec.recharger() } })
 
+    // LA PHRASE, au-dessus de la constellation.
+    let bandeau = null
+    bandeau = bandeauPhrase(vue)
     vider(panneau, aideSchema(graphe))
     vider(
       zone,
@@ -126,6 +132,7 @@ export default {
           h('button', { class: 'discret', title: 'La même page, envoyée à l’imprimante', onclick: () => imprimer(graphe, vue, schema) }, ic('document', 16), 'Imprimer'),
         ),
       ),
+      bandeau.element,
       h('div', { class: 'schema-grille' },
         h('div', { class: 'carte carte-ciel', style: { padding: '0', overflow: 'hidden', position: 'relative' } },
           ciel,
@@ -140,6 +147,12 @@ export default {
       ),
     )
     vue.demarrer({ rapide: !premiereVisite })
+    // Rouvert depuis une vignette (Rapports, Indicateurs GMAO) : le chemin s'allume une fois l'arrivée jouée.
+    const rouvert = sessionStorage.getItem('birtec-rouvrir')
+    if (rouvert) {
+      sessionStorage.removeItem('birtec-rouvrir')
+      setTimeout(() => { try { bandeau.restaurer(JSON.parse(rouvert)) } catch {} }, premiereVisite ? 1500 : 500)
+    }
     animerCiel(ciel, vue)
     const choisi = graphe.parNom.get(String(id || '').toLowerCase())
     if (choisi) setTimeout(() => vue.centrerSur(choisi, true), 400)
@@ -189,6 +202,22 @@ function construireGraphe(schema) {
 
 // La clé de liaison d'un lien : « ID_DI », ou « ID_PERE = ID_ARTICLE » quand les deux colonnes diffèrent.
 // Plusieurs colonnes entre les deux mêmes tables : séparées par « · ».
+function entonnoir(c, x, y, couleur) {
+  c.save()
+  c.globalAlpha = 1
+  c.fillStyle = couleur
+  c.beginPath()
+  c.moveTo(x - 5, y - 4)
+  c.lineTo(x + 5, y - 4)
+  c.lineTo(x + 1.2, y + 1)
+  c.lineTo(x + 1.2, y + 5)
+  c.lineTo(x - 1.2, y + 4)
+  c.lineTo(x - 1.2, y + 1)
+  c.closePath()
+  c.fill()
+  c.restore()
+}
+
 function texteCle(lien) {
   return lien.jointures.map((j) => (j.colonne === j.versColonne ? j.colonne : `${j.colonne} = ${j.versColonne}`)).join(' · ')
 }
@@ -595,6 +624,38 @@ class VueGraphe {
     })
   }
 
+  // Le chemin de LA PHRASE : la première table, puis chaque autre table rattachée par le plus court passage depuis
+  // une table déjà prise. Il reste un chemin « construit » : on peut le prolonger ou le raccourcir à la main.
+  cheminPour(noms) {
+    const noeuds = noms.map((n) => this.graphe.parNom.get(n.toLowerCase())).filter(Boolean)
+    if (!noeuds.length) return null
+    const prises = [noeuds[0]]
+    const etapes = []
+    for (const n of noeuds.slice(1)) {
+      if (prises.includes(n)) continue
+      let morceau = null
+      for (const depart of prises) {
+        const essai = cheminLePlusCourt(this.graphe, depart, n)
+        if (essai && (!morceau || essai.cout < morceau.cout)) morceau = essai
+      }
+      if (!morceau) continue
+      for (const e of morceau.etapes) if (!prises.includes(e.vers)) { etapes.push(e); prises.push(e.vers) }
+    }
+    this.source = noeuds[0]
+    this.chemin = { depart: noeuds[0], arrivee: etapes.at(-1)?.vers || noeuds[0], etapes, manuel: true }
+    this.rappels.surChemin(this.chemin)
+    this.toutVoirChemin()
+    this.dessiner()
+    return this.chemin
+  }
+
+  // Cadre la vue sur les tables du chemin.
+  toutVoirChemin() {
+    if (!this.chemin) return
+    const points = [this.chemin.depart, ...this.chemin.etapes.map((e) => e.vers)]
+    if (points.length > 1) this.vue = this.cadrage(points)
+  }
+
   // Chemin construit à la main (Ctrl + Maj + clic) : chaque table cliquée prolonge le chemin. Si elle n'est pas
   // directement liée à la précédente, le plus court passage entre les deux est ajouté.
   ajouterAuChemin(n) {
@@ -845,6 +906,8 @@ class VueGraphe {
         c.lineWidth = 1.5
         c.stroke()
       }
+      // Table filtrée par LA PHRASE : un petit entonnoir à côté de la bulle.
+      if (this.filtres?.has(n.table.nom) && !pale) entonnoir(c, p.x + rayonVu + 4, p.y - rayonVu - 4, couleurs.chemin)
       // Bulle figée : un petit point sombre au centre (comme une punaise).
       if (n.fige && !pale) {
         c.fillStyle = '#0b1210'
@@ -964,6 +1027,191 @@ function couleursDuTheme() {
     texte: v('--texte', '#e6f2ea'),
     texte2: v('--texte-2', '#a3c2ad'),
   }
+}
+
+// ---------------------------------------------------------------- LA PHRASE (bandeau du haut)
+
+// LA PHRASE en cours : le panneau « Et maintenant ? » s'en sert (texte, filtres choisis).
+let phraseCourante = null
+
+// L'utilisateur dit ce qu'il veut voir ; l'IA en fait une phrase à trous (blocs/phrase/serveur.js), le chemin
+// s'allume dans la constellation, et chaque trou devient une pastille à choisir (valeurs lues dans la base).
+// Les choix deviennent des étiquettes de filtre ; le compteur et l'aperçu suivent chaque changement.
+function bandeauPhrase(vue) {
+  const saisie = h('input', { type: 'text', class: 'saisie-phrase', placeholder: 'Que voulez-vous voir ? Ex. : les RI du parc peinture qui ont une fiche technique cochée « oui »' })
+  const zonePhrase = h('div', { class: 'phrase-construite' })
+  const zoneFiltres = h('div', { class: 'filtres-phrase' })
+  const zoneResultat = h('div', { class: 'resultat-phrase' })
+  let p = null
+  const valeurs = {}
+  let minuterie = null
+  let demande = 0
+
+  const libelleTable = (nom) => vue.graphe.parNom.get(String(nom).toLowerCase())?.table.libelle || nom
+  const choixActifs = () => (p ? p.choix.filter((c) => valeurs[c.id] !== undefined) : [])
+  const libelleValeur = (c) => c.options.find((o) => o.valeur === valeurs[c.id])?.libelle ?? valeurs[c.id]
+  const filtres = () => choixActifs().map((c) => ({ table: c.table, colonne: c.colonne, valeurs: [valeurs[c.id]], texte: `${c.question.replace(/\s*\?\s*$/, '')} : ${libelleValeur(c)}` }))
+  const texte = () => (p ? p.phrase.map((m) => (m.choix ? (() => { const c = p.choix.find((x) => x.id === m.choix); return valeurs[c.id] !== undefined ? libelleValeur(c) : c.question.replace(/\s*\?\s*$/, '') })() : m.table ? libelleTable(m.table) : m.texte)).join('').replace(/\s+/g, ' ').trim() : '')
+
+  async function construire() {
+    if (!saisie.value.trim()) return
+    vider(zonePhrase, h('span', { class: 'discret curseur' }, 'L’IA construit la phrase'))
+    vider(zoneFiltres)
+    vider(zoneResultat)
+    try {
+      p = await api('/api/phrase', { methode: 'POST', corps: { texte: saisie.value } })
+    } catch (e) {
+      p = null
+      vider(zonePhrase, h('span', { class: 'rouge' }, e.message))
+      return
+    }
+    for (const cle of Object.keys(valeurs)) delete valeurs[cle]
+    phraseCourante = { texte, filtres }
+    dessiner()
+    vue.cheminPour(p.tables)
+  }
+
+  function pastille(c) {
+    if (!c.options.length) {
+      // Pas de liste lue (connexion fermée, colonne libre) : une saisie.
+      const champ = h('input', { type: 'text', class: 'pastille-choix libre', placeholder: c.question, value: valeurs[c.id] ?? '' })
+      champ.addEventListener('change', () => { if (champ.value.trim()) valeurs[c.id] = champ.value.trim(); else delete valeurs[c.id]; dessiner() })
+      return champ
+    }
+    const liste = h('select', { class: `pastille-choix${valeurs[c.id] !== undefined ? ' choisie' : ''}`, title: c.question },
+      h('option', { value: '' }, c.question),
+      // Le nombre de lignes de chaque valeur, seulement s'il dit quelque chose (pas dans une liste de codes).
+      c.options.map((o) => h('option', { value: o.valeur, selected: valeurs[c.id] === o.valeur }, c.options.some((x) => x.nombre > 1) && o.nombre ? `${o.libelle} (${nombreFr(o.nombre)})` : o.libelle)))
+    liste.addEventListener('change', () => { if (liste.value) valeurs[c.id] = liste.value; else delete valeurs[c.id]; dessiner() })
+    return liste
+  }
+
+  function dessiner() {
+    if (!p) return
+    vider(zonePhrase, p.phrase.map((m) => m.choix ? pastille(p.choix.find((c) => c.id === m.choix))
+      : m.table ? h('button', { class: 'table-phrase', title: `La table ${m.table}`, onclick: () => { const n = vue.graphe.parNom.get(m.table.toLowerCase()); if (n) vue.centrerSur(n) } }, libelleTable(m.table))
+        : h('span', {}, m.texte)))
+    vider(zoneFiltres, choixActifs().map((c) => h('span', { class: 'etiquette-filtre' }, ic('loupe', 13),
+      h('span', {}, `${c.question.replace(/\s*\?\s*$/, '')} : `, h('b', {}, libelleValeur(c))),
+      h('button', { class: 'discret icone-seule', title: 'Retirer ce filtre', onclick: () => { delete valeurs[c.id]; dessiner() } }, ic('x', 12)))))
+    vue.filtres = new Map()
+    for (const c of choixActifs()) vue.filtres.set(c.table, [...(vue.filtres.get(c.table) || []), libelleValeur(c)])
+    vue.dessiner()
+    majCompteur()
+  }
+
+  // Le compteur et l'aperçu : relus un instant après le dernier changement (choix ou chemin).
+  function majCompteur() {
+    clearTimeout(minuterie)
+    if (!p || !vue.chemin?.etapes) return
+    minuterie = setTimeout(async () => {
+      const numero = ++demande
+      const presentes = new Set([vue.chemin.depart.table.nom, ...vue.chemin.etapes.map((e) => e.vers.table.nom)])
+      const horsChemin = filtres().filter((f) => !presentes.has(f.table))
+      vider(zoneResultat, h('span', { class: 'discret curseur' }, 'Comptage dans la base'))
+      try {
+        const r = await api('/api/phrase/compter', { methode: 'POST', corps: { ...specDuChemin(vue.chemin, filtres().filter((f) => presentes.has(f.table))), apercu: true } })
+        if (numero !== demande) return
+        vider(zoneResultat,
+          h('div', { class: 'compteur-phrase' }, h('b', {}, nombreFr(r.nombre)), ` ${libelleTable(vue.chemin.depart.table.nom)} correspondent`,
+            horsChemin.length ? h('span', { class: 'orange' }, ` — ${horsChemin.length} filtre(s) ignoré(s) : leur table n’est plus dans le chemin`) : null),
+          r.apercu?.lignes.length ? h('div', { class: 'tableau-conteneur apercu-phrase' }, h('table', { class: 'tableau compact' },
+            h('thead', {}, h('tr', {}, r.apercu.colonnes.map((c) => h('th', {}, c)))),
+            h('tbody', {}, r.apercu.lignes.map((l) => h('tr', {}, l.map((v) => h('td', {}, v === null ? '' : String(v)))))))) : null,
+          r.sql ? h('details', { class: 'sql-phrase' }, h('summary', {}, 'Voir le SQL pour BIRT'), h('pre', { class: 'code' }, h('code', {}, r.sql))) : null)
+      } catch (e) {
+        if (numero === demande) vider(zoneResultat, h('span', { class: 'rouge' }, e.message))
+      }
+    }, 350)
+  }
+
+  // Un rapport ou un indicateur rouvert depuis sa vignette : sa phrase, son chemin et ses filtres reviennent.
+  function restaurer(c) {
+    saisie.value = c.phrase || ''
+    const choix = (c.filtres || []).map((f, i) => {
+      const [question, ...valeur] = String(f.texte || '').split(' : ')
+      const v = String(f.valeurs?.[0] ?? '')
+      return { id: `r${i}`, question: `${question || f.colonne} ?`, table: f.table, colonne: f.colonne, options: [{ valeur: v, libelle: valeur.join(' : ') || v }] }
+    })
+    p = { phrase: c.phrase ? [{ texte: c.phrase }] : [], depart: c.depart || c.tables[0], tables: c.tables, choix }
+    for (const cle of Object.keys(valeurs)) delete valeurs[cle]
+    for (const ch of choix) valeurs[ch.id] = ch.options[0].valeur
+    phraseCourante = { texte, filtres, origine: c.origine }
+    dessiner()
+    vue.cheminPour(c.tables)
+  }
+
+  saisie.addEventListener('keydown', (e) => e.key === 'Enter' && construire())
+  const element = h('div', { class: 'carte bandeau-phrase' },
+    h('div', { class: 'ligne-saisie-phrase' }, ic('etincelle', 18), saisie, h('button', { class: 'principal', onclick: construire }, 'Construire la phrase')),
+    zonePhrase, zoneFiltres, zoneResultat)
+  return { element, majCompteur, restaurer }
+}
+
+// La description d'un chemin (et de ses filtres) envoyée au serveur, qui en construit lui-même le SQL.
+function specDuChemin(chemin, filtres = []) {
+  const { ordre } = sqlDuChemin(chemin)
+  return {
+    depart: chemin.depart.table.nom,
+    jointures: ordre.map(({ table, j }) => ({ table, de: j.de, colonne: j.colonne, vers: j.vers, versColonne: j.versColonne })),
+    filtres: filtres.map(({ table, colonne, valeurs }) => ({ table, colonne, valeurs })),
+  }
+}
+
+// « Et maintenant ? » : une fois le chemin (et la phrase) validés, passer au rapport, au SQL ou à l'indicateur.
+// Réservé à l'administrateur : créer demande d'écrire du SQL.
+function etMaintenant(chemin, distinctes) {
+  if (!modeAdmin()) return null
+  const phrase = phraseCourante?.texte() || ''
+  const filtres = phraseCourante?.filtres() || []
+  const presentes = new Set(distinctes)
+  const filtresDuChemin = filtres.filter((f) => presentes.has(f.table))
+  const constellation = { phrase, depart: chemin.depart.table.nom, tables: distinctes, filtres: filtresDuChemin }
+  const libelle = chemin.depart.table.libelle || chemin.depart.table.nom
+  const origine = phraseCourante?.origine || null
+  return h('div', { class: 'et-maintenant' },
+    h('h3', {}, ic('etincelle', 15), 'Et maintenant ?'),
+    h('div', { class: 'actions' },
+      h('button', { class: 'petit principal', title: 'Le formulaire du rapport, déjà rempli d’après la phrase et le chemin', onclick: () => {
+        sessionStorage.setItem('birtec-constellation', JSON.stringify(constellation))
+        sessionStorage.setItem('birtec-phrase', phrase || `Liste des ${libelle}${filtresDuChemin.length ? ` : ${filtresDuChemin.map((f) => f.texte).join(', ')}` : ''}`)
+        location.hash = '#/constructeur/rapport'
+      } }, ic('document', 14), 'Créer un rapport'),
+      h('button', { class: 'petit', title: 'Ranger cette requête dans les requêtes du site (fichier .ktec)', onclick: () => enregistrerSql(chemin, filtresDuChemin, phrase || libelle) }, ic('base', 14), 'Enregistrer le SQL'),
+      origine ? h('button', { class: 'petit principal', title: 'Rouvrir le formulaire de ce qui a été rouvert, avec le chemin et les filtres d’aujourd’hui', onclick: () => mettreAJour(origine, constellation) }, ic('crayon', 14), `Mettre à jour « ${String(origine.titre || '').slice(0, 40)} »`) : null,
+      h('button', { class: 'petit', title: 'Un indicateur de la GMAO sur cette table', onclick: () => {
+        sessionStorage.setItem('birtec-indicateur', JSON.stringify({ etat: { sujet: chemin.depart.table.nom }, nom: phrase ? phrase.slice(0, 80) : '', constellation }))
+        location.hash = '#/indicateur'
+      } }, ic('graphique', 14), 'Indicateur GMAO')))
+}
+
+// « Mettre à jour » un rapport ou un indicateur rouvert : son formulaire, avec le chemin et les filtres actuels.
+async function mettreAJour(origine, constellation) {
+  const nouvelle = { ...constellation, phrase: constellation.phrase || origine.titre || '' }
+  if (origine.type === 'rapport') {
+    const r = await api(`/api/rapports/${encodeURIComponent(origine.nom)}`)
+    if (!r.description?.constructeur) return notifier('Ce rapport n’a pas été fait avec le formulaire : créez-en un nouveau (« Créer un rapport »).', 'erreur')
+    sessionStorage.setItem('birtec-rapport', JSON.stringify({ rapport: { ...r.description.constructeur, constellation: nouvelle }, nom: origine.nom }))
+    location.hash = '#/constructeur/rapport'
+  } else {
+    const i = (await api('/api/indicateurs/indicateurs')).find((x) => String(x.id) === String(origine.id))
+    if (!i) return notifier('Indicateur introuvable.', 'erreur')
+    sessionStorage.setItem('birtec-indicateur', JSON.stringify({ etat: i.definition?.constructeur || { sujet: constellation.depart }, nom: i.nom, dateIndicateur: i.definition?.dateIndicateur, arborescence: i.definition?.arborescence, id: i.id, constellation: nouvelle }))
+    location.hash = '#/indicateur'
+  }
+}
+
+async function enregistrerSql(chemin, filtres, titre) {
+  const champ = h('input', { type: 'text', value: titre.slice(0, 80) })
+  const fait = await fenetre({
+    titre: 'Enregistrer le SQL',
+    contenu: h('div', {}, h('p', { class: 'texte-2', style: { marginTop: 0 } }, 'La requête (jointures dans l’ordre et filtres choisis) est rangée dans les requêtes du site, réutilisables dans BIRT.'), h('label', { class: 'champ' }, h('span', {}, 'Nom'), champ)),
+    boutons: [
+      { texte: 'Annuler', classe: 'discret', valeur: null },
+      { texte: 'Enregistrer', classe: 'principal', action: () => api('/api/phrase/enregistrer', { methode: 'POST', corps: { titre: champ.value, description: phraseCourante?.texte() || '', spec: specDuChemin(chemin, filtres) } }) },
+    ],
+  })
+  if (fait) notifier('Requête enregistrée dans les requêtes du site')
 }
 
 // ---------------------------------------------------------------- cadre des raccourcis (repliable)
@@ -1117,11 +1365,40 @@ function panneauChemin(chemin, vue, panneau) {
     } }, ic('reseau', 14), `Autre chemin : par ${chemin.autre.etapes.slice(0, -1).map((e) => e.vers.table.nom).join(', ') || 'un lien direct'}`) : null,
     h('div', { class: 'actions' },
       h('button', { class: 'petit', onclick: () => navigator.clipboard.writeText(sql).then(() => notifier('Jointures copiées')) }, ic('copier', 14), 'Copier'),
-      h('button', { class: 'petit', title: 'Les données de toutes les tables du chemin', onclick: () => extraireTables(distinctes) }, ic('telecharger', 14), `Télécharger les ${distinctes.length} tables`),
+      h('button', { class: 'petit', title: 'Un zip pour Excel : les tables du chemin en CSV (dossier sources), un classeur avec une requête Power Query par table, l’image du chemin et ses jointures', onclick: () => extraireTables(distinctes, { image: imageDuChemin(vue, chemin, sql), sql }) }, ic('telecharger', 14), `Extraire pour Excel (${distinctes.length} tables)`),
       chemin.manuel ? h('button', { class: 'petit discret', title: 'Retirer la dernière table du chemin', onclick: () => vue.retirerDernier() }, ic('retour', 14), 'Retirer la dernière') : null,
       h('button', { class: 'petit discret', onclick: () => { vue.effacerChemin(); vider(panneau, panneauTable(chemin.depart, vue)) } }, ic('x', 14), 'Effacer'),
     ),
+    etMaintenant(chemin, distinctes),
   ]
+}
+
+// L'image jointe à l'extraction : la constellation telle qu'elle est à l'écran (le chemin allumé), et à droite
+// les tables du chemin et son SQL.
+function imageDuChemin(vue, chemin, sql) {
+  const source = vue.toile
+  const ratio = vue.ratio || 1
+  const largeurTexte = 520 * ratio
+  const lignes = [`Chemin : ${[chemin.depart, ...chemin.etapes.map((e) => e.vers)].map((n) => n.table.nom).filter((n, i, l) => l.indexOf(n) === i).join(' → ')}`, '', ...sql.split('\n')]
+  const toile = document.createElement('canvas')
+  toile.width = source.width + largeurTexte
+  toile.height = Math.max(source.height, (lignes.length * 18 + 60) * ratio)
+  const c = toile.getContext('2d')
+  c.fillStyle = '#04070f'
+  c.fillRect(0, 0, toile.width, toile.height)
+  c.drawImage(source, 0, 0)
+  c.fillStyle = '#0b1210'
+  c.fillRect(source.width, 0, largeurTexte, toile.height)
+  c.scale(ratio, ratio)
+  c.fillStyle = '#e6f2ea'
+  c.font = '600 15px system-ui, sans-serif'
+  c.fillText('Jointures', source.width / ratio + 20, 32)
+  c.font = '12px ui-monospace, Consolas, monospace'
+  lignes.forEach((ligne, i) => {
+    c.fillStyle = i === 0 ? '#f59e0b' : '#c7d2cc'
+    c.fillText(ligne.length > 70 ? ligne.slice(0, 69) + '…' : ligne, source.width / ratio + 20, 60 + i * 18)
+  })
+  return toile.toDataURL('image/png')
 }
 
 // Le SQL d'un chemin, dans un ordre que BIRT accepte : on part de la première table, et une jointure n'ajoute sa
@@ -1145,6 +1422,7 @@ export function sqlDuChemin(chemin) {
   const sql = `SELECT *\nFROM ${depart}\n${ordre.map(({ table, j }) => `LEFT JOIN ${table} ON ${j.de}.${j.colonne} = ${j.vers}.${j.versColonne}`).join('\n')}`
   return {
     sql,
+    ordre,
     jointures: ordre.map((o) => o.j),
     distinctes: [...jointes],
     erreur: restants.length ? `${restants.length} lien(s) sans table déjà jointe : le chemin n’est pas d’un seul tenant.` : null,

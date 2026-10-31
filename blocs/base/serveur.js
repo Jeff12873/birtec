@@ -7,6 +7,7 @@ import { executerRequete, etatConnexion } from 'ktec/mysql.js'
 import { enregistrerDictionnaire, enregistrerLienDictionnaire, ajouterLien, lireInfo, ecrireInfo } from 'ktec/ktec.js'
 import { obtenirSchema, lireTypesChoisis } from './schema.js'
 import { TYPES } from '../../interface/types.js'
+import { classeurPowerQuery } from './classeur.js'
 import { lirePreference, ecrirePreference } from 'ktec/preferences.js'
 
 // Réglages et SQL : réservés à l'administrateur (ctx.exigerModeAdmin, KTEC 0.6 et plus).
@@ -35,38 +36,47 @@ export function routes(r) {
     return executerRequete(`SELECT * FROM \`${table.nom.replaceAll('`', '')}\``, 20)
   })
 
-  // ---- extraction : les tables choisies, en CSV dans un .zip (avec leur structure et un lisez-moi)
+  // ---- extraction : les tables choisies, prêtes pour Power Query, dans un .zip :
+  //   sources/<table>.csv (tables entières), analyse.xlsx (une requête par CSV, en chemin relatif),
+  //   constellation.png (le chemin et ses jointures, envoyé par la constellation) et un lisez-moi.
 
-  // POST /api/extraction { tables: [noms], limite? } → fichier .zip
-  admin.post('/api/extraction', async (ctx) => {
-    const { tables: demandees = [], limite = LIGNES_MAX_EXTRACTION } = await ctx.json()
+  // POST /api/extraction { tables: [noms], limite?, image? (data:image/png;base64,…), sql? } → fichier .zip
+  r.post('/api/extraction', async (ctx) => {
+    const { tables: demandees = [], limite = LIGNES_MAX_EXTRACTION, image = null, sql = '' } = await ctx.json()
     if (!demandees.length) throw new ErreurHttp(400, 'Choisissez au moins une table.')
     if (!etatConnexion().ouverte) throw new ErreurHttp(409, 'Connexion à la GMAO indisponible : impossible d’extraire les données.')
     const schema = await obtenirSchema()
     const fichiers = []
     const bilan = []
-    const structure = [['table', 'nom clair de la table', 'colonne', 'type', 'clé', 'nom clair', 'description']]
+    const lues = []
     for (const nom of demandees) {
       const table = schema.tables.find((t) => t.nom.toLowerCase() === String(nom).toLowerCase())
       if (!table) continue
       const max = Math.min(Number(limite) || LIGNES_MAX_EXTRACTION, LIGNES_MAX_EXTRACTION)
       const r = await executerRequete(`SELECT * FROM \`${table.nom.replaceAll('`', '')}\``, max)
-      fichiers.push({ nom: `${table.nom}.csv`, octets: csv([r.colonnes.map((c) => c.nom), ...r.lignes]) })
+      fichiers.push({ nom: `sources/${table.nom}.csv`, octets: csv([r.colonnes.map((c) => c.nom), ...r.lignes]) })
+      lues.push({ nom: table.nom, lignes: r.lignes.length })
       bilan.push(`${table.nom}${table.libelle ? ` (${table.libelle})` : ''} : ${r.lignes.length} ligne(s)${r.tronque ? ` — LIMITÉE aux ${max} premières` : ''}`)
-      for (const c of table.colonnes) structure.push([table.nom, table.libelle || '', c.nom, c.type + (c.taille ? `(${c.taille})` : ''), c.cle ? 'oui' : '', c.libelle || '', c.description || c.commentaire || ''])
     }
     const base = schema.base
     const date = new Date().toLocaleString('fr-FR')
-    fichiers.push({ nom: '_structure.csv', octets: csv(structure) })
-    fichiers.push({ nom: '_LISEZ-MOI.txt', octets: Buffer.from([
-      `Extraction BiRTEC — base « ${base} » — ${date}`,
+    fichiers.push({ nom: 'analyse.xlsx', octets: classeurPowerQuery(lues, { titre: `Extraction BiRTEC du ${date}` }) })
+    const png = /^data:image\/png;base64,(.+)$/.exec(String(image || ''))
+    if (png) fichiers.push({ nom: 'constellation.png', octets: Buffer.from(png[1], 'base64') })
+    fichiers.push({ nom: 'LISEZ-MOI.txt', octets: Buffer.from([
+      `Extraction BiRTEC — ${date}`,
       '',
       ...bilan,
       '',
-      'Un fichier .csv par table (séparateur « ; », encodage UTF-8 : s’ouvre directement dans Excel).',
-      '_structure.csv : les colonnes de chaque table, avec les noms clairs et descriptions du dictionnaire.',
+      'Dézippez le dossier sur un disque local (pas dans OneDrive ni SharePoint), puis ouvrez analyse.xlsx :',
+      'ses requêtes Power Query (Données › Requêtes et connexions) lisent les fichiers du dossier « sources »',
+      'à côté du classeur, en chemin relatif. Clic droit sur une requête › Charger dans… pour l’afficher.',
+      '',
+      'sources : un fichier .csv par table, entière (séparateur « ; », UTF-8).',
+      png ? 'constellation.png : le chemin dans la constellation et ses jointures.' : '',
+      sql ? `\nLe SQL du chemin :\n${sql}` : '',
       `Au plus ${LIGNES_MAX_EXTRACTION} lignes par table.`,
-    ].join('\r\n'), 'utf8') })
+    ].filter((l) => l !== '').join('\r\n'), 'utf8') })
     const horodatage = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
     envoyerOctets(ctx.res, creerZip(fichiers), { type: 'application/zip', nom: `extraction-${base.replace(/[^\w.-]+/g, '_')}-${horodatage}.zip`, telecharger: true })
   })

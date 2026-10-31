@@ -1,6 +1,18 @@
 {
   "versions": [
     {
+      "version": "0.9.9",
+      "date": "2026-10-31",
+      "points": [
+        "LA PHRASE : dites ce que vous voulez voir, l'IA en fait une phrase à trous, le chemin s'allume et chaque trou devient une pastille avec les vraies valeurs de la base",
+        "Filtres en étiquettes, entonnoir sur les tables filtrées, nombre de lignes et aperçu en direct ; SQL replié pour l'administrateur",
+        "« Et maintenant ? » (administrateur) : créer un rapport déjà rempli, enregistrer le SQL, ou faire un indicateur GMAO",
+        "Rapports et Indicateurs GMAO en vignettes : description écrite par l'IA, petite constellation des tables, réouverture dans la constellation",
+        "Plus de bouton « Nouveau » : on crée depuis la constellation ; les boutons de modification ne s'affichent qu'en administrateur",
+        "Extraire pour Excel : dossier sources (CSV entiers), analyse.xlsx avec une requête Power Query par table en chemin relatif, image du chemin"
+      ]
+    },
+    {
       "version": "0.9.8",
       "date": "2026-10-31",
       "points": [
