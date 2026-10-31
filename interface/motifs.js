@@ -9,6 +9,7 @@ const ECART = 46 // distance visée entre deux bulles voisines
 
 export const MOTIFS = [
   { id: 'libre', nom: 'Ma disposition' },
+  { id: 'types', nom: 'Par types (axe des principales)' },
   { id: 'anneaux', nom: 'Anneaux par importance' },
   { id: 'autour', nom: 'Autour de la table choisie' },
   { id: 'hierarchie', nom: 'Hiérarchie (mères en haut)' },
@@ -26,10 +27,102 @@ export function disposer(id, graphe, options = {}) {
   const etiquettes = []
   const noeuds = [...graphe.noeuds]
   if (!noeuds.length) return { positions, etiquettes }
-  const faire = { anneaux, autour, hierarchie, galaxies, familles, cercle, spirale, concombre }[id]
+  const faire = { types, anneaux, autour, hierarchie, galaxies, familles, cercle, spirale, concombre }[id]
   const extra = faire?.(noeuds, graphe, positions, etiquettes, options) || {}
   return { positions, etiquettes, ...extra }
 }
+
+// ---------------------------------------------------------------- par types (géométrique)
+
+// Un plan lisible, construit sur les types de tables (interface/types.js) :
+//   - au centre, l'AXE des tables principales, de haut en bas, voisines rapprochées ; elles alternent un peu à
+//     gauche et à droite, pour qu'un lien entre deux principales éloignées ne passe jamais sur une autre ;
+//   - à gauche, les tables INTERMÉDIAIRES, à mi-hauteur entre les deux principales qu'elles relient (leurs deux
+//     liens partent en biais, jamais à l'horizontale) ;
+//   - à droite, les SECONDAIRES de chaque principale, en quinconce au-dessus et au-dessous d'elle ;
+//   - tout à gauche, les RÉFÉRENTIELS, à la hauteur moyenne des tables qui s'en servent ;
+//   - en bas à droite, les tables TECHNIQUES et celles qui ne tiennent à rien, en grille.
+// Chaque colonne est ensuite desserrée pour que deux bulles ne se touchent pas.
+function types(noeuds, graphe, positions, etiquettes) {
+  const PAS = 150 // entre deux principales
+  const DECALAGE = 46 // l'alternance de l'axe
+  const COLONNES = { referentiel: -620, intermediaire: -240, axe: 0, secondaire: 240, technique: 620 }
+  const de = (id) => noeuds.filter((n) => (n.type?.id || 'secondaire') === id)
+
+  // L'axe : on enchaîne les principales en partant de la plus reliée, en prenant à chaque fois la voisine la
+  // plus liée à celles déjà placées (les voisines restent proches sur l'axe).
+  const restantes = new Set(de('principale').sort(tri))
+  const axe = []
+  while (restantes.size) {
+    const proche = (n) => axe.filter((m) => liees(n, m)).length + (axe.length && liees(n, axe.at(-1)) ? 2 : 0)
+    const suivante = [...restantes].sort((a, b) => proche(b) - proche(a) || tri(a, b))[0]
+    axe.push(suivante)
+    restantes.delete(suivante)
+  }
+  axe.forEach((n, i) => positions.set(n, { x: (i % 2 ? 1 : -1) * DECALAGE, y: i * PAS }))
+  const yAxe = new Map(axe.map((n, i) => [n, i * PAS]))
+  const principalesDe = (n) => [...n.voisins].filter((v) => yAxe.has(v)).sort((a, b) => yAxe.get(a) - yAxe.get(b))
+
+  // Intermédiaires : entre leurs principales ; sinon près de leur voisine placée.
+  const voulus = { intermediaire: [], secondaire: [], referentiel: [], technique: [] }
+  for (const n of de('intermediaire')) {
+    const p = principalesDe(n)
+    voulus.intermediaire.push({ n, y: p.length ? (yAxe.get(p[0]) + yAxe.get(p.at(-1))) / 2 + (p.length === 1 ? PAS / 3 : 0) : null })
+  }
+  // Secondaires : en quinconce autour de leur principale (au-dessus, au-dessous, de plus en plus loin).
+  const parPrincipale = new Map()
+  for (const n of de('secondaire')) {
+    const p = principalesDe(n)[0] || [...n.voisins].map((v) => principalesDe(v)[0]).find(Boolean)
+    if (!p) { voulus.secondaire.push({ n, y: null }); continue }
+    const rang = parPrincipale.get(p) || 0
+    parPrincipale.set(p, rang + 1)
+    const sens = rang % 2 ? 1 : -1
+    voulus.secondaire.push({ n, y: yAxe.get(p) + sens * (48 + Math.floor(rang / 2) * 40) })
+  }
+  // Référentiels : à la hauteur moyenne des tables qui s'en servent (déjà placées ou à placer).
+  for (const n of de('referentiel')) {
+    const ys = [...n.voisins].map((v) => yAxe.get(v) ?? principalesDe(v).map((p) => yAxe.get(p))[0]).filter((y) => y !== undefined)
+    voulus.referentiel.push({ n, y: ys.length ? ys.reduce((s, y) => s + y, 0) / ys.length : null })
+  }
+  for (const n of de('technique')) voulus.technique.push({ n, y: null })
+
+  // Chaque colonne : triée par hauteur voulue, puis desserrée (écart mini) ; les sans-attache vont au bout, et
+  // une colonne trop chargée déborde sur une deuxième rangée, décalée d'une demi-case (toujours en biais).
+  const bas = Math.max(PAS, (axe.length - 1) * PAS)
+  for (const [type, liste] of Object.entries(voulus)) {
+    if (!liste.length) continue
+    const x0 = COLONNES[type]
+    const sens = x0 < 0 ? -1 : 1
+    if (type === 'technique') {
+      // En grille, sous le reste, à droite.
+      liste.sort((a, b) => tri(a.n, b.n)).forEach(({ n }, i) => positions.set(n, { x: x0 + (i % 4) * 90 * sens, y: bas + 160 + Math.floor(i / 4) * 70 + (i % 2) * 22 }))
+      continue
+    }
+    const attaches = liste.filter((v) => v.y !== null).sort((a, b) => a.y - b.y)
+    const libres = liste.filter((v) => v.y === null)
+    let dernier = -Infinity
+    const ecart = ECART * 1.3
+    const sous = type === 'intermediaire' ? 3 : 2 // sous-colonnes en alternance : les bulles serrées ne s'alignent pas
+    attaches.forEach((v, i) => {
+      const y = Math.max(v.y, dernier + ecart / sous)
+      dernier = y
+      positions.set(v.n, { x: x0 + (i % sous) * 95 * sens, y })
+    })
+    libres.forEach((v, i) => positions.set(v.n, { x: x0 + (i % sous) * 95 * sens, y: Math.max(dernier, bas) + 80 + i * (ecart / sous) }))
+  }
+
+  const haut = -110
+  etiquettes.push(
+    { x: COLONNES.referentiel + 55 * -1, y: haut, texte: 'Référentiels' },
+    { x: COLONNES.intermediaire - 55, y: haut, texte: 'Intermédiaires' },
+    { x: 0, y: haut, texte: 'Principales' },
+    { x: COLONNES.secondaire + 55, y: haut, texte: 'Secondaires' },
+    { x: COLONNES.technique + 135, y: bas + 110, texte: 'Techniques' },
+  )
+  return {}
+}
+
+const liees = (a, b) => a.voisins.has(b)
 
 // Des bulles réparties sur un cercle ; le rayon grandit s'il n'y a pas la place. Renvoie le rayon pris.
 function surCercle(liste, positions, rayon, cx = 0, cy = 0, depart = -Math.PI / 2) {

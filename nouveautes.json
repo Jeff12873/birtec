@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.9.10",
+      "date": "2026-10-31",
+      "points": [
+        "Nouvelle disposition « Par types » : l'axe des tables principales au centre, intermédiaires et référentiels à gauche, secondaires à droite, techniques en bas ; les liens partent en biais et ne passent pas sur les bulles"
+      ]
+    },
+    {
       "version": "0.9.9",
       "date": "2026-10-31",
       "points": [
