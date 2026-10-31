@@ -7,7 +7,7 @@ import { h, vider, ic, fenetre, confirmer, dateHeureFr } from '/socle/ui.js'
 import { modeAdmin } from '/socle/etat.js'
 
 const NS = 'http://www.w3.org/2000/svg'
-const COULEURS = ['#fbbf24', '#c45bff', '#3d9bff', '#2dd4bf', '#f472b6', '#a3e635']
+const COULEURS = ['#ff5c7a', '#c45bff', '#3d9bff', '#ece8e1', '#ff5c7a', '#3d9bff']
 
 // Les tables d'un chemin en petite constellation : posées en zigzag, reliées dans l'ordre, qui scintillent.
 export function miniConstellation(c) {

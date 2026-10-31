@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.9.11",
+      "date": "2026-10-31",
+      "points": [
+        "Couleurs des types de tables changées : plus aucune ne ressemble à celles de la sélection (orange pour le chemin, vert pour la table choisie)"
+      ]
+    },
+    {
       "version": "0.9.10",
       "date": "2026-10-31",
       "points": [

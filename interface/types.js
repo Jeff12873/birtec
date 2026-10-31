@@ -9,11 +9,12 @@
 //
 // BiRTEC devine le type ; l'administrateur peut le corriger dans le panneau de la table (gardé dans le .ktec).
 
+// Aucune couleur proche de celles de la sélection (orange : le chemin, vert : la table choisie).
 export const TYPES = [
-  { id: 'principale', nom: 'Principale', ecran: '#fbbf24', papier: '#d97706', aide: 'Un objet métier, ce qu’on veut voir' },
+  { id: 'principale', nom: 'Principale', ecran: '#ff5c7a', papier: '#e11d48', aide: 'Un objet métier, ce qu’on veut voir' },
   { id: 'secondaire', nom: 'Secondaire', ecran: '#3d9bff', papier: '#0066ff', aide: 'Le détail rattaché à une principale' },
   { id: 'intermediaire', nom: 'Intermédiaire', ecran: '#c45bff', papier: '#9000d8', aide: 'Une table de liaison entre deux tables' },
-  { id: 'referentiel', nom: 'Référentiel', ecran: '#2dd4bf', papier: '#0d9488', aide: 'Une liste de codes (types, familles…)' },
+  { id: 'referentiel', nom: 'Référentiel', ecran: '#ece8e1', papier: '#57534e', aide: 'Une liste de codes (types, familles…)' },
   { id: 'technique', nom: 'Technique', ecran: '#8b95a7', papier: '#a3a9b4', aide: 'Journaux, exports, paramètres' },
 ]
 export const typeParId = (id) => TYPES.find((t) => t.id === id) || TYPES[1]
