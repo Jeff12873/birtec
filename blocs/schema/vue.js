@@ -1322,6 +1322,16 @@ function bandeauPhrase(vue) {
     majCompteur()
   }
 
+  // La bulle d'un champ : son nom dans la base et trois valeurs d'exemple (lues une fois par table).
+  const exemplesParTable = new Map()
+  async function bulleExemple(table, colonne) {
+    if (!exemplesParTable.has(table)) exemplesParTable.set(table, api(`/api/phrase/exemples?table=${encodeURIComponent(table)}`).catch(() => ({})))
+    const exemples = (await exemplesParTable.get(table))[colonne] || []
+    const col = colonneDe(table, colonne)
+    return h('div', {}, h('b', {}, `${libelleColonne(col)}${col?.libelle ? ` · ${colonne}` : ''}`),
+      exemples.length ? exemples.map((v) => h('code', {}, v)) : h('span', { class: 'discret' }, 'Toujours vide dans les dernières lignes'))
+  }
+
   // Une condition : « qui » [opérateur] [table] [champ] [valeur].
   function editeurCondition(c) {
     const col = c.table ? colonneDe(c.table, c.colonne) : null
@@ -1339,11 +1349,18 @@ function bandeauPhrase(vue) {
       dessiner()
       changement()
     }, { vide: '— dans quelle table ? —', classe: 'champ' })
-    const champ = c.table ? choixListe(colonnesDe(c.table, c.colonne), c.colonne || '', (v) => {
-      Object.assign(c, { colonne: v || null, valeurs: [], valeurTexte: null })
-      dessiner()
-      changement()
-    }, { vide: '— quel champ ? —', classe: 'champ' }) : null
+    // Le champ : un menu à bulle, qui montre quelques valeurs d'exemple de la colonne survolée.
+    const champ = c.table ? menuDeroulant({
+      choix: [{ valeur: '', libelle: '— quel champ ? —' }, ...colonnesDe(c.table, c.colonne).map((x) => ({ valeur: x.valeur, libelle: x.libelle }))],
+      valeur: c.colonne || '',
+      classe: `champ-phrase${c.colonne ? ' choisi' : ''}`,
+      bulle: (v) => bulleExemple(c.table, v),
+      surChoix: (v) => {
+        Object.assign(c, { colonne: v || null, valeurs: [], valeurTexte: null })
+        dessiner()
+        changement()
+      },
+    }) : null
     const reglerColonnes = c.table && modeAdmin() ? h('button', { class: 'discret icone-seule petit', title: 'Choisir les colonnes proposées pour cette table (administrateur)', onclick: () => choisirColonnes(c.table) }, ic('reglages', 14)) : null
     return h('div', { class: 'condition' }, h('span', { class: 'mot-phrase' }, 'qui'), op, table, champ, reglerColonnes, editeurValeur(c, col))
   }

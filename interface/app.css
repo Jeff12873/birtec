@@ -212,6 +212,12 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 .menu-theme-choix { display: flex; align-items: baseline; gap: 10px; padding: 6px 10px; border-radius: 8px; font-size: 14px; color: var(--texte); cursor: pointer; }
 .menu-theme-choix span { flex: 1; }
 .menu-theme-choix small { color: var(--texte-3); font-variant-numeric: tabular-nums; }
+.menu-theme-bulle { position: absolute; left: calc(100% + 8px); width: max-content; max-width: 300px; padding: 8px 10px; border-radius: 10px; background: var(--carte); border: 1px solid var(--bord-fort); box-shadow: 0 8px 22px rgba(0, 0, 0, .4); font-size: 12px; color: var(--texte-2); pointer-events: none; }
+.menu-theme-bulle b { display: block; color: var(--texte); margin-bottom: 4px; font-size: 12px; }
+.menu-theme-bulle code { display: block; color: var(--texte); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Le choix du champ dans LA PHRASE, à l'allure des pastilles. */
+.menu-theme.champ-phrase .menu-theme-bouton { font-size: 15px; padding: 3px 34px 3px 12px; border-radius: 99px; border: 1.5px dashed #f59e0b; background-color: color-mix(in srgb, #f59e0b 10%, transparent); max-width: 280px; }
+.menu-theme.champ-phrase.choisi .menu-theme-bouton { border-style: solid; background-color: color-mix(in srgb, #f59e0b 22%, transparent); font-weight: 600; }
 .menu-theme-choix:hover, .menu-theme-choix.vise { background: var(--carte-2); }
 .menu-theme-choix.on { background: var(--accent-doux); color: var(--accent); font-weight: 600; }
 

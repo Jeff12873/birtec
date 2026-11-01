@@ -26,6 +26,26 @@ export function routes(r) {
     return valeursDe(table, colonne, affichage, affichage ? null : libelleParLien(schema, table, colonne))
   })
 
+  // Quelques valeurs d'exemple de chaque colonne d'une table (les plus récentes lignes), pour la bulle des champs.
+  r.get('/api/phrase/exemples', async (ctx) => {
+    if (!etatConnexion().ouverte) return {}
+    const table = tableDe(await obtenirSchema(), ctx.query.table)
+    if (!table) throw new ErreurHttp(400, 'Table inconnue.')
+    const cle = table.colonnes.find((c) => c.cle)
+    const r200 = await executerRequete(`SELECT * FROM ${table.nom}${cle ? ` ORDER BY ${cle.nom} DESC` : ''}`, 200)
+    const exemples = {}
+    r200.colonnes.forEach((c, i) => {
+      const vus = new Set()
+      for (const l of r200.lignes) {
+        const v = l[i] === null || l[i] === undefined ? '' : String(l[i]).trim()
+        if (v && !vus.has(v)) vus.add(v)
+        if (vus.size >= 3) break
+      }
+      exemples[c.nom] = [...vus].map((v) => (v.length > 60 ? `${v.slice(0, 57)}…` : v))
+    })
+    return exemples
+  })
+
   // Les colonnes proposées dans LA PHRASE, table par table (choisies par l'administrateur ; absent : toutes).
   r.get('/api/phrase/colonnes', () => lireInfo('colonnes_phrase') || {})
   r.post('/api/phrase/colonnes', async (ctx) => {

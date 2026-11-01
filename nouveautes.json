@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.11.7",
+      "date": "2026-11-01",
+      "points": [
+        "LA PHRASE : en survolant un champ dans la liste, une bulle montre son nom dans la base et trois valeurs d'exemple ; la liste des champs se filtre en tapant"
+      ]
+    },
+    {
       "version": "0.11.6",
       "date": "2026-11-01",
       "points": [
