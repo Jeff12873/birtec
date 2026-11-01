@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.12.4",
+      "date": "2026-11-01",
+      "points": [
+        "LA PHRASE : « dans quelle table ? » propose la table consultée, les choix guidés et les tables principales reliées ; plus de tables liées ni lointaines (le chemin se trouve tout seul)"
+      ]
+    },
+    {
       "version": "0.12.3",
       "date": "2026-11-01",
       "points": [

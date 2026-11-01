@@ -1148,26 +1148,20 @@ function bandeauPhrase(vue) {
   const colonneDe = (table, nom) => noeud(table)?.table.colonnes.find((c) => c.nom === nom)
   const libelleColonne = (c) => (c ? (c.libelle ? c.libelle : c.nom) : '')
 
-  // Les tables proposées pour une condition : les voisines de la table, puis les voisines de celles-ci. Les tables
-  // de liaison (type intermédiaire) ne sont jamais proposées : on les traverse sans compter de pas, si bien que la
-  // machine d'un rapport (rapport → liaison → machine) est une voisine directe.
+  // Les tables proposées pour une condition : les tables principales (les objets métier) qu'un chemin relie à la
+  // table consultée. Les tables de liaison et les tables lointaines ne sont pas proposées : la constellation trouve
+  // elle-même le chemin.
   const deLiaison = (n) => n.type?.id === 'intermediaire'
-  function tablesLiees() {
+  const principalesCache = new Map()
+  function tablesPrincipales() {
     const depart = noeud(etatPhrase.depart)
     if (!depart) return []
-    const distances = new Map([[depart, 0]])
-    const file = [depart]
-    while (file.length) {
-      const n = file.shift()
-      for (const v of n.voisins) {
-        const d = distances.get(n) + (deLiaison(v) ? 0 : 1)
-        if (d > 2 || (distances.has(v) && distances.get(v) <= d)) continue
-        distances.set(v, d)
-        if (deLiaison(v)) file.unshift(v)
-        else file.push(v)
-      }
+    if (!principalesCache.has(depart)) {
+      principalesCache.set(depart, vue.graphe.noeuds
+        .filter((n) => n !== depart && n.type?.id === 'principale' && cheminLePlusCourt(vue.graphe, depart, n))
+        .sort((x, y) => (x.table.libelle || x.table.nom).localeCompare(y.table.libelle || y.table.nom, 'fr')))
     }
-    return [...distances].filter(([n, d]) => d > 0 && !deLiaison(n)).sort((a, b) => a[1] - b[1] || (a[0].table.libelle || a[0].table.nom).localeCompare(b[0].table.libelle || b[0].table.nom, 'fr')).map(([n, d]) => ({ n, d }))
+    return principalesCache.get(depart)
   }
 
   // Toutes les conditions, groupes compris (pour le chemin, les étiquettes, le texte).
@@ -1310,8 +1304,8 @@ function bandeauPhrase(vue) {
   }
 
   // Les tables où chercher : celle qu'on consulte, les choix guidés, puis les tables liées (et un peu plus loin).
-  function sourcesCondition() {
-    const liees = tablesLiees()
+  // garder : la table déjà choisie dans la condition, même si elle n'est pas principale (rapport rouvert).
+  function sourcesCondition(garder = null) {
     const option = (n) => ({ valeur: n.table.nom, libelle: n.table.libelle ? `${n.table.libelle} (${n.table.nom})` : n.table.nom })
     const guides = [
       guidesDispo.parcs.length ? { valeur: 'parc', libelle: 'le parc (AITEC)' } : null,
@@ -1321,8 +1315,8 @@ function bandeauPhrase(vue) {
     return [
       { groupe: 'La table consultée', options: [option(noeud(etatPhrase.depart))] },
       guides.length ? { groupe: 'Choix guidés', options: guides } : null,
-      { groupe: 'Tables liées', options: liees.filter(({ d }) => d === 1).map(({ n }) => option(n)) },
-      { groupe: 'Un peu plus loin', options: liees.filter(({ d }) => d === 2).map(({ n }) => option(n)) },
+      { groupe: 'Tables principales', options: tablesPrincipales().map(option) },
+      garder && garder !== etatPhrase.depart && !tablesPrincipales().some((n) => n.table.nom === garder) && noeud(garder) ? { groupe: 'Déjà choisie', options: [option(noeud(garder))] } : null,
     ].filter((g) => g && g.options.length)
   }
   // Les colonnes proposées d'une table (le choix de l'administrateur, sinon toutes) ; garder : celle déjà choisie.
@@ -1380,7 +1374,7 @@ function bandeauPhrase(vue) {
       (v) => { c.op = v; if (SANS_VALEUR.has(v)) c.valeurs = []; dessiner(); changement() }, { classe: 'operateur' })
 
     // D'abord où chercher (la table, une table liée, ou un choix guidé), puis la colonne de cette table.
-    const table = choixListe(sourcesCondition(), c.source && !c.source.startsWith('table:') ? c.source : c.table || '', (v) => {
+    const table = choixListe(sourcesCondition(c.table), c.source && !c.source.startsWith('table:') ? c.source : c.table || '', (v) => {
       Object.assign(c, { valeurs: [], valeur: null, valeurTexte: null, modele: null, champ: null, colonne: null })
       if (['parc', 'machine', 'fiche'].includes(v)) Object.assign(c, { source: v, table: null })
       else Object.assign(c, { source: v ? `table:${v}` : '', table: v || null })
