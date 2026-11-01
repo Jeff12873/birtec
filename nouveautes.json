@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.10.2",
+      "date": "2026-11-01",
+      "points": [
+        "La nébuleuse de la constellation déborde de l'encart, très floutée, et passe du net au flou sans aucun bord visible"
+      ]
+    },
+    {
       "version": "0.10.1",
       "date": "2026-11-01",
       "points": [

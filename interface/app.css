@@ -40,20 +40,28 @@ input.champ-dico.enregistre { border-color: var(--accent); }
 /* Constellation des tables (graphe en bulles) */
 canvas.toile-schema { position: relative; display: block; width: 100%; height: calc(100vh - 210px); min-height: 480px; cursor: grab; touch-action: none; }
 /* Constellation : un ciel de nuit (la nébuleuse, fixe ; les étoiles en parallaxe par-dessus) */
-.carte-ciel { border-color: transparent; box-shadow: none; background: linear-gradient(180deg, rgba(4, 7, 15, 0.30), rgba(4, 7, 15, 0.55)), url('nebuleuse.webp') center / cover no-repeat, #04070f; }
+.carte-ciel { border-color: transparent; box-shadow: none; background: transparent; }
+/* Le halo (derrière, flou, qui déborde) et le ciel net (dans l'encart) partagent le même cadre : la nébuleuse
+   tombe au même endroit, et l'encart n'a plus de bord, seulement un passage du net au flou. */
+.halo-ciel, .ciel-net { background: linear-gradient(180deg, rgba(4, 7, 15, 0.30), rgba(4, 7, 15, 0.55)), url('nebuleuse.webp') center / cover no-repeat, #04070f; }
+.ciel-net { position: absolute; top: -170px; left: -170px; right: -170px; bottom: -40px; pointer-events: none;
+  -webkit-mask-image: linear-gradient(to right, transparent 170px, #000 310px, #000 calc(100% - 310px), transparent calc(100% - 170px)), linear-gradient(to bottom, transparent 170px, #000 310px, #000 calc(100% - 180px), transparent calc(100% - 40px));
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to right, transparent 170px, #000 310px, #000 calc(100% - 310px), transparent calc(100% - 170px)), linear-gradient(to bottom, transparent 170px, #000 310px, #000 calc(100% - 180px), transparent calc(100% - 40px));
+  mask-composite: intersect; }
 .pluie-constellation { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .pluie-constellation img { position: absolute; top: -70px; height: calc(42px * var(--taille, 1)); width: auto; opacity: 0.8; animation-name: constellation-chute; animation-timing-function: linear; animation-fill-mode: forwards; }
 @keyframes constellation-chute { to { transform: translateY(var(--chute, 800px)) rotate(var(--tour, 360deg)); } }
 @media (prefers-reduced-motion: reduce) { .pluie-constellation { display: none; } }
 .zone-motif { display: flex; gap: 6px; align-items: center; }
-/* Les bords du ciel : floutés puis fondus dans le fond de la page, sans cadre net. */
-.brume-bords { position: absolute; inset: 0; pointer-events: none; --b: 70px;
-  -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
-  background:
-    linear-gradient(to right, var(--fond), transparent var(--b), transparent calc(100% - var(--b)), var(--fond)),
-    linear-gradient(to bottom, var(--fond), transparent var(--b), transparent calc(100% - var(--b)), var(--fond));
-  -webkit-mask-image: linear-gradient(to right, #000, transparent calc(var(--b) * 1.6), transparent calc(100% - var(--b) * 1.6), #000), linear-gradient(to bottom, #000, transparent calc(var(--b) * 1.6), transparent calc(100% - var(--b) * 1.6), #000);
-  mask-image: linear-gradient(to right, #000, transparent calc(var(--b) * 1.6), transparent calc(100% - var(--b) * 1.6), #000), linear-gradient(to bottom, #000, transparent calc(var(--b) * 1.6), transparent calc(100% - var(--b) * 1.6), #000); }
+/* Le halo autour de l'encart : la même nébuleuse, très floutée, qui s'efface vers l'extérieur. */
+.halo-ciel { position: absolute; z-index: -1; top: -170px; left: -170px; bottom: -40px; right: calc(336px - 170px); pointer-events: none;
+  filter: blur(28px); animation: halo-arrivee 1.8s ease-out;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 170px, #000 calc(100% - 170px), transparent), linear-gradient(to bottom, transparent, #000 170px, #000 calc(100% - 40px), transparent);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to right, transparent, #000 170px, #000 calc(100% - 170px), transparent), linear-gradient(to bottom, transparent, #000 170px, #000 calc(100% - 40px), transparent);
+  mask-composite: intersect; }
+@keyframes halo-arrivee { from { opacity: 0; } }
 canvas.ciel-schema { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .voile-arrivee { position: absolute; inset: 0; background: #04070f; pointer-events: none; animation: voile-arrivee 1.8s ease-out forwards; }
 .voile-arrivee.rapide { animation-duration: .6s; }
@@ -85,8 +93,8 @@ a.raccourci-rapport:hover { border-color: var(--accent); text-decoration: none; 
 .poignee { color: var(--texte-3); }
 .tuile-indicateur .retirer, .raccourci-rapport .retirer { position: absolute; top: 6px; right: 6px; }
 
-.schema-grille { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
-@media (max-width: 1100px) { .schema-grille { grid-template-columns: 1fr; } .panneau-schema { position: static; max-height: none; } }
+.schema-grille { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .schema-grille { grid-template-columns: 1fr; } .halo-ciel { right: -160px; } .panneau-schema { position: static; max-height: none; } }
 
 /* Les cases à cocher gardent leur taille (le style des champs les étirerait) */
 input[type=checkbox] { width: auto; flex: none; padding: 0; }

@@ -134,14 +134,16 @@ export default {
       ),
       bandeau.element,
       h('div', { class: 'schema-grille' },
+        // Le halo : la nébuleuse, très floutée, déborde autour de l'encart et se perd dans la page.
+        h('div', { class: 'halo-ciel', 'aria-hidden': 'true' }),
         h('div', { class: 'carte carte-ciel', style: { padding: '0', overflow: 'hidden', position: 'relative' } },
+          // La nébuleuse nette, cadrée comme le halo, qui s'efface vers les bords.
+          h('div', { class: 'ciel-net', 'aria-hidden': 'true' }),
           ciel,
           // L'arrivée : le fond (nébuleuse et étoiles) apparaît en fondu, pendant que la vue dézoome.
           h('div', { class: `voile-arrivee${premiereVisite ? '' : ' rapide'}`, 'aria-hidden': 'true' }),
           pluie,
           toile,
-          // Les bords flous qui fondent le ciel dans la page.
-          h('div', { class: 'brume-bords', 'aria-hidden': 'true' }),
           cadreRaccourcis(),
           reglagesSchema(vue, caseEcartees),
         ),
