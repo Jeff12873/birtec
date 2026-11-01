@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.11.2",
+      "date": "2026-11-01",
+      "points": [
+        "LA PHRASE : le tri se fait en cliquant sur les colonnes de l'aperçu (croissant, décroissant, sans tri ; Maj + clic pour un tri secondaire) ; il fait l'ORDER BY de la requête"
+      ]
+    },
+    {
       "version": "0.11.1",
       "date": "2026-11-01",
       "points": [

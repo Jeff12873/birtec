@@ -1077,7 +1077,6 @@ const nouvelleCondition = (lien = 'et') => ({ id: ++numeroCondition, lien, sourc
 function bandeauPhrase(vue) {
   const zoneDepart = h('div', { class: 'ligne-depart-phrase' })
   const zoneConditions = h('div', { class: 'conditions-phrase' })
-  const zoneTri = h('div', { class: 'tri-phrase' })
   const zoneResultat = h('div', { class: 'resultat-phrase' })
   // { depart, conditions: [condition | { id, lien, groupe: [condition…] }], tri: [{ table, colonne, sens }] }
   let etatPhrase = { depart: null, conditions: [], tri: [] }
@@ -1210,9 +1209,8 @@ function bandeauPhrase(vue) {
   }
 
   function dessiner() {
-    if (!etatPhrase.depart) { vider(zoneConditions); vider(zoneTri); return }
+    if (!etatPhrase.depart) return vider(zoneConditions)
     vider(zoneConditions, listeConditions(etatPhrase.conditions, true))
-    dessinerTri()
   }
 
   // Une liste de conditions (la phrase entière, ou l'intérieur d'un groupe), avec ses boutons d'ajout.
@@ -1358,15 +1356,22 @@ function bandeauPhrase(vue) {
     return zone
   }
 
-  function dessinerTri() {
-    const sources = sourcesCondition().filter((g) => g.groupe !== 'Choix guidés')
-    const lignes = etatPhrase.tri.map((t, i) => h('span', { class: 'ligne-tri' },
-      h('span', { class: 'mot-phrase' }, i ? 'puis par' : 'triés par'),
-      choixListe(sources, t.table || '', (v) => { Object.assign(t, { table: v || null, colonne: null }); dessiner(); changement() }, { vide: '— dans quelle table ? —' }),
-      t.table ? choixListe(colonnesDe(t.table), t.colonne || '', (v) => { t.colonne = v || null; dessiner(); changement() }, { vide: '— quel champ ? —' }) : null,
-      h('button', { class: 'pastille-lien', title: 'Changer le sens', onclick: () => { t.sens = t.sens === 'desc' ? 'asc' : 'desc'; dessiner(); changement() } }, t.sens === 'desc' ? 'décroissant ↓' : 'croissant ↑'),
-      h('button', { class: 'discret icone-seule petit', title: 'Retirer ce tri', onclick: () => { etatPhrase.tri.splice(i, 1); dessiner(); changement() } }, ic('x', 13))))
-    vider(zoneTri, lignes, h('button', { class: 'pastille-ajout', onclick: () => { etatPhrase.tri.push({ table: etatPhrase.depart, colonne: null, sens: 'asc' }); dessiner() } }, ic('plus', 13), etatPhrase.tri.length ? 'puis par…' : 'triés par…'))
+  // Le tri se fait dans l'aperçu : un clic sur une colonne trie (croissant, puis décroissant, puis plus de tri) ;
+  // Maj + clic ajoute un tri secondaire. C'est ce tri qui fait l'ORDER BY de la requête.
+  function trierPar(colonne, ajouter) {
+    const table = etatPhrase.depart
+    const existant = etatPhrase.tri.find((t) => t.table === table && t.colonne === colonne)
+    if (!ajouter) etatPhrase.tri = existant ? [existant] : []
+    if (!existant) etatPhrase.tri.push({ table, colonne, sens: 'asc' })
+    else if (existant.sens === 'asc') existant.sens = 'desc'
+    else etatPhrase.tri = etatPhrase.tri.filter((t) => t !== existant)
+    changement()
+  }
+  const enteteTri = (colonne) => {
+    const i = etatPhrase.tri.findIndex((t) => t.table === etatPhrase.depart && t.colonne === colonne)
+    const t = etatPhrase.tri[i]
+    return h('th', { class: `triable${t ? ' trie' : ''}`, title: 'Cliquer pour trier (Maj + clic : tri secondaire)', onclick: (e) => trierPar(colonne, e.shiftKey) },
+      colonne, t ? h('span', { class: 'sens-tri' }, `${t.sens === 'desc' ? '↓' : '↑'}${etatPhrase.tri.length > 1 ? i + 1 : ''}`) : null)
   }
 
   // Le compteur et l'aperçu : relus un instant après le dernier changement (choix ou chemin).
@@ -1382,7 +1387,7 @@ function bandeauPhrase(vue) {
         vider(zoneResultat,
           h('div', { class: 'compteur-phrase' }, h('b', {}, nombreFr(r.nombre)), ` ${libelleTable(vue.chemin.depart.table.nom)} correspondent`),
           r.apercu?.lignes.length ? h('div', { class: 'tableau-conteneur apercu-phrase' }, h('table', { class: 'tableau compact' },
-            h('thead', {}, h('tr', {}, r.apercu.colonnes.map((c) => h('th', {}, c)))),
+            h('thead', {}, h('tr', {}, r.apercu.colonnes.map(enteteTri))),
             h('tbody', {}, r.apercu.lignes.map((l) => h('tr', {}, l.map((v) => h('td', {}, v === null ? '' : String(v)))))))) : null,
           r.sql ? h('details', { class: 'sql-phrase' }, h('summary', {}, 'Voir le SQL pour BIRT'), h('pre', { class: 'code' }, h('code', {}, r.sql))) : null)
       } catch (e) {
@@ -1408,7 +1413,7 @@ function bandeauPhrase(vue) {
   const reprendre = (liste) => liste.map((x) => (x.groupe ? { ...x, id: ++numeroCondition, groupe: reprendre(x.groupe) } : { ...nouvelleCondition(x.lien), ...x, id: ++numeroCondition, valeurs: x.valeurs || [] }))
 
   dessinerDepart()
-  const element = h('div', { class: 'carte bandeau-phrase' }, zoneDepart, zoneConditions, zoneTri, zoneResultat)
+  const element = h('div', { class: 'carte bandeau-phrase' }, zoneDepart, zoneConditions, zoneResultat)
   return { element, majCompteur, restaurer }
 }
 

@@ -246,8 +246,10 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 .ajouts-condition { display: flex; gap: 8px; flex-wrap: wrap; }
 .pastille-ajout { font: inherit; font-size: 13px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 99px; border: 1px dashed var(--bord); background: none; color: var(--texte-2); cursor: pointer; }
 .pastille-ajout:hover { border-color: var(--accent); color: var(--texte); }
-.tri-phrase { display: flex; gap: 8px 14px; align-items: center; flex-wrap: wrap; }
-.ligne-tri { display: inline-flex; gap: 6px; align-items: center; }
+.apercu-phrase th.triable { cursor: pointer; user-select: none; white-space: nowrap; }
+.apercu-phrase th.triable:hover { color: var(--texte); }
+.apercu-phrase th.trie { color: var(--accent); }
+.sens-tri { margin-left: 4px; font-size: 11px; }
 .ligne-saisie-phrase { display: flex; align-items: center; gap: 10px; }
 .ligne-saisie-phrase > svg { color: var(--accent); flex: none; }
 .saisie-phrase { flex: 1; font-size: 15px; padding: 10px 14px; }
