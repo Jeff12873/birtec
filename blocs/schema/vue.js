@@ -1035,198 +1035,339 @@ function couleursDuTheme() {
 
 // ---------------------------------------------------------------- LA PHRASE (bandeau du haut)
 
-// LA PHRASE en cours : le panneau « Et maintenant ? » s'en sert (texte, filtres choisis).
+// LA PHRASE en cours : le panneau « Et maintenant ? » s'en sert (texte, conditions, tri).
 let phraseCourante = null
 
-// L'utilisateur dit ce qu'il veut voir ; l'IA en fait une phrase à trous (blocs/phrase/serveur.js), le chemin
-// s'allume dans la constellation, et chaque trou devient une pastille à choisir (valeurs lues dans la base).
-// Les choix deviennent des étiquettes de filtre ; le compteur et l'aperçu suivent chaque changement.
+// L'utilisateur construit lui-même ce qu'il veut consulter, par des choix cliquables (pas d'IA) : la table, puis
+// des conditions (« qui ont », « qui contiennent »…) liées par ET / OU et groupées entre parenthèses, puis l'ordre.
+// Le chemin s'allume dans la constellation avec les tables utilisées ; le compteur et l'aperçu suivent chaque
+// changement. Le SQL est écrit par le serveur (blocs/phrase/serveur.js).
+
+const OPERATEURS = {
+  egal: 'ont', different: 'n’ont pas', contient: 'contiennent', ne_contient: 'ne contiennent pas',
+  commence: 'commencent par', finit: 'finissent par', sup: 'ont plus que', inf: 'ont moins que', entre: 'ont entre',
+  vide: 'ont vide', non_vide: 'ont rempli',
+}
+const OPERATEURS_PAR_NATURE = {
+  texte: ['egal', 'different', 'contient', 'ne_contient', 'commence', 'finit', 'vide', 'non_vide'],
+  nombre: ['egal', 'different', 'sup', 'inf', 'entre', 'vide', 'non_vide'],
+  date: ['egal', 'sup', 'inf', 'entre', 'vide', 'non_vide'],
+  guide: ['egal', 'different'],
+}
+const libelleOperateur = (op, nature) => (nature === 'date' && op === 'sup' ? 'ont après' : nature === 'date' && op === 'inf' ? 'ont avant' : OPERATEURS[op])
+const SANS_VALEUR = new Set(['vide', 'non_vide'])
+
+// La nature d'une colonne, d'après son type : les dates rangées en AAAAMMJJ (texte de 8) comptent pour des dates.
+function natureColonne(c) {
+  const type = String(c?.type || '')
+  if (/^(int|bigint|smallint|tinyint|mediumint|decimal|numeric|float|double)/i.test(type)) return 'nombre'
+  if (/^(date|datetime|timestamp)/i.test(type)) return 'date'
+  if (/^(var)?char\(8\)/i.test(type) && /^date|_date|^dt_/i.test(c.nom)) return 'date8'
+  return 'texte'
+}
+const famille = (nature) => (nature === 'date8' ? 'date' : nature)
+// Saisie d'une date (AAAA-MM-JJ) → valeur de la base, et inversement.
+const versBase = (v, nature) => (nature === 'date8' ? String(v).replace(/-/g, '') : v)
+const versSaisie = (v, nature) => (nature === 'date8' && /^\d{8}$/.test(String(v)) ? `${v.slice(0, 4)}-${v.slice(4, 6)}-${v.slice(6)}` : v)
+const dateFr = (v) => (/^\d{4}-?\d{2}-?\d{2}$/.test(String(v)) ? String(v).replace(/-/g, '').replace(/^(\d{4})(\d{2})(\d{2})$/, '$3/$2/$1') : v)
+
+let numeroCondition = 0
+const nouvelleCondition = (lien = 'et') => ({ id: ++numeroCondition, lien, source: '', op: 'egal', valeurs: [] })
+
 function bandeauPhrase(vue) {
-  const saisie = h('input', { type: 'text', class: 'saisie-phrase', placeholder: 'Que voulez-vous voir ? Ex. : les RI du parc peinture qui ont une fiche technique cochée « oui »' })
-  const zonePhrase = h('div', { class: 'phrase-construite' })
-  const zoneFiltres = h('div', { class: 'filtres-phrase' })
+  const zoneDepart = h('div', { class: 'ligne-depart-phrase' })
+  const zoneConditions = h('div', { class: 'conditions-phrase' })
+  const zoneTri = h('div', { class: 'tri-phrase' })
   const zoneResultat = h('div', { class: 'resultat-phrase' })
-  const zoneGuides = h('div', { class: 'guides-phrase' })
-  let p = null
-  const valeurs = {}
-  // Les choix guidés (parc, machine, fiche technique) : { parc, machine: { code, texte }, fiche: { type, modele,
-  // modeleTexte, champ, champTexte, valeur } } ; restaures : filtres guidés repris d'un rapport rouvert.
-  let guides = {}
-  let restaures = []
+  // { depart, conditions: [condition | { id, lien, groupe: [condition…] }], tri: [{ table, colonne, sens }] }
+  let etatPhrase = { depart: null, conditions: [], tri: [] }
+  let guidesDispo = { parcs: [], machines: null, fiche: null }
+  let origine = null
   let minuterie = null
   let demande = 0
+  let tablesDuChemin = ''
+  const listesValeurs = new Map()
 
-  const libelleTable = (nom) => vue.graphe.parNom.get(String(nom).toLowerCase())?.table.libelle || nom
-  const choixActifs = () => (p ? p.choix.filter((c) => valeurs[c.id] !== undefined) : [])
-  const libelleValeur = (c) => c.options.find((o) => o.valeur === valeurs[c.id])?.libelle ?? valeurs[c.id]
-  const filtresGuides = () => {
-    const liste = [...restaures]
-    const g = p?.guides || {}
-    const tableMachines = g.machine?.table
-    if (guides.machine?.code) liste.push({ guide: 'machine', valeur: guides.machine.code, table: tableMachines, texte: `Machine : ${guides.machine.texte} (et dessous)` })
-    else if (guides.parc) liste.push({ guide: 'parc', valeur: guides.parc, table: tableMachines, texte: `Parc : ${g.parc?.options.find((o) => o.valeur === guides.parc)?.libelle || guides.parc}` })
-    const f = guides.fiche
-    if (f?.modele) liste.push({ guide: 'fiche', type: f.type, modele: f.modele, champ: f.champ || null, valeurs: f.valeur ? [f.valeur] : [], table: p?.depart, texte: `Fiche ${f.modeleTexte}${f.champ ? ` › ${f.champTexte}` : ''}${f.valeur ? ` : ${f.valeur}` : ''}` })
-    return liste
-  }
-  const filtres = () => [...choixActifs().map((c) => ({ table: c.table, colonne: c.colonne, valeurs: [valeurs[c.id]], texte: `${c.question.replace(/\s*\?\s*$/, '')} : ${libelleValeur(c)}` })), ...filtresGuides()]
-  // Un trou de la phrase tenu par un choix guidé : ce qui est choisi, sinon des points de suspension.
-  const texteGuide = (sorte) => {
-    const g = p?.guides || {}
-    if (sorte === 'lieu') return guides.machine?.texte || g.parc?.options.find((o) => o.valeur === guides.parc)?.libelle || '…'
-    if (sorte === 'fiche') return guides.fiche?.modeleTexte || '…'
-    return guides.fiche?.valeur || g.fiche?.valeur || '…'
-  }
-  const texte = () => (p ? p.phrase.map((m) => (m.guide ? texteGuide(m.guide) : m.choix ? (() => { const c = p.choix.find((x) => x.id === m.choix); return valeurs[c.id] !== undefined ? libelleValeur(c) : c.question.replace(/\s*\?\s*$/, '') })() : m.table ? libelleTable(m.table) : m.texte)).join('').replace(/\s+/g, ' ').trim() : '')
+  const noeud = (nom) => vue.graphe.parNom.get(String(nom || '').toLowerCase())
+  const libelleTable = (nom) => noeud(nom)?.table.libelle || nom
+  const colonneDe = (table, nom) => noeud(table)?.table.colonnes.find((c) => c.nom === nom)
+  const libelleColonne = (c) => (c ? (c.libelle ? c.libelle : c.nom) : '')
 
-  async function construire() {
-    if (!saisie.value.trim()) return
-    vider(zonePhrase, h('span', { class: 'discret curseur' }, 'L’IA construit la phrase'))
-    vider(zoneFiltres)
-    vider(zoneResultat)
-    try {
-      p = await api('/api/phrase', { methode: 'POST', corps: { texte: saisie.value } })
-    } catch (e) {
-      p = null
-      vider(zonePhrase, h('span', { class: 'rouge' }, e.message))
-      return
+  // Les tables proposées pour une condition : la table elle-même, puis ses voisines et les voisines de celles-ci.
+  function tablesLiees() {
+    const depart = noeud(etatPhrase.depart)
+    if (!depart) return []
+    const vues = new Map([[depart, 0]])
+    let front = [depart]
+    for (let d = 1; d <= 2; d++) {
+      const suivant = []
+      for (const n of front) for (const v of n.voisins) if (!vues.has(v)) { vues.set(v, d); suivant.push(v) }
+      front = suivant
     }
-    for (const cle of Object.keys(valeurs)) delete valeurs[cle]
-    guides = { parc: p.guides?.parc?.choisi || null }
-    const gf = p.guides?.fiche
-    if (gf && !gf.absent) guides.fiche = { type: gf.type, modele: gf.choisi, modeleTexte: gf.modeles.find((m) => m.valeur === gf.choisi)?.code || '', voulu: gf.valeur }
-    restaures = []
-    phraseCourante = { texte, filtres }
+    return [...vues].filter(([, d]) => d > 0).sort((a, b) => a[1] - b[1] || a[0].table.nom.localeCompare(b[0].table.nom)).map(([n, d]) => ({ n, d }))
+  }
+
+  // Toutes les conditions, groupes compris (pour le chemin, les étiquettes, le texte).
+  const aplatir = (liste) => liste.flatMap((c) => (c.groupe ? aplatir(c.groupe) : [c]))
+  const tableDeCondition = (c) => (c.source === 'parc' || c.source === 'machine' ? guidesDispo.machines?.table : c.source === 'fiche' ? guidesDispo.fiche?.table : c.table)
+  const complete = (c) => {
+    if (!c.source) return false
+    if (c.source === 'parc' || c.source === 'machine') return Boolean(c.valeur)
+    if (c.source === 'fiche') return Boolean(c.modele)
+    return Boolean(c.colonne) && (SANS_VALEUR.has(c.op) || (c.op === 'entre' ? c.valeurs.length === 2 && c.valeurs.every(Boolean) : Boolean(c.valeurs[0])))
+  }
+
+  // ---- le texte de la phrase (gardé avec le rapport, affiché dans les vignettes)
+  function texteCondition(c) {
+    const op = OPERATEURS[c.op] || 'ont'
+    if (c.source === 'parc') return `qui ${c.op === 'different' ? 'ne sont pas' : 'sont'} dans le parc ${c.valeurTexte || c.valeur}`
+    if (c.source === 'machine') return `qui ${c.op === 'different' ? 'ne concernent pas' : 'concernent'} la machine ${c.valeurTexte || c.valeur} (et dessous)`
+    if (c.source === 'fiche') return `qui ${op} la fiche technique ${c.modeleTexte}${c.champ ? ` › ${c.champTexte}` : ''}${c.valeurs[0] ? ` = ${c.valeurs[0]}` : ''}`
+    const col = colonneDe(c.table, c.colonne)
+    const nature = natureColonne(col)
+    const champ = `${libelleColonne(col)}${c.table !== etatPhrase.depart ? ` (${libelleTable(c.table)})` : ''}`
+    const v = (x) => `« ${famille(nature) === 'date' ? dateFr(x) : c.valeurTexte || x} »`
+    if (SANS_VALEUR.has(c.op)) return `qui ${op.replace(/^ont /, `ont ${champ} `)}`
+    if (c.op === 'entre') return `qui ont ${champ} entre ${v(c.valeurs[0])} et ${v(c.valeurs[1])}`
+    if (['contient', 'ne_contient', 'commence', 'finit'].includes(c.op)) return `qui ${op} ${v(c.valeurs[0])} dans ${champ}`
+    return `qui ${libelleOperateur(c.op, famille(nature))} ${champ} ${v(c.valeurs[0])}`
+  }
+  function texteListe(liste) {
+    const morceaux = []
+    for (const c of liste) {
+      const t = c.groupe ? (() => { const x = texteListe(c.groupe); return x ? `(${x})` : '' })() : complete(c) ? texteCondition(c) : ''
+      if (t) morceaux.push(`${morceaux.length ? (c.lien === 'ou' ? ' ou ' : ' et ') : ''}${t}`)
+    }
+    return morceaux.join('')
+  }
+  const texte = () => {
+    if (!etatPhrase.depart) return ''
+    const conditions = texteListe(etatPhrase.conditions)
+    const tri = etatPhrase.tri.filter((t) => t.colonne).map((t) => `${libelleColonne(colonneDe(t.table, t.colonne))}${t.sens === 'desc' ? ' (décroissant)' : ''}`)
+    return `Les ${libelleTable(etatPhrase.depart)}${conditions ? ` ${conditions}` : ''}${tri.length ? `, triés par ${tri.join(', ')}` : ''}.`
+  }
+
+  // ---- ce qui part au serveur : les conditions complètes, dans leurs groupes
+  const versSpec = (liste) => liste.map((c) => {
+    if (c.groupe) return { lien: c.lien, groupe: versSpec(c.groupe) }
+    if (!complete(c)) return null
+    if (c.source === 'parc' || c.source === 'machine') return { lien: c.lien, guide: c.source, op: c.op, valeur: c.valeur }
+    if (c.source === 'fiche') return { lien: c.lien, guide: 'fiche', op: c.op, type: guidesDispo.fiche?.type, modele: c.modele, champ: c.champ || null, valeurs: c.valeurs.filter(Boolean) }
+    return { lien: c.lien, table: c.table, colonne: c.colonne, op: c.op, valeurs: c.valeurs }
+  }).filter((c) => c && (!c.groupe || c.groupe.length))
+  const conditionsSpec = () => versSpec(etatPhrase.conditions)
+  const triSpec = () => etatPhrase.tri.filter((t) => t.colonne).map(({ table, colonne, sens }) => ({ table, colonne, sens }))
+
+  // ---- après chaque changement : le chemin (si les tables ont changé), les étiquettes, le compteur
+  function changement() {
+    if (!etatPhrase.depart) return
+    const tables = [etatPhrase.depart, ...aplatir(etatPhrase.conditions).filter(complete).map(tableDeCondition), ...etatPhrase.tri.filter((t) => t.colonne).map((t) => t.table)].filter(Boolean)
+    const cle = [...new Set(tables)].join('|')
+    if (cle !== tablesDuChemin) {
+      tablesDuChemin = cle
+      vue.cheminPour([...new Set(tables)]) // rappelle majCompteur
+    } else majCompteur()
+    vue.filtres = new Map()
+    for (const c of aplatir(etatPhrase.conditions).filter(complete)) {
+      const t = tableDeCondition(c)
+      vue.filtres.set(t, [...(vue.filtres.get(t) || []), texteCondition(c)])
+    }
+    vue.dessiner()
+  }
+
+  // ---- le dessin
+  const choixListe = (options, valeur, surChoix, { vide = null, classe = '' } = {}) => {
+    const s = h('select', { class: `pastille-choix ${classe}${valeur ? ' choisie' : ''}` },
+      vide !== null ? h('option', { value: '' }, vide) : null,
+      options.map((o) => (o.groupe
+        ? h('optgroup', { label: o.groupe }, o.options.map((x) => h('option', { value: x.valeur, selected: String(valeur ?? '') === String(x.valeur), title: x.titre || '' }, x.libelle)))
+        : h('option', { value: o.valeur, selected: String(valeur ?? '') === String(o.valeur), title: o.titre || '' }, o.libelle))))
+    s.addEventListener('change', () => surChoix(s.value, s.selectedOptions[0]?.textContent || ''))
+    return s
+  }
+
+  function dessinerDepart() {
+    const tables = vue.graphe.noeuds.map((n) => n.table).sort((a, b) => (a.libelle || a.nom).localeCompare(b.libelle || b.nom, 'fr'))
+    const principales = vue.graphe.noeuds.filter((n) => n.type?.id === 'principale').map((n) => n.table.nom)
+    const option = (t) => ({ valeur: t.nom, libelle: t.libelle ? `${t.libelle} (${t.nom})` : t.nom })
+    const options = principales.length
+      ? [{ groupe: 'Principales', options: tables.filter((t) => principales.includes(t.nom)).map(option) }, { groupe: 'Toutes les tables', options: tables.filter((t) => !principales.includes(t.nom)).map(option) }]
+      : tables.map(option)
+    vider(zoneDepart, ic('etincelle', 18), h('span', {}, 'Je souhaite consulter les'),
+      choixListe(options, etatPhrase.depart, (v) => choisirDepart(v), { vide: '— choisir —', classe: 'depart' }))
+  }
+
+  async function choisirDepart(nom, garder = null) {
+    etatPhrase = garder || { depart: nom || null, conditions: [], tri: [] }
+    tablesDuChemin = ''
+    guidesDispo = { parcs: [], machines: null, fiche: null }
+    if (etatPhrase.depart) guidesDispo = await api(`/api/phrase/guides?depart=${encodeURIComponent(etatPhrase.depart)}`).catch(() => guidesDispo)
+    phraseCourante = { texte, conditions: conditionsSpec, tri: triSpec, sauvegarde: () => JSON.parse(JSON.stringify({ conditions: etatPhrase.conditions, tri: triSpec() })), origine }
+    dessinerDepart()
     dessiner()
-    dessinerGuides()
-    vue.cheminPour(p.tables)
-  }
-
-  // Les choix guidés, l'un après l'autre : où (parc), quelle machine du parc, quelle fiche technique, quel champ,
-  // quelle valeur. Les listes viennent de la base (modèle de données du site) ; ce que l'IA a compris est déjà choisi.
-  async function dessinerGuides() {
-    const g = p?.guides || {}
-    const etapes = []
-    const select = (titre, options, choisi, surChoix, vide = '— au choix —') => {
-      const s = h('select', { class: `pastille-choix guide${choisi ? ' choisie' : ''}`, title: titre }, h('option', { value: '' }, vide), options.map((o) => h('option', { value: o.valeur, selected: String(choisi ?? '') === String(o.valeur), title: o.chemin || '' }, o.libelle)))
-      s.addEventListener('change', () => surChoix(s.value, s.selectedOptions[0]?.textContent || ''))
-      return h('label', { class: 'etape-guide' }, h('span', {}, titre), s)
-    }
-    if (g.parc) {
-      etapes.push(select('Où ? (parc)', g.parc.options, guides.parc, (v) => { guides.parc = v || null; guides.machine = null; apresGuide() }, '— tous les parcs —'))
-      // La machine : cherchée dans le parc, d'après les mots de la phrase (modifiables).
-      const recherche = h('input', { type: 'search', class: 'recherche-machine', placeholder: 'Chercher une machine (repère, nom)…', value: guides.machineMots ?? g.machine?.mots ?? '' })
-      const liste = h('select', { class: `pastille-choix guide${guides.machine ? ' choisie' : ''}` }, h('option', { value: '' }, '— toute la zone —'))
-      const chemin = h('div', { class: 'chemin-machine discret' }, guides.machine?.chemin || '')
-      const charger = async (choisirMeilleure) => {
-        guides.machineMots = recherche.value
-        const machines = await api(`/api/phrase/machines?parc=${encodeURIComponent(guides.parc || '')}&q=${encodeURIComponent(recherche.value)}`).catch(() => [])
-        vider(liste, h('option', { value: '' }, '— toute la zone —'), machines.slice(0, 200).map((m) => h('option', { value: m.code, selected: guides.machine?.code === m.code, title: m.chemin }, m.libelle)))
-        // Choisie d'office seulement si un mot entier de la phrase la désigne.
-        if (choisirMeilleure && machines[0]?.score >= 3 && !guides.machine) {
-          guides.machine = { code: machines[0].code, texte: machines[0].libelle, chemin: machines[0].chemin }
-          liste.value = machines[0].code
-          liste.classList.add('choisie')
-          chemin.textContent = machines[0].chemin
-          apresGuide(false)
-        }
-      }
-      let minuterieRecherche = null
-      recherche.addEventListener('input', () => { clearTimeout(minuterieRecherche); minuterieRecherche = setTimeout(() => charger(false), 300) })
-      liste.addEventListener('change', () => {
-        const o = liste.selectedOptions[0]
-        guides.machine = liste.value ? { code: liste.value, texte: o.textContent, chemin: o.title } : null
-        liste.classList.toggle('choisie', Boolean(liste.value))
-        chemin.textContent = o?.title || ''
-        apresGuide(false)
-      })
-      etapes.push(h('label', { class: 'etape-guide machine' }, h('span', {}, 'Quelle machine ?'), h('div', { class: 'choix-machine' }, recherche, liste, chemin)))
-      charger(!guides.machine && Boolean(recherche.value.trim()))
-    }
-    if (g.fiche?.absent) etapes.push(h('div', { class: 'etape-guide absent discret' }, h('span', {}, 'Fiche technique'), g.fiche.absent))
-    else if (g.fiche) {
-      const f = guides.fiche
-      etapes.push(select('Quelle fiche technique ?', g.fiche.modeles, f.modele, (v, texte) => { Object.assign(f, { modele: v || null, modeleTexte: texte.split(' — ')[0], champ: null, valeur: null }); apresGuide() }))
-      if (f.modele) {
-        const champs = await api(`/api/phrase/fiche/champs?type=${encodeURIComponent(f.type)}&modele=${encodeURIComponent(f.modele)}`).catch(() => [])
-        etapes.push(select('Quel champ ?', champs, f.champ, (v, texte) => { Object.assign(f, { champ: v || null, champTexte: texte, valeur: null }); apresGuide() }))
-        if (f.champ) {
-          const vals = await api(`/api/phrase/fiche/valeurs?type=${encodeURIComponent(f.type)}&modele=${encodeURIComponent(f.modele)}&champ=${encodeURIComponent(f.champ)}`).catch(() => [])
-          if (!f.valeur && f.voulu) f.valeur = vals.find((x) => x.valeur.toLowerCase() === f.voulu)?.valeur || null
-          etapes.push(select('Quelle valeur ?', vals.map((x) => ({ ...x, libelle: `${x.libelle} (${nombreFr(x.nombre)})` })), f.valeur, (v) => { f.valeur = v || null; apresGuide(false) }))
-        }
-      }
-    }
-    vider(zoneGuides, etapes)
-  }
-
-  // Après un choix guidé : les étiquettes, le compteur, et (si besoin) les étapes suivantes.
-  function apresGuide(redessiner = true) {
-    // Un parc ou une machine choisi : la table des machines doit être dans le chemin (elle y est ajoutée).
-    const tableMachines = p?.guides?.machine?.table
-    if ((guides.parc || guides.machine) && tableMachines && vue.chemin) {
-      const presentes = [vue.chemin.depart, ...vue.chemin.etapes.map((e) => e.vers)].map((n) => n.table.nom)
-      if (!presentes.some((nom) => nom.toLowerCase() === tableMachines.toLowerCase())) vue.cheminPour([...new Set(presentes), tableMachines])
-    }
-    dessiner()
-    if (redessiner) dessinerGuides()
-  }
-
-  function pastille(c) {
-    if (!c.options.length) {
-      // Pas de liste lue (connexion fermée, colonne libre) : une saisie.
-      const champ = h('input', { type: 'text', class: 'pastille-choix libre', placeholder: c.question, value: valeurs[c.id] ?? '' })
-      champ.addEventListener('change', () => { if (champ.value.trim()) valeurs[c.id] = champ.value.trim(); else delete valeurs[c.id]; dessiner() })
-      return champ
-    }
-    const liste = h('select', { class: `pastille-choix${valeurs[c.id] !== undefined ? ' choisie' : ''}`, title: c.question },
-      h('option', { value: '' }, c.question),
-      // Le nombre de lignes de chaque valeur, seulement s'il dit quelque chose (pas dans une liste de codes).
-      c.options.map((o) => h('option', { value: o.valeur, selected: valeurs[c.id] === o.valeur }, c.options.some((x) => x.nombre > 1) && o.nombre ? `${o.libelle} (${nombreFr(o.nombre)})` : o.libelle)))
-    liste.addEventListener('change', () => { if (liste.value) valeurs[c.id] = liste.value; else delete valeurs[c.id]; dessiner() })
-    return liste
+    if (etatPhrase.depart) changement()
+    else vider(zoneResultat)
   }
 
   function dessiner() {
-    if (!p) return
-    vider(zonePhrase, p.phrase.map((m) => m.guide ? h('span', { class: `texte-guide${texteGuide(m.guide) === '…' ? ' vide' : ''}` }, texteGuide(m.guide))
-      : m.choix ? pastille(p.choix.find((c) => c.id === m.choix))
-      : m.table ? h('button', { class: 'table-phrase', title: `La table ${m.table}`, onclick: () => { const n = vue.graphe.parNom.get(m.table.toLowerCase()); if (n) vue.centrerSur(n) } }, libelleTable(m.table))
-        : h('span', {}, m.texte)))
-    const retirerGuide = (f) => {
-      if (restaures.includes(f)) restaures = restaures.filter((x) => x !== f)
-      else if (f.guide === 'machine') guides.machine = null
-      else if (f.guide === 'parc') guides.parc = null
-      else if (f.guide === 'fiche') guides.fiche = { ...guides.fiche, modele: null, champ: null, valeur: null }
-      apresGuide()
+    if (!etatPhrase.depart) { vider(zoneConditions); vider(zoneTri); return }
+    vider(zoneConditions, listeConditions(etatPhrase.conditions, true))
+    dessinerTri()
+  }
+
+  // Une liste de conditions (la phrase entière, ou l'intérieur d'un groupe), avec ses boutons d'ajout.
+  function listeConditions(liste, racine) {
+    const lignes = liste.map((c, i) => {
+      const lien = i === 0 ? null : h('button', { class: `pastille-lien ${c.lien}`, title: 'Changer ET / OU', onclick: () => { c.lien = c.lien === 'ou' ? 'et' : 'ou'; dessiner(); changement() } }, c.lien === 'ou' ? 'OU' : 'ET')
+      const retirer = h('button', { class: 'discret icone-seule petit', title: c.groupe ? 'Retirer le groupe' : 'Retirer la condition', onclick: () => { liste.splice(liste.indexOf(c), 1); dessiner(); changement() } }, ic('x', 13))
+      if (c.groupe) return h('div', { class: 'ligne-condition' }, lien, h('div', { class: 'groupe-condition' }, h('span', { class: 'parenthese' }, '('), listeConditions(c.groupe, false), h('span', { class: 'parenthese' }, ')')), retirer)
+      return h('div', { class: 'ligne-condition' }, lien, editeurCondition(c), retirer)
+    })
+    const ajouter = (quoi) => { liste.push(quoi === 'groupe' ? { id: ++numeroCondition, lien: 'et', groupe: [nouvelleCondition()] } : nouvelleCondition()); dessiner() }
+    return h('div', { class: `liste-conditions${racine ? '' : ' interieur'}` }, lignes,
+      h('div', { class: 'ajouts-condition' },
+        h('button', { class: 'pastille-ajout', onclick: () => ajouter('condition') }, ic('plus', 13), liste.length ? 'et qui…' : 'qui…'),
+        racine ? h('button', { class: 'pastille-ajout', title: 'Un groupe entre parenthèses : ses conditions sont lues ensemble', onclick: () => ajouter('groupe') }, ic('plus', 13), '( groupe )') : null))
+  }
+
+  // Une condition : « qui » [opérateur] [champ] [valeur].
+  function editeurCondition(c) {
+    const col = c.table ? colonneDe(c.table, c.colonne) : null
+    const nature = c.source && !c.source.startsWith('table:') ? 'guide' : famille(natureColonne(col))
+    const ops = OPERATEURS_PAR_NATURE[nature] || OPERATEURS_PAR_NATURE.texte
+    if (!ops.includes(c.op)) c.op = 'egal'
+    const op = choixListe(ops.map((o) => ({ valeur: o, libelle: c.source === 'parc' ? (o === 'egal' ? 'sont dans' : 'ne sont pas dans') : c.source === 'machine' ? (o === 'egal' ? 'concernent' : 'ne concernent pas') : libelleOperateur(o, nature) })), c.op,
+      (v) => { c.op = v; if (SANS_VALEUR.has(v)) c.valeurs = []; dessiner(); changement() }, { classe: 'operateur' })
+
+    // Le champ : ceux de la table, ceux des tables liées, et les choix guidés (parc, machine, fiche technique).
+    const sources = [{ groupe: `${libelleTable(etatPhrase.depart)}`, options: noeud(etatPhrase.depart).table.colonnes.map((x) => ({ valeur: `${etatPhrase.depart}.${x.nom}`, libelle: libelleColonne(x), titre: x.nom })) }]
+    const guides = [
+      guidesDispo.parcs.length ? { valeur: 'parc', libelle: 'le parc (AITEC)' } : null,
+      guidesDispo.machines ? { valeur: 'machine', libelle: 'la machine (et dessous)' } : null,
+      guidesDispo.fiche ? { valeur: 'fiche', libelle: 'la fiche technique' } : null,
+    ].filter(Boolean)
+    if (guides.length) sources.push({ groupe: 'Choix guidés', options: guides })
+    for (const { n, d } of tablesLiees()) sources.push({ groupe: `${d === 1 ? 'Liée' : 'Plus loin'} : ${n.table.libelle || n.table.nom}`, options: n.table.colonnes.map((x) => ({ valeur: `${n.table.nom}.${x.nom}`, libelle: libelleColonne(x), titre: `${n.table.nom}.${x.nom}` })) })
+    const valeurSource = c.source && !c.source.startsWith('table:') ? c.source : c.colonne ? `${c.table}.${c.colonne}` : ''
+    const champ = choixListe(sources, valeurSource, (v) => {
+      Object.assign(c, { valeurs: [], valeur: null, valeurTexte: null, modele: null, champ: null })
+      if (['parc', 'machine', 'fiche'].includes(v)) Object.assign(c, { source: v, table: null, colonne: null })
+      else if (v) { const [table, ...reste] = v.split('.'); Object.assign(c, { source: `table:${table}`, table, colonne: reste.join('.') }) }
+      else Object.assign(c, { source: '', table: null, colonne: null })
+      dessiner()
+      changement()
+    }, { vide: '— quel champ ? —', classe: 'champ' })
+
+    return h('div', { class: 'condition' }, h('span', { class: 'mot-phrase' }, 'qui'), op, champ, editeurValeur(c, col))
+  }
+
+  function editeurValeur(c, col) {
+    if (c.source === 'parc') return choixListe(guidesDispo.parcs, c.valeur, (v, t) => { c.valeur = v || null; c.valeurTexte = t; dessiner(); changement() }, { vide: '— quel parc ? —' })
+    if (c.source === 'machine') return editeurMachine(c)
+    if (c.source === 'fiche') return editeurFiche(c)
+    if (!c.colonne || SANS_VALEUR.has(c.op)) return null
+    const nature = natureColonne(col)
+    const saisie = (i) => {
+      const date = famille(nature) === 'date'
+      const champ = h('input', { type: date ? 'date' : nature === 'nombre' ? 'number' : 'text', class: 'pastille-choix libre', value: date ? versSaisie(c.valeurs[i] || '', nature) : c.valeurs[i] || '', placeholder: 'valeur…' })
+      if (!date && ['egal', 'different'].includes(c.op)) {
+        // Les valeurs de la base, proposées en tapant (avec leur désignation quand la colonne est un code).
+        const id = `valeurs-${c.id}`
+        champ.setAttribute('list', id)
+        const liste = h('datalist', { id })
+        const cle = `${c.table}.${c.colonne}`
+        const remplir = (vals) => vider(liste, vals.map((x) => h('option', { value: x.valeur }, x.libelle !== x.valeur ? x.libelle : '')))
+        if (listesValeurs.has(cle)) remplir(listesValeurs.get(cle))
+        else champ.addEventListener('focus', async () => {
+          const vals = await api(`/api/phrase/valeurs?table=${encodeURIComponent(c.table)}&colonne=${encodeURIComponent(c.colonne)}`).catch(() => [])
+          listesValeurs.set(cle, vals)
+          remplir(vals)
+        }, { once: true })
+        champ.addEventListener('input', () => {
+          const trouve = (listesValeurs.get(cle) || []).find((x) => x.valeur === champ.value)
+          c.valeurTexte = trouve && trouve.libelle !== trouve.valeur ? trouve.libelle : null
+        })
+        champ._liste = liste
+      }
+      champ.addEventListener('input', () => {
+        c.valeurs[i] = champ.value ? (date ? versBase(champ.value, nature) : champ.value) : ''
+        champ.classList.toggle('choisie', Boolean(champ.value))
+        clearTimeout(champ._minuterie)
+        champ._minuterie = setTimeout(changement, 400)
+      })
+      if (champ.value) champ.classList.add('choisie')
+      return [champ, champ._liste || null]
     }
-    vider(zoneFiltres,
-      choixActifs().map((c) => h('span', { class: 'etiquette-filtre' }, ic('loupe', 13),
-        h('span', {}, `${c.question.replace(/\s*\?\s*$/, '')} : `, h('b', {}, libelleValeur(c))),
-        h('button', { class: 'discret icone-seule', title: 'Retirer ce filtre', onclick: () => { delete valeurs[c.id]; dessiner() } }, ic('x', 12)))),
-      filtresGuides().map((f) => h('span', { class: 'etiquette-filtre guide' }, ic('loupe', 13), h('span', {}, f.texte),
-        h('button', { class: 'discret icone-seule', title: 'Retirer ce filtre', onclick: () => retirerGuide(f) }, ic('x', 12)))))
-    vue.filtres = new Map()
-    for (const f of filtres()) if (f.table) vue.filtres.set(f.table, [...(vue.filtres.get(f.table) || []), f.texte])
-    vue.dessiner()
-    majCompteur()
+    if (c.op === 'entre') return h('span', { class: 'valeurs-entre' }, saisie(0), h('span', { class: 'mot-phrase' }, 'et'), saisie(1))
+    return h('span', {}, saisie(0))
+  }
+
+  function editeurMachine(c) {
+    const recherche = h('input', { type: 'search', class: 'pastille-choix libre', placeholder: 'repère, nom…', value: c.recherche || '' })
+    const liste = h('select', { class: `pastille-choix${c.valeur ? ' choisie' : ''}` }, h('option', { value: '' }, '— quelle machine ? —'))
+    const chemin = h('div', { class: 'chemin-machine discret' }, c.chemin || '')
+    const parc = aplatir(etatPhrase.conditions).find((x) => x.source === 'parc' && x.op === 'egal' && x.valeur)?.valeur || ''
+    const charger = async () => {
+      const machines = await api(`/api/phrase/machines?parc=${encodeURIComponent(parc)}&q=${encodeURIComponent(recherche.value)}`).catch(() => [])
+      vider(liste, h('option', { value: '' }, '— quelle machine ? —'), machines.slice(0, 200).map((m) => h('option', { value: m.code, selected: c.valeur === m.code, title: m.chemin }, m.libelle)))
+    }
+    let minuterieRecherche = null
+    recherche.addEventListener('input', () => { c.recherche = recherche.value; clearTimeout(minuterieRecherche); minuterieRecherche = setTimeout(charger, 300) })
+    liste.addEventListener('change', () => {
+      const o = liste.selectedOptions[0]
+      Object.assign(c, { valeur: liste.value || null, valeurTexte: liste.value ? o.textContent : null, chemin: liste.value ? o.title : '' })
+      liste.classList.toggle('choisie', Boolean(liste.value))
+      chemin.textContent = c.chemin
+      changement()
+    })
+    charger()
+    return h('div', { class: 'choix-machine' }, recherche, liste, chemin)
+  }
+
+  function editeurFiche(c) {
+    const f = guidesDispo.fiche
+    const zone = h('span', { class: 'choix-fiche' })
+    const remplir = async () => {
+      const modeles = await api(`/api/phrase/fiche/modeles?type=${encodeURIComponent(f.type)}`).catch(() => [])
+      const morceaux = [choixListe(modeles, c.modele, (v, t) => { Object.assign(c, { modele: v || null, modeleTexte: t.split(' — ')[0], champ: null, valeurs: [] }); dessiner(); changement() }, { vide: modeles.length ? '— quelle fiche ? —' : '— aucune fiche remplie —' })]
+      if (c.modele) {
+        const champs = await api(`/api/phrase/fiche/champs?type=${encodeURIComponent(f.type)}&modele=${encodeURIComponent(c.modele)}`).catch(() => [])
+        morceaux.push(choixListe(champs, c.champ, (v, t) => { Object.assign(c, { champ: v || null, champTexte: t, valeurs: [] }); dessiner(); changement() }, { vide: '— tout champ —' }))
+        if (c.champ) {
+          const vals = await api(`/api/phrase/fiche/valeurs?type=${encodeURIComponent(f.type)}&modele=${encodeURIComponent(c.modele)}&champ=${encodeURIComponent(c.champ)}`).catch(() => [])
+          morceaux.push(choixListe(vals.map((x) => ({ ...x, libelle: `${x.libelle} (${nombreFr(x.nombre)})` })), c.valeurs[0], (v) => { c.valeurs = v ? [v] : []; dessiner(); changement() }, { vide: '— toute valeur —' }))
+        }
+      }
+      vider(zone, morceaux)
+    }
+    remplir()
+    return zone
+  }
+
+  function dessinerTri() {
+    const depart = noeud(etatPhrase.depart)
+    const sources = [{ groupe: libelleTable(etatPhrase.depart), options: depart.table.colonnes.map((x) => ({ valeur: `${depart.table.nom}.${x.nom}`, libelle: libelleColonne(x) })) },
+      ...tablesLiees().filter(({ d }) => d === 1).map(({ n }) => ({ groupe: `Liée : ${n.table.libelle || n.table.nom}`, options: n.table.colonnes.map((x) => ({ valeur: `${n.table.nom}.${x.nom}`, libelle: libelleColonne(x) })) }))]
+    const lignes = etatPhrase.tri.map((t, i) => h('span', { class: 'ligne-tri' },
+      h('span', { class: 'mot-phrase' }, i ? 'puis par' : 'triés par'),
+      choixListe(sources, t.colonne ? `${t.table}.${t.colonne}` : '', (v) => { const [table, ...reste] = v.split('.'); Object.assign(t, { table: v ? table : null, colonne: v ? reste.join('.') : null }); dessiner(); changement() }, { vide: '— quel champ ? —' }),
+      h('button', { class: 'pastille-lien', title: 'Changer le sens', onclick: () => { t.sens = t.sens === 'desc' ? 'asc' : 'desc'; dessiner(); changement() } }, t.sens === 'desc' ? 'décroissant ↓' : 'croissant ↑'),
+      h('button', { class: 'discret icone-seule petit', title: 'Retirer ce tri', onclick: () => { etatPhrase.tri.splice(i, 1); dessiner(); changement() } }, ic('x', 13))))
+    vider(zoneTri, lignes, h('button', { class: 'pastille-ajout', onclick: () => { etatPhrase.tri.push({ table: null, colonne: null, sens: 'asc' }); dessiner() } }, ic('plus', 13), etatPhrase.tri.length ? 'puis par…' : 'triés par…'))
   }
 
   // Le compteur et l'aperçu : relus un instant après le dernier changement (choix ou chemin).
   function majCompteur() {
     clearTimeout(minuterie)
-    if (!p || !vue.chemin?.etapes) return
+    if (!etatPhrase.depart || !vue.chemin?.etapes) return
     minuterie = setTimeout(async () => {
       const numero = ++demande
-      const presentes = new Set([vue.chemin.depart.table.nom, ...vue.chemin.etapes.map((e) => e.vers.table.nom)])
-      const horsChemin = filtres().filter((f) => !presentes.has(f.table))
       vider(zoneResultat, h('span', { class: 'discret curseur' }, 'Comptage dans la base'))
       try {
-        const r = await api('/api/phrase/compter', { methode: 'POST', corps: { ...specDuChemin(vue.chemin, filtres().filter((f) => presentes.has(f.table))), apercu: true } })
+        const r = await api('/api/phrase/compter', { methode: 'POST', corps: { ...specDuChemin(vue.chemin, conditionsSpec(), triSpec()), apercu: true } })
         if (numero !== demande) return
         vider(zoneResultat,
-          h('div', { class: 'compteur-phrase' }, h('b', {}, nombreFr(r.nombre)), ` ${libelleTable(vue.chemin.depart.table.nom)} correspondent`,
-            horsChemin.length ? h('span', { class: 'orange' }, ` — ${horsChemin.length} filtre(s) ignoré(s) : leur table n’est plus dans le chemin`) : null),
+          h('div', { class: 'compteur-phrase' }, h('b', {}, nombreFr(r.nombre)), ` ${libelleTable(vue.chemin.depart.table.nom)} correspondent`),
           r.apercu?.lignes.length ? h('div', { class: 'tableau-conteneur apercu-phrase' }, h('table', { class: 'tableau compact' },
             h('thead', {}, h('tr', {}, r.apercu.colonnes.map((c) => h('th', {}, c)))),
             h('tbody', {}, r.apercu.lignes.map((l) => h('tr', {}, l.map((v) => h('td', {}, v === null ? '' : String(v)))))))) : null,
@@ -1237,38 +1378,35 @@ function bandeauPhrase(vue) {
     }, 350)
   }
 
-  // Un rapport ou un indicateur rouvert depuis sa vignette : sa phrase, son chemin et ses filtres reviennent.
+  // Un rapport ou un indicateur rouvert depuis sa vignette : sa table, ses conditions et son tri reviennent. Les
+  // anciennes constellations (filtres : une valeur par colonne) deviennent des conditions « ont ».
   function restaurer(c) {
-    saisie.value = c.phrase || ''
-    restaures = (c.filtres || []).filter((f) => f.guide)
-    guides = {}
-    const choix = (c.filtres || []).filter((f) => !f.guide).map((f, i) => {
-      const [question, ...valeur] = String(f.texte || '').split(' : ')
-      const v = String(f.valeurs?.[0] ?? '')
-      return { id: `r${i}`, question: `${question || f.colonne} ?`, table: f.table, colonne: f.colonne, options: [{ valeur: v, libelle: valeur.join(' : ') || v }] }
+    origine = c.origine || null
+    const depart = c.depart || c.tables?.[0]
+    const conditions = Array.isArray(c.conditions) ? reprendre(c.conditions) : (c.filtres || []).map((f) => (f.guide
+      ? { ...nouvelleCondition(), source: f.guide, valeur: f.valeur, valeurTexte: String(f.texte || '').split(' : ').slice(1).join(' : ') || f.valeur, modele: f.modele, modeleTexte: f.modele, champ: f.champ, champTexte: f.champ, valeurs: f.valeurs || [] }
+      : { ...nouvelleCondition(), source: `table:${f.table}`, table: f.table, colonne: f.colonne, valeurs: [String(f.valeurs?.[0] ?? '')] }))
+    choisirDepart(depart, { depart, conditions, tri: (c.tri || []).map((t) => ({ ...t })) }).then(() => {
+      // Les tables du chemin d'origine (y compris celles sans condition) sont rallumées.
+      if (c.tables?.length) { tablesDuChemin = ''; vue.cheminPour(c.tables) }
     })
-    p = { phrase: c.phrase ? [{ texte: c.phrase }] : [], depart: c.depart || c.tables[0], tables: c.tables, choix }
-    for (const cle of Object.keys(valeurs)) delete valeurs[cle]
-    for (const ch of choix) valeurs[ch.id] = ch.options[0].valeur
-    phraseCourante = { texte, filtres, origine: c.origine }
-    dessiner()
-    vue.cheminPour(c.tables)
   }
+  // Les conditions enregistrées → l'état de l'éditeur (identifiants neufs).
+  const reprendre = (liste) => liste.map((x) => (x.groupe ? { ...x, id: ++numeroCondition, groupe: reprendre(x.groupe) } : { ...nouvelleCondition(x.lien), ...x, id: ++numeroCondition, valeurs: x.valeurs || [] }))
 
-  saisie.addEventListener('keydown', (e) => e.key === 'Enter' && construire())
-  const element = h('div', { class: 'carte bandeau-phrase' },
-    h('div', { class: 'ligne-saisie-phrase' }, ic('etincelle', 18), saisie, h('button', { class: 'principal', onclick: construire }, 'Construire la phrase')),
-    zonePhrase, zoneGuides, zoneFiltres, zoneResultat)
+  dessinerDepart()
+  const element = h('div', { class: 'carte bandeau-phrase' }, zoneDepart, zoneConditions, zoneTri, zoneResultat)
   return { element, majCompteur, restaurer }
 }
 
-// La description d'un chemin (et de ses filtres) envoyée au serveur, qui en construit lui-même le SQL.
-function specDuChemin(chemin, filtres = []) {
+// La description d'un chemin (et de ses conditions, de son tri) envoyée au serveur, qui en construit lui-même le SQL.
+function specDuChemin(chemin, conditions = [], tri = []) {
   const { ordre } = sqlDuChemin(chemin)
   return {
     depart: chemin.depart.table.nom,
     jointures: ordre.map(({ table, j }) => ({ table, de: j.de, colonne: j.colonne, vers: j.vers, versColonne: j.versColonne })),
-    filtres: filtres.map((f) => (f.guide ? { guide: f.guide, valeur: f.valeur, type: f.type, modele: f.modele, champ: f.champ, valeurs: f.valeurs } : { table: f.table, colonne: f.colonne, valeurs: f.valeurs })),
+    conditions,
+    tri,
   }
 }
 
@@ -1276,24 +1414,27 @@ function specDuChemin(chemin, filtres = []) {
 // Réservé à l'administrateur : créer demande d'écrire du SQL.
 function etMaintenant(chemin, distinctes) {
   if (!modeAdmin()) return null
-  const phrase = phraseCourante?.texte() || ''
-  const filtres = phraseCourante?.filtres() || []
-  const presentes = new Set(distinctes)
-  const filtresDuChemin = filtres.filter((f) => presentes.has(f.table))
-  const constellation = { phrase, depart: chemin.depart.table.nom, tables: distinctes, filtres: filtresDuChemin }
+  // Lu au moment du clic : les conditions ont pu changer depuis que ce panneau a été dessiné.
+  const actuel = () => {
+    const phrase = phraseCourante?.texte() || ''
+    const constellation = { phrase, depart: chemin.depart.table.nom, tables: distinctes, ...(phraseCourante?.sauvegarde() || {}) }
+    return { phrase, constellation, conditions: phraseCourante?.conditions() || [], tri: phraseCourante?.tri() || [] }
+  }
   const libelle = chemin.depart.table.libelle || chemin.depart.table.nom
   const origine = phraseCourante?.origine || null
   return h('div', { class: 'et-maintenant' },
     h('h3', {}, ic('etincelle', 15), 'Et maintenant ?'),
     h('div', { class: 'actions' },
       h('button', { class: 'petit principal', title: 'Le formulaire du rapport, déjà rempli d’après la phrase et le chemin', onclick: () => {
+        const { phrase, constellation } = actuel()
         sessionStorage.setItem('birtec-constellation', JSON.stringify(constellation))
-        sessionStorage.setItem('birtec-phrase', phrase || `Liste des ${libelle}${filtresDuChemin.length ? ` : ${filtresDuChemin.map((f) => f.texte).join(', ')}` : ''}`)
+        sessionStorage.setItem('birtec-phrase', phrase || `Liste des ${libelle}`)
         location.hash = '#/constructeur/rapport'
       } }, ic('document', 14), 'Créer un rapport'),
-      h('button', { class: 'petit', title: 'Ranger cette requête dans les requêtes du site (fichier .ktec)', onclick: () => enregistrerSql(chemin, filtresDuChemin, phrase || libelle) }, ic('base', 14), 'Enregistrer le SQL'),
-      origine ? h('button', { class: 'petit principal', title: 'Rouvrir le formulaire de ce qui a été rouvert, avec le chemin et les filtres d’aujourd’hui', onclick: () => mettreAJour(origine, constellation) }, ic('crayon', 14), `Mettre à jour « ${String(origine.titre || '').slice(0, 40)} »`) : null,
+      h('button', { class: 'petit', title: 'Ranger cette requête dans les requêtes du site (fichier .ktec)', onclick: () => { const { phrase, conditions, tri } = actuel(); enregistrerSql(chemin, conditions, tri, phrase || libelle) } }, ic('base', 14), 'Enregistrer le SQL'),
+      origine ? h('button', { class: 'petit principal', title: 'Rouvrir le formulaire de ce qui a été rouvert, avec le chemin et les conditions d’aujourd’hui', onclick: () => mettreAJour(origine, actuel().constellation) }, ic('crayon', 14), `Mettre à jour « ${String(origine.titre || '').slice(0, 40)} »`) : null,
       h('button', { class: 'petit', title: 'Un indicateur de la GMAO sur cette table', onclick: () => {
+        const { phrase, constellation } = actuel()
         sessionStorage.setItem('birtec-indicateur', JSON.stringify({ etat: { sujet: chemin.depart.table.nom }, nom: phrase ? phrase.slice(0, 80) : '', constellation }))
         location.hash = '#/indicateur'
       } }, ic('graphique', 14), 'Indicateur GMAO')))
@@ -1315,14 +1456,14 @@ async function mettreAJour(origine, constellation) {
   }
 }
 
-async function enregistrerSql(chemin, filtres, titre) {
+async function enregistrerSql(chemin, conditions, tri, titre) {
   const champ = h('input', { type: 'text', value: titre.slice(0, 80) })
   const fait = await fenetre({
     titre: 'Enregistrer le SQL',
     contenu: h('div', {}, h('p', { class: 'texte-2', style: { marginTop: 0 } }, 'La requête (jointures dans l’ordre et filtres choisis) est rangée dans les requêtes du site, réutilisables dans BIRT.'), h('label', { class: 'champ' }, h('span', {}, 'Nom'), champ)),
     boutons: [
       { texte: 'Annuler', classe: 'discret', valeur: null },
-      { texte: 'Enregistrer', classe: 'principal', action: () => api('/api/phrase/enregistrer', { methode: 'POST', corps: { titre: champ.value, description: phraseCourante?.texte() || '', spec: specDuChemin(chemin, filtres) } }) },
+      { texte: 'Enregistrer', classe: 'principal', action: () => api('/api/phrase/enregistrer', { methode: 'POST', corps: { titre: champ.value, description: phraseCourante?.texte() || '', spec: specDuChemin(chemin, conditions, tri) } }) },
     ],
   })
   if (fait) notifier('Requête enregistrée dans les requêtes du site')

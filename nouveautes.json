@@ -1,6 +1,16 @@
 {
   "versions": [
     {
+      "version": "0.11.0",
+      "date": "2026-11-01",
+      "points": [
+        "LA PHRASE se construit par choix, sans IA : « Je souhaite consulter les » [table], puis des conditions « qui ont / n'ont pas / contiennent / ne contiennent pas / commencent par / finissent par / plus que / moins que / entre / vide / rempli » [champ] [valeur]",
+        "Pastilles ET / OU entre les conditions et groupes entre parenthèses ; puis « triés par », croissant ou décroissant, sur plusieurs champs",
+        "Le champ vient de la table, d'une table liée (jointure ajoutée toute seule) ou des choix guidés : parc d'AITEC, machine et dessous, fiche technique ; les valeurs de la base sont proposées en tapant",
+        "Les rapports et indicateurs rouverts retrouvent leurs conditions et leur tri"
+      ]
+    },
+    {
       "version": "0.10.4",
       "date": "2026-11-01",
       "points": [

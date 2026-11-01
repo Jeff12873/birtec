@@ -223,6 +223,31 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 
 /* LA PHRASE : le bandeau au-dessus de la constellation */
 .bandeau-phrase { margin-bottom: 14px; display: grid; gap: 10px; }
+/* LA PHRASE construite par choix : « Je souhaite consulter les [table] qui [opérateur] [champ] [valeur]… triés par … » */
+.ligne-depart-phrase { display: flex; align-items: center; gap: 10px; font-size: 18px; flex-wrap: wrap; }
+.ligne-depart-phrase > svg { color: var(--accent); flex: none; }
+.pastille-choix.depart { font-size: 17px; max-width: 420px; }
+.conditions-phrase:empty, .tri-phrase:empty { display: none; }
+.liste-conditions { display: grid; gap: 8px; }
+.liste-conditions.interieur { gap: 6px; }
+.ligne-condition { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+.condition { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.condition .pastille-choix { max-width: 280px; }
+.groupe-condition { flex: 1 1 0; min-width: 0; }
+.groupe-condition > .liste-conditions { flex: 1 1 0; min-width: 0; }
+.condition .choix-machine { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.choix-fiche, .valeurs-entre { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.mot-phrase { color: var(--texte-2); font-size: 15px; }
+.pastille-choix.operateur { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.groupe-condition { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 12px; border: 1px dashed var(--bord); background: color-mix(in srgb, var(--carte) 70%, transparent); }
+.parenthese { font-size: 28px; line-height: 1; color: #c45bff; font-weight: 300; }
+.pastille-lien { font: inherit; font-size: 12px; font-weight: 700; letter-spacing: .04em; padding: 4px 10px; border-radius: 99px; border: 1px solid #c45bff; background: color-mix(in srgb, #c45bff 14%, transparent); color: var(--texte); cursor: pointer; margin-top: 4px; }
+.pastille-lien.ou { border-color: #3d9bff; background: color-mix(in srgb, #3d9bff 16%, transparent); }
+.ajouts-condition { display: flex; gap: 8px; flex-wrap: wrap; }
+.pastille-ajout { font: inherit; font-size: 13px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 99px; border: 1px dashed var(--bord); background: none; color: var(--texte-2); cursor: pointer; }
+.pastille-ajout:hover { border-color: var(--accent); color: var(--texte); }
+.tri-phrase { display: flex; gap: 8px 14px; align-items: center; flex-wrap: wrap; }
+.ligne-tri { display: inline-flex; gap: 6px; align-items: center; }
 .ligne-saisie-phrase { display: flex; align-items: center; gap: 10px; }
 .ligne-saisie-phrase > svg { color: var(--accent); flex: none; }
 .saisie-phrase { flex: 1; font-size: 15px; padding: 10px 14px; }

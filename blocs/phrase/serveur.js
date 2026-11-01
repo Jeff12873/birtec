@@ -1,75 +1,41 @@
-// LA PHRASE : le bandeau au-dessus de la constellation. L'utilisateur dit ce qu'il veut voir (« les RI du parc
-// peinture qui ont la fiche technique X cochée ») ; l'IA en fait une phrase à trous, avec les tables à relier et
-// les choix à faire. BiRTEC vérifie tout sur la vraie structure, et lit dans la base les valeurs proposées en
-// pastilles : l'IA choisit seulement quelle question poser, jamais les valeurs.
+// LA PHRASE : le bandeau au-dessus de la constellation. L'utilisateur construit lui-même, par des choix
+// cliquables, ce qu'il veut consulter : la table, puis des conditions (« qui ont », « qui contiennent »…) liées
+// par ET / OU et groupées entre parenthèses, puis l'ordre. Pas d'IA : les listes viennent de la structure et de
+// la base.
 //
 // Le SQL (comptage, aperçu, requête enregistrée) est construit ici, à partir d'une description (tables, clés,
-// filtres) vérifiée sur la structure : aucun SQL ne vient du navigateur.
+// conditions, tri) vérifiée sur la structure : aucun SQL ne vient du navigateur.
 
 import { ErreurHttp } from 'ktec/http.js'
-import { discuter, iaInstallee } from 'ktec/ia.js'
 import { executerRequete, etatConnexion } from 'ktec/mysql.js'
 import { enregistrerRequete } from 'ktec/ktec.js'
-import { obtenirSchema, tablesUtiles, decrireTables } from '../base/schema.js'
-import { extraireJson } from '../rapports/serveur.js'
-import { devinerTypes, typeParId } from '../../interface/types.js'
+import { obtenirSchema } from '../base/schema.js'
 import { lireModele, enregistrerModele, reconnaitreModele, lireArbre, lireParcs, sousLesNoeuds, cheminDe } from './modele.js'
 
 const VALEURS_MAX = 30
 
 export function routes(r) {
-  // { texte } → { phrase: [{ texte } | { table } | { choix }], depart, tables, choix: [{ id, question, table, colonne, options }] }
-  r.post('/api/phrase', async (ctx) => {
-    const { texte = '' } = await ctx.json()
-    if (!String(texte).trim()) throw new ErreurHttp(400, 'Dites ce que vous voulez voir.')
-    if (!iaInstallee()) throw new ErreurHttp(409, 'L’IA n’est pas installée sur ce poste : construisez le chemin à la main dans la constellation.')
+  // Les valeurs proposées pour une colonne (les plus fréquentes, avec leur désignation si elle existe).
+  r.get('/api/phrase/valeurs', async (ctx) => {
+    if (!etatConnexion().ouverte) return []
     const schema = await obtenirSchema()
-    const { types } = devinerTypes(schema.tables, Object.fromEntries(schema.tables.filter((t) => t.typeChoisi).map((t) => [t.nom.toLowerCase(), t.typeChoisi])))
-    const tables = tablesUtiles(schema, texte, 14)
-    const description = decrireTables(tables)
-      .split('\n')
-      .map((ligne) => {
-        const nom = ligne.match(/^TABLE (\S+)/)?.[1]?.toLowerCase()
-        return nom && types.has(nom) ? `${ligne} [${typeParId(types.get(nom)).nom.toLowerCase()}]` : ligne
-      })
-      .join('\n')
+    const table = tableDe(schema, ctx.query.table)
+    const colonne = colonneDe(table, ctx.query.colonne)
+    if (!table || !colonne) throw new ErreurHttp(400, 'Colonne inconnue.')
+    const affichage = colonneLisible(table, colonne)
+    return valeursDe(table, colonne, affichage, affichage ? null : libelleParLien(schema, table, colonne))
+  })
 
-    const reponse = await discuter([
-      {
-        role: 'system',
-        content: `Tu aides un agent de maintenance à dire ce qu'il veut voir dans la base de la GMAO. Tu reformules sa demande en UNE phrase courte, avec des trous à remplir (les choix), et tu indiques les tables à relier. Réponds uniquement par ce JSON :
-{"phrase": [{"texte": "Je veux voir les "}, {"table": "nom_table"}, {"texte": " du parc "}, {"choix": "c1"}, {"texte": "."}],
- "depart": "la table principale : ce qu'on veut voir (une ligne du résultat = une ligne de cette table)",
- "tables": ["depart d'abord, puis toutes les tables nécessaires aux choix, y compris les tables de liaison"],
- "choix": [{"id": "c1", "question": "Quel parc ?", "table": "table qui porte la valeur", "colonne": "colonne à filtrer", "affichage": "colonne lisible de la même table (désignation), facultatif", "options": null}]}
-Règles :
-- Uniquement des tables et des colonnes de la STRUCTURE ci-dessous, écrites exactement.
-- Un choix = une précision que l'agent doit donner (quel parc, quelle fiche, quel type, coché oui/non…). Laisse "options" à null : BiRTEC lira les valeurs dans la base. Donne des options seulement pour un oui/non ou une liste fermée évidente : [{"libelle": "Oui", "valeur": "1"}, {"libelle": "Non", "valeur": "0"}].
-- Le texte de la phrase est en français simple, sans nom de colonne.
-- Les tables [principale] sont les objets qu'on veut voir ; [intermédiaire] relient deux tables ; [référentiel] portent les listes de codes.
-- Une « fiche technique » (FT) n'est PAS une fiche d'intervention (FI) : ne relie jamais la table des fiches d'intervention pour une fiche technique.`,
-      },
-      { role: 'user', content: `STRUCTURE :\n${description}\n\n${lireModele() ? 'IMPORTANT : ne crée AUCUN choix et ne relie AUCUNE table pour le parc, la machine ou une fiche technique (BiRTEC les propose lui-même, guidés) ; cite seulement la table principale et ce qu\'il faut relier d\'autre.\n\n' : ''}DEMANDE : ${texte}` },
-    ], { temperature: 0, maxMots: 450 })
-    const p = extraireJson(reponse)
-    if (!p) throw new ErreurHttp(502, 'L’IA n’a pas rendu de phrase lisible : reformulez, ou construisez le chemin à la main.')
-    const phrase = await completerPhrase(p, schema)
-    phrase.guides = await guidesDe(texte, phrase, schema)
-    // Les choix que l'IA a ajoutés malgré tout pour ce que les choix guidés couvrent (parc, machine, fiche) : retirés.
-    const couvert = [phrase.guides.parc || phrase.guides.machine ? /parc|machine|[ée]quipement|ligne|zone|secteur|arbo/i : null, phrase.guides.fiche ? /fiche|technique|coch/i : null].filter(Boolean)
-    const retiresListe = phrase.choix.filter((c) => couvert.some((motif) => motif.test(`${c.question} ${c.table}`)))
-    const retires = new Set(retiresListe.map((c) => c.id))
-    phrase.choix = phrase.choix.filter((c) => !retires.has(c.id))
-    // À leur place dans la phrase : le choix guidé correspondant (le lieu, la fiche, ou la valeur cochée).
-    const sorte = (c) => (/coch/i.test(c.question) ? 'valeur' : /fiche|technique/i.test(`${c.question} ${c.table}`) ? 'fiche' : 'lieu')
-    phrase.phrase = phrase.phrase.map((m) => (m.choix && retires.has(m.choix) ? { guide: sorte(retiresListe.find((c) => c.id === m.choix)) } : m))
-    // L'IA a parfois laissé la fiche technique hors de la phrase : elle y est remise.
-    if (phrase.guides.fiche && !phrase.phrase.some((m) => m.guide === 'fiche' || /fiche/i.test(m.texte || ''))) {
-      const fin = phrase.phrase.length && /^\s*\.\s*$/.test(phrase.phrase.at(-1).texte || '') ? phrase.phrase.pop() : { texte: '.' }
-      phrase.phrase.push({ texte: ' avec la fiche technique ' }, { guide: 'fiche' }, fin)
+  // Les choix guidés possibles pour une table de départ : parcs d'AITEC, table des machines, type de fiche technique.
+  r.get('/api/phrase/guides', async (ctx) => {
+    const m = lireModele()
+    const parcs = lireParcs()
+    const type = typeDeTable(m, ctx.query.depart)
+    return {
+      parcs: m?.machine && parcs.length ? parcs.map((x) => ({ valeur: x.id, libelle: x.nom })) : [],
+      machines: m?.machine ? { table: m.machine.table } : null,
+      fiche: m?.ficheTechnique && type ? { type, table: m.objets[type].table } : null,
     }
-    if (phrase.guides.parc || phrase.guides.fiche) resserrerTables(phrase, schema, texte)
-    return phrase
   })
 
   // ---- les choix guidés (parc, machine, fiche technique), d'après le modèle de données du site
@@ -105,12 +71,12 @@ Règles :
     return { modele: lireModele() }
   })
 
-  // { depart, jointures, filtres, apercu? } → { nombre, apercu: { colonnes, lignes }, sql? (administrateur) }
+  // { depart, jointures, conditions, tri, apercu? } → { nombre, apercu: { colonnes, lignes }, sql? (administrateur) }
   r.post('/api/phrase/compter', async (ctx) => {
     const spec = await ctx.json()
     if (!etatConnexion().ouverte) throw new ErreurHttp(409, 'Connexion à la GMAO indisponible.')
     const schema = await obtenirSchema()
-    const { from, where } = await morceauxSql(spec, schema)
+    const { from, where, tri } = await morceauxSql(spec, schema)
     // Les jointures multiplient les lignes (une RI et ses trois machines) : on compte les lignes distinctes de la
     // table de départ, par sa clé.
     const depart = tableDe(schema, spec.depart)
@@ -118,11 +84,12 @@ Règles :
     const compte = await executerRequete(`SELECT COUNT(${cle ? `DISTINCT ${depart.nom}.${cle.nom}` : '*'}) AS n ${from}${where}`, 1)
     const reponse = { nombre: Number(compte.lignes[0]?.[0] ?? 0) }
     if (spec.apercu) {
-      const colonnes = depart.colonnes.slice(0, 8).map((c) => `${depart.nom}.${c.nom}`).join(', ')
-      const r5 = await executerRequete(`SELECT DISTINCT ${colonnes} ${from}${where}`, 5)
-      reponse.apercu = { colonnes: r5.colonnes.map((c) => c.nom), lignes: r5.lignes }
+      // Les colonnes du tri sont lues en plus (DISTINCT l'exige), puis retirées de l'aperçu.
+      const colonnes = depart.colonnes.slice(0, 8).map((c) => `${depart.nom}.${c.nom}`)
+      const r5 = await executerRequete(`SELECT DISTINCT ${[...colonnes, ...tri.map((t, i) => `${t.expression} AS tri_${i}`)].join(', ')} ${from}${where}${tri.length ? `\nORDER BY ${tri.map((t, i) => `tri_${i} ${t.sens}`).join(', ')}` : ''}`, 5)
+      reponse.apercu = { colonnes: r5.colonnes.slice(0, colonnes.length).map((c) => c.nom), lignes: r5.lignes.map((l) => l.slice(0, colonnes.length)) }
     }
-    if (ctx.modeAdmin) reponse.sql = `SELECT *\n${from}${where}`
+    if (ctx.modeAdmin) reponse.sql = sqlComplet(from, where, tri)
     return reponse
   })
 
@@ -132,45 +99,17 @@ Règles :
     const { titre = '', description = '', spec } = await ctx.json()
     if (!String(titre).trim()) throw new ErreurHttp(400, 'Donnez un nom à la requête.')
     const schema = await obtenirSchema()
-    const { from, where } = await morceauxSql(spec, schema)
-    const sql = `SELECT *\n${from}${where}`
+    const { from, where, tri } = await morceauxSql(spec, schema)
+    const sql = sqlComplet(from, where, tri)
     enregistrerRequete({ titre: titre.trim(), sql, description, source: `constellation:${titre.trim().toLowerCase()}` })
     return { sql }
   })
 }
 
-// ---------------------------------------------------------------- vérification de la phrase
+// ---------------------------------------------------------------- structure
 
 const tableDe = (schema, nom) => schema.tables.find((t) => t.nom.toLowerCase() === String(nom || '').toLowerCase())
 const colonneDe = (table, nom) => table?.colonnes.find((c) => c.nom.toLowerCase() === String(nom || '').toLowerCase())
-
-async function completerPhrase(p, schema) {
-  const depart = tableDe(schema, p.depart) || tableDe(schema, p.tables?.[0])
-  if (!depart) throw new ErreurHttp(422, 'L’IA n’a pas trouvé de table principale pour cette demande : reformulez avec le nom de ce que vous voulez voir.')
-  const tables = [depart.nom]
-  for (const nom of p.tables || []) {
-    const t = tableDe(schema, nom)
-    if (t && !tables.includes(t.nom)) tables.push(t.nom)
-  }
-  const choix = []
-  for (const c of Array.isArray(p.choix) ? p.choix : []) {
-    const table = tableDe(schema, c.table)
-    const colonne = colonneDe(table, c.colonne)
-    if (!table || !colonne) continue // inventé : on l'oublie
-    if (!tables.includes(table.nom)) tables.push(table.nom)
-    // La colonne lisible des pastilles : celle donnée par l'IA, sinon une désignation de la même table
-    // (pour ne pas proposer des identifiants).
-    const affichage = colonneDe(table, c.affichage) || colonneLisible(table, colonne)
-    let options = Array.isArray(c.options) && c.options.length ? c.options.map((o) => ({ libelle: String(o.libelle ?? o.valeur), valeur: String(o.valeur ?? o.libelle) })) : null
-    if (!options && etatConnexion().ouverte) options = await valeursDe(table, colonne, affichage, affichage ? null : libelleParLien(schema, table, colonne))
-    choix.push({ id: String(c.id || `c${choix.length + 1}`), question: String(c.question || colonne.libelle || colonne.nom), table: table.nom, colonne: colonne.nom, options: options || [] })
-  }
-  const ids = new Set(choix.map((c) => c.id))
-  const phrase = (Array.isArray(p.phrase) ? p.phrase : [])
-    .map((m) => (m.choix ? (ids.has(String(m.choix)) ? { choix: String(m.choix) } : null) : m.table ? (tableDe(schema, m.table) ? { table: tableDe(schema, m.table).nom } : { texte: String(m.table) }) : { texte: String(m.texte ?? '') }))
-    .filter(Boolean)
-  return { phrase, depart: depart.nom, tables, choix }
-}
 
 function colonneLisible(table, colonne) {
   if (!colonne.cle && !/^id_|_id$/i.test(colonne.nom)) return null
@@ -211,8 +150,14 @@ async function valeursDe(table, colonne, affichage, parLien = null) {
 
 // ---------------------------------------------------------------- SQL construit ici
 
-// La description du chemin et des filtres, vérifiée sur la structure : chaque table et chaque colonne doit exister ;
-// les valeurs sont écrites entre apostrophes (doublées). → { from, where }
+const sqlComplet = (from, where, tri) => `SELECT *\n${from}${where}${tri.length ? `\nORDER BY ${tri.map((t) => `${t.expression} ${t.sens}`).join(', ')}` : ''}`
+
+// La description du chemin, des conditions et du tri, vérifiée sur la structure : chaque table et chaque colonne
+// doit exister et être dans le chemin ; les valeurs sont écrites entre apostrophes (doublées).
+// conditions : [{ table, colonne, op, valeurs, lien } | { guide, op, … , lien } | { groupe: [ … ], lien }],
+// lien = 'et' | 'ou' avec l'élément précédent. Comme à la lecture, ET passe avant OU ; un groupe change cet ordre.
+// Les anciennes constellations (filtres : une valeur par colonne, tous en ET) restent comprises.
+// → { from, where, tri: [{ expression, sens }] }
 export async function morceauxSql(spec, schema) {
   const depart = tableDe(schema, spec?.depart)
   if (!depart) throw new ErreurHttp(400, 'Table de départ inconnue.')
@@ -228,24 +173,56 @@ export async function morceauxSql(spec, schema) {
     jointes.add(table.nom)
     lignes.push(`LEFT JOIN ${table.nom} ON ${de.nom}.${colonneDe(de, j.colonne).nom} = ${vers.nom}.${colonneDe(vers, j.versColonne).nom}`)
   }
-  const conditions = []
-  for (const f of Array.isArray(spec.filtres) ? spec.filtres : []) {
-    if (f.guide) {
-      const condition = await conditionGuidee(f, jointes, depart, schema)
-      if (condition) conditions.push(condition)
-      continue
-    }
+  const ciblee = (f) => {
     const table = tableDe(schema, f.table)
     const colonne = colonneDe(table, f.colonne)
-    const valeurs = (Array.isArray(f.valeurs) ? f.valeurs : [f.valeurs]).filter((v) => v !== undefined && v !== null && v !== '')
-    if (!table || !colonne || !valeurs.length) continue
-    if (!jointes.has(table.nom)) throw new ErreurHttp(400, `La table ${table.nom} d’un filtre n’est pas dans le chemin.`)
-    conditions.push(`${table.nom}.${colonne.nom} IN (${valeurs.map(litteral).join(', ')})`)
+    if (!table || !colonne) throw new ErreurHttp(400, 'Colonne inconnue dans la structure.')
+    if (!jointes.has(table.nom)) throw new ErreurHttp(400, `La table ${table.nom} n’est pas dans le chemin.`)
+    return { e: `${table.nom}.${colonne.nom}`, colonne }
   }
-  return { from: lignes.join('\n'), where: conditions.length ? `\nWHERE ${conditions.join('\n  AND ')}` : '' }
+  const conditionDe = async (f) => {
+    if (f.guide) {
+      const c = await conditionGuidee(f, jointes, depart, schema)
+      return c && f.op === 'different' ? `NOT COALESCE((${c}), FALSE)` : c
+    }
+    const { e, colonne } = ciblee(f)
+    const v = (Array.isArray(f.valeurs) ? f.valeurs : [f.valeurs]).filter((x) => x !== undefined && x !== null && x !== '')
+    const lit = (x) => litteralPour(colonne, x)
+    const motif = (x) => `'${echapper(String(x).replace(/[%_]/g, (m) => `\\${m}`))}'`
+    switch (f.op || 'egal') {
+      case 'egal': return v.length ? `${e} IN (${v.map(lit).join(', ')})` : null
+      case 'different': return v.length ? `(${e} IS NULL OR ${e} NOT IN (${v.map(lit).join(', ')}))` : null
+      case 'contient': return v.length ? `${e} LIKE CONCAT('%', ${motif(v[0])}, '%')` : null
+      case 'ne_contient': return v.length ? `(${e} IS NULL OR ${e} NOT LIKE CONCAT('%', ${motif(v[0])}, '%'))` : null
+      case 'commence': return v.length ? `${e} LIKE CONCAT(${motif(v[0])}, '%')` : null
+      case 'finit': return v.length ? `${e} LIKE CONCAT('%', ${motif(v[0])})` : null
+      case 'sup': return v.length ? `${e} > ${lit(v[0])}` : null
+      case 'inf': return v.length ? `${e} < ${lit(v[0])}` : null
+      case 'entre': return v.length === 2 ? `${e} BETWEEN ${lit(v[0])} AND ${lit(v[1])}` : null
+      case 'vide': return `(${e} IS NULL OR ${e} = '')`
+      case 'non_vide': return `(${e} IS NOT NULL AND ${e} <> '')`
+      default: throw new ErreurHttp(400, `Opérateur inconnu : ${f.op}`)
+    }
+  }
+  const combiner = async (liste) => {
+    const morceaux = []
+    for (const f of Array.isArray(liste) ? liste : []) {
+      const sql = Array.isArray(f.groupe) ? await combiner(f.groupe) : await conditionDe(f)
+      if (sql) morceaux.push(`${morceaux.length ? (f.lien === 'ou' ? '\n  OR ' : '\n  AND ') : ''}(${sql})`)
+    }
+    return morceaux.length ? morceaux.join('') : null
+  }
+  const anciens = (Array.isArray(spec.filtres) ? spec.filtres : []).map((f) => ({ ...f, op: f.op || 'egal', lien: 'et' }))
+  const where = await combiner([...anciens, ...(Array.isArray(spec.conditions) ? spec.conditions : [])])
+  const tri = (Array.isArray(spec.tri) ? spec.tri : []).map((t) => ({ expression: ciblee(t).e, sens: t.sens === 'desc' ? 'DESC' : 'ASC' }))
+  return { from: lignes.join('\n'), where: where ? `\nWHERE ${where}` : '', tri }
 }
 
-const litteral = (v) => (/^-?\d+(\.\d+)?$/.test(String(v)) ? String(v) : `'${String(v).replace(/\\/g, '\\\\').replace(/'/g, "''")}'`)
+const echapper = (v) => String(v).replace(/\\/g, '\\\\').replace(/'/g, "''")
+const litteral = (v) => (/^-?\d+(\.\d+)?$/.test(String(v)) ? String(v) : `'${echapper(v)}'`)
+// Une colonne texte garde ses zéros (« 0012 ») : la valeur reste entre apostrophes.
+const NUMERIQUE = /^(int|bigint|smallint|tinyint|mediumint|decimal|numeric|float|double)/i
+const litteralPour = (colonne, v) => (NUMERIQUE.test(colonne.type || '') && /^-?\d+(\.\d+)?$/.test(String(v)) ? String(v) : `'${echapper(v)}'`)
 
 // ---------------------------------------------------------------- choix guidés
 
@@ -289,90 +266,6 @@ async function listeFiche(quoi, q) {
   }
   const r = await executerRequete(`SELECT ${v.valeur}, COUNT(*) FROM ${v.table} WHERE ${v.typeObjet} = ${typeSql} AND ${v.modele} = ${litteral(q.modele)} AND ${v.champ} = ${litteral(q.champ)} AND ${v.valeur} IS NOT NULL AND ${v.valeur} <> '' GROUP BY 1 ORDER BY 2 DESC LIMIT 40`, 40)
   return r.lignes.map((l) => ({ valeur: String(l[0]), libelle: String(l[0]), nombre: Number(l[1]) }))
-}
-
-// Une fiche technique dans la demande : la fiche d'intervention n'a rien à y faire (« fiche » trompe l'IA).
-const parleDeFicheTechnique = (texte) => /fiches?\s+tech|\bft\b/.test(sansAccents(texte))
-const estFicheIntervention = (t) => /fiche/i.test(sansAccents(t?.libelle)) && !/techn/i.test(sansAccents(t?.libelle))
-
-// Les choix guidés couvrent le parc, la machine et la fiche technique : le chemin se réduit à la table de départ,
-// aux tables citées dans la phrase et à celles des choix restants (plus la table des machines) ; la constellation
-// retrouve elle-même les tables de liaison. Les tables que l'IA avait ajoutées « pour » ces choix disparaissent.
-function resserrerTables(phrase, schema, texte) {
-  const m = lireModele()
-  const ft = m?.ficheTechnique
-  const tablesFiche = new Set([ft?.valeurs?.table, ft?.modeles?.table, ft?.champs?.table].filter(Boolean).map((x) => x.toLowerCase()))
-  const ecartee = (nom) => {
-    const t = tableDe(schema, nom)
-    if (!t || t.nom === phrase.depart) return false
-    return tablesFiche.has(t.nom.toLowerCase()) || (parleDeFicheTechnique(texte) && !/intervention/.test(sansAccents(texte)) && estFicheIntervention(t))
-  }
-  phrase.phrase = phrase.phrase.map((x) => (x.table && ecartee(x.table) ? { texte: '' } : x))
-  const gardees = [phrase.depart, ...phrase.phrase.filter((x) => x.table).map((x) => x.table), ...phrase.choix.map((c) => c.table)]
-  if (phrase.guides.parc?.choisi && m?.machine) gardees.push(m.machine.table)
-  phrase.tables = [...new Set(gardees.map((nom) => tableDe(schema, nom)?.nom).filter(Boolean))].filter((nom) => !ecartee(nom))
-}
-
-// Ce que l'IA a compris des choix guidés, rapproché des vraies valeurs : le parc (parmi ceux d'AITEC), les mots
-// de la machine, et la fiche technique (modèle, champ, valeur) parmi celles utilisées pour la table de départ.
-async function guidesDe(texte, phrase, schema) {
-  const m = lireModele()
-  const guides = {}
-  const parcs = lireParcs()
-  if (parcs.length && m?.machine) {
-    const mots = sansAccents(texte)
-    const parc = parcs.find((x) => x.nom && mots.includes(sansAccents(x.nom)))
-    guides.parc = { options: parcs.map((x) => ({ valeur: x.id, libelle: x.nom })), choisi: parc?.id || null }
-    guides.machine = { table: m.machine.table, mots: '' }
-    // La table des machines n'entre dans le chemin que si un parc est cité (sinon, quand on en choisit un).
-    if (parc && !phrase.tables.some((x) => x.toLowerCase() === m.machine.table.toLowerCase())) phrase.tables.push(m.machine.table)
-  }
-  // Les mots qui restent pour chercher le modèle de fiche et la machine : sans les mots courants (fautes de frappe
-  // comprises : « ouii », « sde »), sans le parc ni ce qu'on veut voir.
-  const depart = tableDe(schema, phrase.depart)
-  const vides = new Set(`je veux voir les des du de la le l d qui ont a avec dans fiche fiches technique techniques oui non coche cochee cocher case parc ri di fi ft et en sur pour leur leurs ${sansAccents(depart?.nom)} ${sansAccents(depart?.libelle)}`.split(/[^a-z0-9]+/))
-  const parcNom = sansAccents(parcs.find((x) => x.id === guides.parc?.choisi)?.nom)
-  let restes = sansAccents(texte).split(/[^a-z0-9]+/).filter((w) => w && !vides.has(w) && !/^ou+i+$|^no+n$|^coch/.test(w) && (w.length > 3 || /\d/.test(w)) && !(parcNom && parcNom.split(/[^a-z0-9]+/).includes(w)))
-
-  const type = typeDeTable(m, phrase.depart)
-  if (m?.ficheTechnique && (parleDeFicheTechnique(texte) || /coch/.test(sansAccents(texte)))) {
-    const voulu = /\bou+i+\b/i.test(sansAccents(texte)) ? 'oui' : /\bno+n\b/i.test(sansAccents(texte)) ? 'non' : null
-    if (!type) {
-      // La table de départ ne porte aucune fiche technique dans cette base : on le dit, plutôt que de chercher ailleurs.
-      guides.fiche = { type: null, modeles: [], choisi: null, valeur: voulu, absent: `Aucune fiche technique n’est rattachée aux ${depart?.libelle || phrase.depart} dans cette base.` }
-    } else {
-      try {
-        const modeles = await listeFiche('modeles', { type })
-        // Le modèle : celui dont le code ou le nom reprend le plus de mots de la demande (« suivi » → un modèle « X_SUIVI » ;
-        // « pompe électrique » → « POMPE_ELEC »). Mot entier : 2 points, début de mot (« elec ») : 1.
-        const racine = (w) => w.replace(/[sx]$/, '')
-        const scores = modeles.map((x) => {
-          const parties = [...new Set(sansAccents(`${x.code} ${x.libelle}`).split(/[^a-z0-9]+/).filter(Boolean).map(racine))]
-          let points = 0
-          const mots = restes.filter((w) => {
-            const r = racine(w)
-            const p = parties.includes(r) ? 2 : parties.some((x) => x.length >= 4 && (r.startsWith(x) || x.startsWith(r))) ? 1 : 0
-            points += p
-            return p > 0
-          })
-          return { x, mots, points, taille: parties.length }
-        }).filter((e) => e.points).sort((a, b) => b.points - a.points || a.taille - b.taille)
-        const choisi = scores[0] && (scores[0].points > (scores[1]?.points || 0) || scores[0].taille < scores[1].taille) ? scores[0] : null
-        if (choisi) restes = restes.filter((w) => !choisi.mots.includes(w))
-        guides.fiche = { type, modeles, choisi: choisi?.x.valeur || null, valeur: voulu }
-        if (!modeles.length) guides.fiche.absent = `Aucune fiche technique n’est remplie pour les ${depart?.libelle || phrase.depart} dans cette base.`
-      } catch {}
-    }
-  }
-  // Les mots qui suivent « fiche technique » désignent la fiche, pas la machine (même sans modèle reconnu).
-  if (guides.fiche) {
-    const apres = (sansAccents(texte).match(/(?:techniques?|\bft)\s+(.*?)(?:\b(?:avec|qui|cochee?s?|coche|dont|ou|et)\b|$)/) || [])[1] || ''
-    const motsFiche = new Set(apres.split(/[^a-z0-9]+/))
-    restes = restes.filter((w) => !motsFiche.has(w))
-  }
-  // La machine : cherchée avec les mots restants, seulement si un parc est cité.
-  if (guides.machine && guides.parc?.choisi) guides.machine.mots = restes.join(' ')
-  return guides
 }
 
 // La condition SQL d'un choix guidé. Parc ou machine : les machines de l'arborescence sous le parc ou la machine
