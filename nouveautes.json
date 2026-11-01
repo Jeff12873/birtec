@@ -1,6 +1,15 @@
 {
   "versions": [
     {
+      "version": "0.10.4",
+      "date": "2026-11-01",
+      "points": [
+        "LA PHRASE ne confond plus « fiche technique » et fiche d'intervention : la fiche technique passe par le choix guidé, sans tables en plus dans le chemin",
+        "Le modèle de fiche est reconnu d'après les mots de la phrase (« suivi », « moteur électrique »…), et la phrase affiche le parc, la fiche et la valeur choisis",
+        "Plus de machine choisie au hasard : seulement si un mot de la phrase la désigne vraiment ; un message dit quand aucune fiche technique n'existe pour ce qu'on veut voir"
+      ]
+    },
+    {
       "version": "0.10.3",
       "date": "2026-11-01",
       "points": [

@@ -46,19 +46,29 @@ Règles :
 - Uniquement des tables et des colonnes de la STRUCTURE ci-dessous, écrites exactement.
 - Un choix = une précision que l'agent doit donner (quel parc, quelle fiche, quel type, coché oui/non…). Laisse "options" à null : BiRTEC lira les valeurs dans la base. Donne des options seulement pour un oui/non ou une liste fermée évidente : [{"libelle": "Oui", "valeur": "1"}, {"libelle": "Non", "valeur": "0"}].
 - Le texte de la phrase est en français simple, sans nom de colonne.
-- Les tables [principale] sont les objets qu'on veut voir ; [intermédiaire] relient deux tables ; [référentiel] portent les listes de codes.`,
+- Les tables [principale] sont les objets qu'on veut voir ; [intermédiaire] relient deux tables ; [référentiel] portent les listes de codes.
+- Une « fiche technique » (FT) n'est PAS une fiche d'intervention (FI) : ne relie jamais la table des fiches d'intervention pour une fiche technique.`,
       },
-      { role: 'user', content: `STRUCTURE :\n${description}\n\n${lireModele() ? 'IMPORTANT : ne crée AUCUN choix pour le parc, la machine ou une fiche technique (BiRTEC les propose lui-même, guidés) ; cite seulement la table principale et ce qu\'il faut relier.\n\n' : ''}DEMANDE : ${texte}` },
+      { role: 'user', content: `STRUCTURE :\n${description}\n\n${lireModele() ? 'IMPORTANT : ne crée AUCUN choix et ne relie AUCUNE table pour le parc, la machine ou une fiche technique (BiRTEC les propose lui-même, guidés) ; cite seulement la table principale et ce qu\'il faut relier d\'autre.\n\n' : ''}DEMANDE : ${texte}` },
     ], { temperature: 0, maxMots: 450 })
     const p = extraireJson(reponse)
     if (!p) throw new ErreurHttp(502, 'L’IA n’a pas rendu de phrase lisible : reformulez, ou construisez le chemin à la main.')
     const phrase = await completerPhrase(p, schema)
     phrase.guides = await guidesDe(texte, phrase, schema)
     // Les choix que l'IA a ajoutés malgré tout pour ce que les choix guidés couvrent (parc, machine, fiche) : retirés.
-    const couvert = [phrase.guides.parc || phrase.guides.machine ? /parc|machine|[ée]quipement|ligne|zone|secteur|arbo/i : null, phrase.guides.fiche ? /fiche|technique/i : null].filter(Boolean)
-    const retires = new Set(phrase.choix.filter((c) => couvert.some((motif) => motif.test(`${c.question} ${c.table}`))).map((c) => c.id))
+    const couvert = [phrase.guides.parc || phrase.guides.machine ? /parc|machine|[ée]quipement|ligne|zone|secteur|arbo/i : null, phrase.guides.fiche ? /fiche|technique|coch/i : null].filter(Boolean)
+    const retiresListe = phrase.choix.filter((c) => couvert.some((motif) => motif.test(`${c.question} ${c.table}`)))
+    const retires = new Set(retiresListe.map((c) => c.id))
     phrase.choix = phrase.choix.filter((c) => !retires.has(c.id))
-    phrase.phrase = phrase.phrase.filter((m) => !(m.choix && retires.has(m.choix)))
+    // À leur place dans la phrase : le choix guidé correspondant (le lieu, la fiche, ou la valeur cochée).
+    const sorte = (c) => (/coch/i.test(c.question) ? 'valeur' : /fiche|technique/i.test(`${c.question} ${c.table}`) ? 'fiche' : 'lieu')
+    phrase.phrase = phrase.phrase.map((m) => (m.choix && retires.has(m.choix) ? { guide: sorte(retiresListe.find((c) => c.id === m.choix)) } : m))
+    // L'IA a parfois laissé la fiche technique hors de la phrase : elle y est remise.
+    if (phrase.guides.fiche && !phrase.phrase.some((m) => m.guide === 'fiche' || /fiche/i.test(m.texte || ''))) {
+      const fin = phrase.phrase.length && /^\s*\.\s*$/.test(phrase.phrase.at(-1).texte || '') ? phrase.phrase.pop() : { texte: '.' }
+      phrase.phrase.push({ texte: ' avec la fiche technique ' }, { guide: 'fiche' }, fin)
+    }
+    if (phrase.guides.parc || phrase.guides.fiche) resserrerTables(phrase, schema, texte)
     return phrase
   })
 
@@ -281,37 +291,87 @@ async function listeFiche(quoi, q) {
   return r.lignes.map((l) => ({ valeur: String(l[0]), libelle: String(l[0]), nombre: Number(l[1]) }))
 }
 
+// Une fiche technique dans la demande : la fiche d'intervention n'a rien à y faire (« fiche » trompe l'IA).
+const parleDeFicheTechnique = (texte) => /fiches?\s+tech|\bft\b/.test(sansAccents(texte))
+const estFicheIntervention = (t) => /fiche/i.test(sansAccents(t?.libelle)) && !/techn/i.test(sansAccents(t?.libelle))
+
+// Les choix guidés couvrent le parc, la machine et la fiche technique : le chemin se réduit à la table de départ,
+// aux tables citées dans la phrase et à celles des choix restants (plus la table des machines) ; la constellation
+// retrouve elle-même les tables de liaison. Les tables que l'IA avait ajoutées « pour » ces choix disparaissent.
+function resserrerTables(phrase, schema, texte) {
+  const m = lireModele()
+  const ft = m?.ficheTechnique
+  const tablesFiche = new Set([ft?.valeurs?.table, ft?.modeles?.table, ft?.champs?.table].filter(Boolean).map((x) => x.toLowerCase()))
+  const ecartee = (nom) => {
+    const t = tableDe(schema, nom)
+    if (!t || t.nom === phrase.depart) return false
+    return tablesFiche.has(t.nom.toLowerCase()) || (parleDeFicheTechnique(texte) && !/intervention/.test(sansAccents(texte)) && estFicheIntervention(t))
+  }
+  phrase.phrase = phrase.phrase.map((x) => (x.table && ecartee(x.table) ? { texte: '' } : x))
+  const gardees = [phrase.depart, ...phrase.phrase.filter((x) => x.table).map((x) => x.table), ...phrase.choix.map((c) => c.table)]
+  if (phrase.guides.parc?.choisi && m?.machine) gardees.push(m.machine.table)
+  phrase.tables = [...new Set(gardees.map((nom) => tableDe(schema, nom)?.nom).filter(Boolean))].filter((nom) => !ecartee(nom))
+}
+
 // Ce que l'IA a compris des choix guidés, rapproché des vraies valeurs : le parc (parmi ceux d'AITEC), les mots
 // de la machine, et la fiche technique (modèle, champ, valeur) parmi celles utilisées pour la table de départ.
 async function guidesDe(texte, phrase, schema) {
   const m = lireModele()
   const guides = {}
   const parcs = lireParcs()
-  const proche = (liste, mots, champ = 'libelle') => {
-    const cible = sansAccents(mots)
-    if (!cible) return null
-    return liste.find((x) => sansAccents(x[champ]) === cible) || liste.find((x) => sansAccents(x[champ]).includes(cible) || cible.includes(sansAccents(x[champ]))) || null
-  }
   if (parcs.length && m?.machine) {
     const mots = sansAccents(texte)
     const parc = parcs.find((x) => x.nom && mots.includes(sansAccents(x.nom)))
     guides.parc = { options: parcs.map((x) => ({ valeur: x.id, libelle: x.nom })), choisi: parc?.id || null }
-    // Les mots de la machine : ce qui reste de la demande une fois retirés les mots courants et le parc.
-    const vides = new Set('je veux voir les des du de la le l d qui ont a avec dans fiche technique oui non coche cochee parc ri di fi et en sur pour'.split(' '))
-    const restes = mots.split(/[^a-z0-9]+/).filter((w) => w && !vides.has(w) && !(parc && sansAccents(parc.nom).includes(w)))
-    guides.machine = { table: m.machine.table, mots: parc ? restes.join(' ') : '' }
+    guides.machine = { table: m.machine.table, mots: '' }
     // La table des machines n'entre dans le chemin que si un parc est cité (sinon, quand on en choisit un).
     if (parc && !phrase.tables.some((x) => x.toLowerCase() === m.machine.table.toLowerCase())) phrase.tables.push(m.machine.table)
   }
+  // Les mots qui restent pour chercher le modèle de fiche et la machine : sans les mots courants (fautes de frappe
+  // comprises : « ouii », « sde »), sans le parc ni ce qu'on veut voir.
+  const depart = tableDe(schema, phrase.depart)
+  const vides = new Set(`je veux voir les des du de la le l d qui ont a avec dans fiche fiches technique techniques oui non coche cochee cocher case parc ri di fi ft et en sur pour leur leurs ${sansAccents(depart?.nom)} ${sansAccents(depart?.libelle)}`.split(/[^a-z0-9]+/))
+  const parcNom = sansAccents(parcs.find((x) => x.id === guides.parc?.choisi)?.nom)
+  let restes = sansAccents(texte).split(/[^a-z0-9]+/).filter((w) => w && !vides.has(w) && !/^ou+i+$|^no+n$|^coch/.test(w) && (w.length > 3 || /\d/.test(w)) && !(parcNom && parcNom.split(/[^a-z0-9]+/).includes(w)))
+
   const type = typeDeTable(m, phrase.depart)
-  if (m?.ficheTechnique && type && /fiche|technique|\bft\b|coch/i.test(sansAccents(texte))) {
-    try {
-      const modeles = await listeFiche('modeles', { type })
-      const mot = (sansAccents(texte).match(/(?:technique|ft)\s+([a-z0-9_]+)/) || [])[1] || ''
-      const choisi = modeles.find((x) => sansAccents(x.code) === mot) || proche(modeles, mot, 'code')
-      guides.fiche = { type, modeles, choisi: choisi?.valeur || null, valeur: /\boui\b/i.test(texte) ? 'oui' : /\bnon\b/i.test(texte) ? 'non' : null }
-    } catch {}
+  if (m?.ficheTechnique && (parleDeFicheTechnique(texte) || /coch/.test(sansAccents(texte)))) {
+    const voulu = /\bou+i+\b/i.test(sansAccents(texte)) ? 'oui' : /\bno+n\b/i.test(sansAccents(texte)) ? 'non' : null
+    if (!type) {
+      // La table de départ ne porte aucune fiche technique dans cette base : on le dit, plutôt que de chercher ailleurs.
+      guides.fiche = { type: null, modeles: [], choisi: null, valeur: voulu, absent: `Aucune fiche technique n’est rattachée aux ${depart?.libelle || phrase.depart} dans cette base.` }
+    } else {
+      try {
+        const modeles = await listeFiche('modeles', { type })
+        // Le modèle : celui dont le code ou le nom reprend le plus de mots de la demande (« suivi » → un modèle « X_SUIVI » ;
+        // « pompe électrique » → « POMPE_ELEC »). Mot entier : 2 points, début de mot (« elec ») : 1.
+        const racine = (w) => w.replace(/[sx]$/, '')
+        const scores = modeles.map((x) => {
+          const parties = [...new Set(sansAccents(`${x.code} ${x.libelle}`).split(/[^a-z0-9]+/).filter(Boolean).map(racine))]
+          let points = 0
+          const mots = restes.filter((w) => {
+            const r = racine(w)
+            const p = parties.includes(r) ? 2 : parties.some((x) => x.length >= 4 && (r.startsWith(x) || x.startsWith(r))) ? 1 : 0
+            points += p
+            return p > 0
+          })
+          return { x, mots, points, taille: parties.length }
+        }).filter((e) => e.points).sort((a, b) => b.points - a.points || a.taille - b.taille)
+        const choisi = scores[0] && (scores[0].points > (scores[1]?.points || 0) || scores[0].taille < scores[1].taille) ? scores[0] : null
+        if (choisi) restes = restes.filter((w) => !choisi.mots.includes(w))
+        guides.fiche = { type, modeles, choisi: choisi?.x.valeur || null, valeur: voulu }
+        if (!modeles.length) guides.fiche.absent = `Aucune fiche technique n’est remplie pour les ${depart?.libelle || phrase.depart} dans cette base.`
+      } catch {}
+    }
   }
+  // Les mots qui suivent « fiche technique » désignent la fiche, pas la machine (même sans modèle reconnu).
+  if (guides.fiche) {
+    const apres = (sansAccents(texte).match(/(?:techniques?|\bft)\s+(.*?)(?:\b(?:avec|qui|cochee?s?|coche|dont|ou|et)\b|$)/) || [])[1] || ''
+    const motsFiche = new Set(apres.split(/[^a-z0-9]+/))
+    restes = restes.filter((w) => !motsFiche.has(w))
+  }
+  // La machine : cherchée avec les mots restants, seulement si un parc est cité.
+  if (guides.machine && guides.parc?.choisi) guides.machine.mots = restes.join(' ')
   return guides
 }
 

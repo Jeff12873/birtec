@@ -65,6 +65,9 @@ canvas.toile-schema { position: relative; display: block; width: 100%; height: c
   mask-image: linear-gradient(to right, transparent, #000 170px, #000 calc(100% - 170px), transparent), linear-gradient(to bottom, transparent, #000 170px, #000 calc(100% - 40px), transparent);
   mask-composite: intersect; }
 @keyframes halo-arrivee { from { opacity: 0; } }
+.texte-guide { color: var(--accent); font-weight: 600; }
+.texte-guide.vide { color: var(--texte-3); font-weight: 400; }
+.etape-guide.absent { max-width: 340px; font-size: 13px; }
 canvas.ciel-schema { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .voile-arrivee { position: absolute; inset: 0; background: #04070f; pointer-events: none; animation: voile-arrivee 1.8s ease-out forwards; }
 .voile-arrivee.rapide { animation-duration: .6s; }
