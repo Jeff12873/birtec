@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.12.2",
+      "date": "2026-11-01",
+      "points": [
+        "Aperçu : la pastille + ouvre les colonnes de la table à cocher (Toutes, Aucune, filtre, bulle d'exemples) ; on peut retirer les colonnes affichées, sauf celle de la jointure ou d'une condition, verrouillée"
+      ]
+    },
+    {
       "version": "0.12.1",
       "date": "2026-11-01",
       "points": [

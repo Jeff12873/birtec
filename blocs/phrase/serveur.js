@@ -118,26 +118,27 @@ export function routes(r) {
     const compte = await executerRequete(`SELECT COUNT(${cle ? `DISTINCT ${depart.nom}.${cle.nom}` : '*'}) AS n ${from}${where}`, 1)
     const reponse = { nombre: Number(compte.lignes[0]?.[0] ?? 0) }
     if (spec.apercu) {
-      // Les premières colonnes de la table de départ, puis celles des conditions (pour voir ce qui est filtré).
+      // Les colonnes montrées, table par table. La table de départ : sa clé (verrouillée), puis les colonnes cochées
+      // par l'utilisateur, sinon les premières colonnes proposées. Les autres tables : la colonne de chaque
+      // condition (verrouillée : elle montre la jointure ou le filtre), puis les colonnes cochées.
       // Les colonnes du tri sont lues en plus (DISTINCT l'exige), puis retirées de l'aperçu.
-      // Les colonnes proposées de la table, si l'administrateur les a choisies ; sinon les premières.
+      const jointes = new Set([depart.nom, ...(spec.jointures || []).map((j) => tableDe(schema, j.table)?.nom)])
+      const choisies = spec.apercu?.affichees && typeof spec.apercu.affichees === 'object' ? spec.apercu.affichees : {}
+      const cochees = (t) => (Array.isArray(choisies[t.nom]) ? t.colonnes.filter((c) => choisies[t.nom].includes(c.nom)) : null)
+      const sources = []
+      const ajouter = (c) => { if (!sources.some((x) => x.table === c.table && x.colonne === c.colonne)) sources.push(c) }
+      const cleDepart = depart.colonnes.find((c) => c.cle)
+      if (cleDepart) ajouter({ table: depart.nom, colonne: cleDepart.nom, verrouillee: true })
       const proposees = (lireInfo('colonnes_phrase') || {})[depart.nom]
       const premieres = proposees?.length ? depart.colonnes.filter((c) => proposees.includes(c.nom)) : depart.colonnes
-      // Puis, table par table : les colonnes des conditions et celles que l'utilisateur a ajoutées (pastille +).
-      const sources = premieres.slice(0, 8).map((c) => ({ table: depart.nom, colonne: c.nom }))
-      const ajouter = (c) => { if (!sources.some((x) => x.table === c.table && x.colonne === c.colonne)) sources.push(c) }
-      const jointes = new Set([depart.nom, ...(spec.jointures || []).map((j) => tableDe(schema, j.table)?.nom)])
-      const ajoutees = (Array.isArray(spec.apercu?.colonnes) ? spec.apercu.colonnes : []).map((c) => {
-        const t = tableDe(schema, c.table)
-        const col = colonneDe(t, c.colonne)
-        return t && col && jointes.has(t.nom) ? { table: t.nom, colonne: col.nom, ajoutee: true } : null
-      }).filter(Boolean)
-      for (const c of ajoutees.filter((x) => x.table === depart.nom)) ajouter(c)
-      for (const c of colonnesDesConditions(spec.conditions, schema)) {
-        ajouter({ ...c, condition: true })
-        for (const a of ajoutees.filter((x) => x.table === c.table)) ajouter(a)
+      for (const c of cochees(depart) || premieres.slice(0, 8)) ajouter({ table: depart.nom, colonne: c.nom })
+      const conditions = colonnesDesConditions(spec.conditions, schema)
+      for (const c of conditions) ajouter({ ...c, condition: true, verrouillee: true })
+      for (const nom of [...new Set([...conditions.map((c) => c.table), ...Object.keys(choisies)])]) {
+        const t = tableDe(schema, nom)
+        if (!t || t.nom === depart.nom || !jointes.has(t.nom)) continue
+        for (const c of cochees(t) || []) ajouter({ table: t.nom, colonne: c.nom })
       }
-      for (const c of ajoutees) ajouter(c)
       // Regroupées par table, dans l'ordre d'arrivée des tables.
       const ordre = [...new Set(sources.map((c) => c.table))]
       sources.sort((a, b) => ordre.indexOf(a.table) - ordre.indexOf(b.table))

@@ -4,11 +4,10 @@
 // haut : la liste s'ouvre au-dessus du bouton (menus posés en bas de l'écran).
 // classe : classe en plus sur le menu ; bulle(valeur) : texte (ou promesse) montré dans une bulle à côté du choix
 // survolé, par exemple quelques valeurs d'exemple d'une colonne.
-// flottant : la liste flotte au-dessus de la page (pour un menu posé dans un cadre qui défile, comme un tableau).
 
 import { h } from '/socle/ui.js'
 
-export function menuDeroulant({ choix, valeur = '', surChoix, haut = false, classe = '', bulle = null, flottant = false }) {
+export function menuDeroulant({ choix, valeur = '', surChoix, haut = false, classe = '', bulle = null }) {
   const actuel = choix.find((c) => c.valeur === valeur) || choix[0]
   const bouton = h('button', { type: 'button', class: 'menu-theme-bouton' }, h('span', {}, actuel?.libelle || ''))
   const liste = h('div', { class: 'menu-theme-liste', hidden: true })
@@ -56,38 +55,18 @@ export function menuDeroulant({ choix, valeur = '', surChoix, haut = false, clas
     fermer()
     if (c.valeur !== actuel?.valeur) surChoix(c.valeur)
   }
-  const dehors = (e) => { if (!zone.contains(e.target) && !liste.contains(e.target)) fermer() }
+  const dehors = (e) => { if (!zone.contains(e.target)) fermer() }
   function ouvrir() {
     document.querySelectorAll('.menu-theme-liste').forEach((l) => (l.hidden = true))
     if (filtre) filtre.value = ''
     dessiner()
     liste.hidden = false
-    if (flottant) {
-      // Posée sur la page elle-même (au-dessus de tout, constellation comprise), juste sous le bouton.
-      document.body.append(liste)
-      Object.assign(liste.style, { position: 'fixed', zIndex: '1000', minWidth: '220px', width: 'max-content', maxWidth: 'min(420px, 90vw)' })
-      const r = bouton.getBoundingClientRect()
-      const largeur = liste.offsetWidth
-      const hauteur = liste.offsetHeight
-      const enBas = r.bottom + 6 + hauteur <= innerHeight - 8 || r.top < hauteur + 14
-      Object.assign(liste.style, {
-        left: `${Math.max(8, Math.min(r.left, innerWidth - largeur - 8))}px`,
-        top: `${enBas ? r.bottom + 6 : r.top - 6 - hauteur}px`,
-      })
-      addEventListener('scroll', surDefilement, { capture: true })
-    }
     ;(filtre || bouton).focus()
     options.querySelector('.on')?.scrollIntoView({ block: 'nearest' })
     document.addEventListener('pointerdown', dehors)
   }
-  // Un défilement de la page ferme la liste flottante (sauf celui de la liste elle-même).
-  function surDefilement(e) { if (!liste.contains(e.target)) fermer() }
   function fermer() {
     liste.hidden = true
-    if (flottant) {
-      removeEventListener('scroll', surDefilement, { capture: true })
-      zone.append(liste)
-    }
     if (infobulle) infobulle.hidden = true
     document.removeEventListener('pointerdown', dehors)
   }
@@ -111,7 +90,5 @@ export function menuDeroulant({ choix, valeur = '', surChoix, haut = false, clas
     }
   }
   zone.addEventListener('keydown', clavier)
-  // La liste flottante n'est plus dans le menu quand elle est ouverte : elle écoute le clavier elle-même.
-  if (flottant) liste.addEventListener('keydown', (e) => { e.stopPropagation(); clavier(e) })
   return zone
 }

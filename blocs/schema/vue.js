@@ -1166,7 +1166,7 @@ function bandeauPhrase(vue) {
   const COULEURS_TABLES = ['#3d9bff', '#e879f9', '#2dd4bf', '#f87171', '#a3e635', '#fbbf24', '#818cf8', '#fb923c']
   const couleurTable = (table) => {
     if (!table || table === etatPhrase.depart) return null
-    const tables = [...new Set([...aplatir(etatPhrase.conditions).map(tableDeCondition), ...Object.keys(etatPhrase.colonnes || {})].filter((t) => t && t !== etatPhrase.depart))]
+    const tables = [...new Set([...aplatir(etatPhrase.conditions).map(tableDeCondition), ...Object.keys(etatPhrase.affichees || {})].filter((t) => t && t !== etatPhrase.depart))]
     const i = tables.indexOf(table)
     return i < 0 ? null : COULEURS_TABLES[i % COULEURS_TABLES.length]
   }
@@ -1254,12 +1254,12 @@ function bandeauPhrase(vue) {
   }
 
   async function choisirDepart(nom, garder = null) {
-    etatPhrase = garder || { depart: nom || null, conditions: [], tri: [], colonnes: {} }
-    etatPhrase.colonnes ||= {}
+    etatPhrase = garder || { depart: nom || null, conditions: [], tri: [], affichees: {} }
+    etatPhrase.affichees ||= {}
     tablesDuChemin = ''
     guidesDispo = { parcs: [], machines: null, fiche: null }
     if (etatPhrase.depart) guidesDispo = await api(`/api/phrase/guides?depart=${encodeURIComponent(etatPhrase.depart)}`).catch(() => guidesDispo)
-    phraseCourante = { texte, conditions: conditionsSpec, tri: triSpec, sauvegarde: () => JSON.parse(JSON.stringify({ conditions: etatPhrase.conditions, tri: triSpec(), colonnes: etatPhrase.colonnes })), origine }
+    phraseCourante = { texte, conditions: conditionsSpec, tri: triSpec, sauvegarde: () => JSON.parse(JSON.stringify({ conditions: etatPhrase.conditions, tri: triSpec(), affichees: etatPhrase.affichees })), origine }
     dessinerDepart()
     dessiner()
     if (etatPhrase.depart) changement()
@@ -1479,7 +1479,7 @@ function bandeauPhrase(vue) {
   }
   // Une colonne de l'aperçu. Celles des autres tables portent la couleur de leur table ; celles des conditions de
   // la table consultée sont teintées en orange. La première colonne de chaque table porte la pastille « + » qui
-  // ajoute une colonne de cette table ; une colonne ajoutée se retire par sa croix.
+  // ouvre les colonnes de cette table, à cocher.
   const styleColonne = (c) => {
     const teinte = couleurTable(c.table)
     return teinte ? { '--teinte': teinte } : {}
@@ -1487,38 +1487,85 @@ function bandeauPhrase(vue) {
   const classeColonne = (c) => (couleurTable(c.table) ? ' colonne-table' : c.condition ? ' colonne-condition' : '')
   const celluleApercu = (c, v) => h('td', { class: classeColonne(c).trim(), style: styleColonne(c), title: v === null ? '' : String(v) }, v === null ? '' : String(v))
   const enteteTri = (c, i, toutes) => {
-    const { table, colonne, ajoutee } = c
+    const { table, colonne } = c
     const k = etatPhrase.tri.findIndex((t) => t.table === table && t.colonne === colonne)
     const t = etatPhrase.tri[k]
     const premiere = toutes.findIndex((x) => x.table === table) === i
-    const plus = premiere ? ajoutColonne(table, toutes) : null
-    const retirer = ajoutee ? h('button', { class: 'retirer-colonne', title: 'Retirer cette colonne de l’aperçu', onclick: (e) => {
-      e.stopPropagation()
-      etatPhrase.colonnes[table] = (etatPhrase.colonnes[table] || []).filter((x) => x !== colonne)
-      if (!etatPhrase.colonnes[table].length) delete etatPhrase.colonnes[table]
-      majCompteur()
-    } }, '×') : null
-    return h('th', { class: `triable${t ? ' trie' : ''}${classeColonne(c)}`, style: styleColonne(c), title: 'Cliquer pour trier (Maj + clic : tri secondaire)', onclick: (e) => { if (!e.target.closest('.menu-theme, .retirer-colonne')) trierPar(table, colonne, e.shiftKey) } },
+    const plus = premiere ? h('button', { class: 'bouton-colonnes', title: `Colonnes de ${libelleTable(table)} à montrer`, onclick: (e) => { e.stopPropagation(); choisirColonnesApercu(e.currentTarget, table, toutes) } }, '+') : null
+    return h('th', { class: `triable${t ? ' trie' : ''}${classeColonne(c)}`, style: styleColonne(c), title: 'Cliquer pour trier (Maj + clic : tri secondaire)', onclick: (e) => { if (!e.target.closest('.bouton-colonnes')) trierPar(table, colonne, e.shiftKey) } },
       h('span', { class: 'entete-apercu' }, colonne, table !== etatPhrase.depart ? h('span', { class: 'table-colonne' }, ` (${table})`) : null,
-        t ? h('span', { class: 'sens-tri' }, `${t.sens === 'desc' ? '↓' : '↑'}${etatPhrase.tri.length > 1 ? k + 1 : ''}`) : null, retirer, plus))
+        t ? h('span', { class: 'sens-tri' }, `${t.sens === 'desc' ? '↓' : '↑'}${etatPhrase.tri.length > 1 ? k + 1 : ''}`) : null, plus))
   }
-  // La pastille « + » : les colonnes (proposées) de la table pas encore affichées, avec leur bulle d'exemples.
-  function ajoutColonne(table, toutes) {
-    const deja = new Set(toutes.filter((x) => x.table === table).map((x) => x.colonne))
-    const choix = colonnesDe(table).filter((x) => !deja.has(x.valeur))
-    if (!choix.length) return null
-    return menuDeroulant({
-      choix: [{ valeur: '', libelle: `Ajouter une colonne de ${libelleTable(table)}` }, ...choix.map((x) => ({ valeur: x.valeur, libelle: x.libelle }))],
-      valeur: '',
-      classe: 'ajout-colonne',
-      flottant: true,
-      bulle: (v) => bulleExemple(table, v),
-      surChoix: (v) => {
-        if (!v) return
-        etatPhrase.colonnes[table] = [...(etatPhrase.colonnes[table] || []), v]
-        majCompteur()
-      },
+
+  // Le panneau des colonnes d'une table, à cocher, posé sous la pastille « + » (au-dessus de la constellation).
+  // Cochées : celles montrées. La colonne qui fait la jointure (ou le filtre d'une condition) reste cochée.
+  let panneauOuvert = null
+  function choisirColonnesApercu(bouton, table, toutes) {
+    panneauOuvert?.fermer()
+    const montrees = toutes.filter((x) => x.table === table)
+    const verrouillees = new Set(montrees.filter((x) => x.verrouillee).map((x) => x.colonne))
+    const cochees = new Set(montrees.map((x) => x.colonne))
+    // Les colonnes proposées de la table, plus celles déjà montrées (même si l'administrateur les a retirées depuis).
+    const liste = [...new Map([...colonnesDe(table), ...montrees.map((x) => ({ valeur: x.colonne, libelle: libelleColonne(colonneDe(table, x.colonne)) || x.colonne }))].map((x) => [x.valeur, x])).values()]
+    const ordre = (noeud(table)?.table.colonnes || []).map((x) => x.nom)
+    liste.sort((a, b) => ordre.indexOf(a.valeur) - ordre.indexOf(b.valeur))
+    const bulle = h('div', { class: 'menu-theme-bulle', hidden: true })
+    let minuterieMaj = null
+    const appliquer = () => {
+      etatPhrase.affichees[table] = liste.map((x) => x.valeur).filter((v) => cochees.has(v) && !verrouillees.has(v))
+      clearTimeout(minuterieMaj)
+      minuterieMaj = setTimeout(majCompteur, 500)
+    }
+    const lignes = liste.map((x) => {
+      const verrou = verrouillees.has(x.valeur)
+      const caseACocher = h('input', { type: 'checkbox', checked: cochees.has(x.valeur), disabled: verrou, onchange: (e) => { if (e.target.checked) cochees.add(x.valeur); else cochees.delete(x.valeur); appliquer() } })
+      const ligne = h('label', { class: `case-colonne-apercu${verrou ? ' verrou' : ''}`, title: verrou ? 'Colonne de la jointure ou d’une condition : elle reste affichée' : '' },
+        caseACocher, h('span', {}, x.libelle), x.libelle !== x.valeur ? h('span', { class: 'discret' }, x.valeur) : null, verrou ? ic('cadenas', 12) : null)
+      ligne.addEventListener('mouseenter', async () => {
+        const contenu = await bulleExemple(table, x.valeur)
+        if (!panneau.isConnected) return
+        bulle.replaceChildren(contenu)
+        bulle.style.top = `${ligne.offsetTop - corps.scrollTop + corps.offsetTop}px`
+        bulle.hidden = false
+      })
+      return { x, ligne }
     })
+    const filtre = liste.length > 12 ? h('input', { type: 'search', class: 'menu-theme-filtre', placeholder: 'Filtrer…', oninput: () => {
+      const t = filtre.value.trim().toLowerCase()
+      for (const { x, ligne } of lignes) ligne.hidden = Boolean(t) && !`${x.libelle} ${x.valeur}`.toLowerCase().includes(t)
+    } }) : null
+    const corps = h('div', { class: 'corps-colonnes-apercu' }, lignes.map((l) => l.ligne))
+    const panneau = h('div', { class: 'panneau-colonnes-apercu', onmouseleave: () => { bulle.hidden = true } },
+      h('div', { class: 'titre-colonnes-apercu' }, `Colonnes de ${libelleTable(table)}`),
+      h('div', { class: 'actions-colonnes-apercu' },
+        h('button', { class: 'petit discret', onclick: () => { lignes.forEach(({ x, ligne }) => { if (!ligne.hidden) { cochees.add(x.valeur); ligne.querySelector('input').checked = true } }); appliquer() } }, 'Toutes'),
+        h('button', { class: 'petit discret', onclick: () => { lignes.forEach(({ x, ligne }) => { if (!verrouillees.has(x.valeur)) { cochees.delete(x.valeur); ligne.querySelector('input').checked = false } }); appliquer() } }, 'Aucune')),
+      filtre, corps, bulle)
+    document.body.append(panneau)
+    const r = bouton.getBoundingClientRect()
+    const enBas = r.bottom + 6 + panneau.offsetHeight <= innerHeight - 8 || r.top < panneau.offsetHeight + 14
+    Object.assign(panneau.style, {
+      left: `${Math.max(8, Math.min(r.left, innerWidth - panneau.offsetWidth - 8))}px`,
+      top: `${enBas ? r.bottom + 6 : r.top - 6 - panneau.offsetHeight}px`,
+    })
+    if (panneau.getBoundingClientRect().right + 310 > innerWidth) Object.assign(bulle.style, { left: 'auto', right: 'calc(100% + 8px)' })
+    ;(filtre || panneau.querySelector('input:not([disabled])'))?.focus()
+    const dehors = (e) => { if (!panneau.contains(e.target) && e.target !== bouton) fermer() }
+    const defilement = (e) => { if (!panneau.contains(e.target)) fermer() }
+    const echap = (e) => { if (e.key === 'Escape') fermer() }
+    function fermer() {
+      panneau.remove()
+      document.removeEventListener('pointerdown', dehors)
+      removeEventListener('scroll', defilement, { capture: true })
+      removeEventListener('keydown', echap)
+      if (panneauOuvert?.panneau === panneau) panneauOuvert = null
+    }
+    setTimeout(() => {
+      document.addEventListener('pointerdown', dehors)
+      addEventListener('scroll', defilement, { capture: true })
+      addEventListener('keydown', echap)
+    })
+    panneauOuvert = { panneau, fermer }
   }
 
   // Le compteur et l'aperçu : relus un instant après le dernier changement (choix ou chemin).
@@ -1529,8 +1576,7 @@ function bandeauPhrase(vue) {
       const numero = ++demande
       vider(zoneResultat, h('span', { class: 'discret curseur' }, 'Comptage dans la base'))
       try {
-        const ajoutees = Object.entries(etatPhrase.colonnes).flatMap(([table, cols]) => cols.map((colonne) => ({ table, colonne })))
-        const r = await api('/api/phrase/compter', { methode: 'POST', corps: { ...specDuChemin(vue.chemin, conditionsSpec(), triSpec()), apercu: { colonnes: ajoutees } } })
+        const r = await api('/api/phrase/compter', { methode: 'POST', corps: { ...specDuChemin(vue.chemin, conditionsSpec(), triSpec()), apercu: { affichees: etatPhrase.affichees } } })
         if (numero !== demande) return
         vider(zoneResultat,
           h('div', { class: 'compteur-phrase' }, h('b', {}, nombreFr(r.nombre)), ` ${libelleTable(vue.chemin.depart.table.nom)} correspondent`),
@@ -1552,7 +1598,7 @@ function bandeauPhrase(vue) {
     const conditions = Array.isArray(c.conditions) ? reprendre(c.conditions) : (c.filtres || []).map((f) => (f.guide
       ? { ...nouvelleCondition(), source: f.guide, valeur: f.valeur, valeurTexte: String(f.texte || '').split(' : ').slice(1).join(' : ') || f.valeur, modele: f.modele, modeleTexte: f.modele, champ: f.champ, champTexte: f.champ, valeurs: f.valeurs || [] }
       : { ...nouvelleCondition(), source: `table:${f.table}`, table: f.table, colonne: f.colonne, valeurs: [String(f.valeurs?.[0] ?? '')] }))
-    choisirDepart(depart, { depart, conditions, tri: (c.tri || []).map((t) => ({ ...t })), colonnes: { ...(c.colonnes || {}) } }).then(() => {
+    choisirDepart(depart, { depart, conditions, tri: (c.tri || []).map((t) => ({ ...t })), affichees: { ...(c.affichees || {}) } }).then(() => {
       // Les tables du chemin d'origine (y compris celles sans condition) sont rallumées.
       if (c.tables?.length) { tablesDuChemin = ''; vue.cheminPour(c.tables) }
     })

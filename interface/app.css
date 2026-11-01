@@ -265,13 +265,17 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 .apercu-phrase .colonne-table { background: color-mix(in srgb, var(--teinte) 10%, transparent); }
 .apercu-phrase th.colonne-table { color: var(--teinte); }
 .entete-apercu { display: inline-flex; align-items: center; gap: 4px; }
-.retirer-colonne { font: inherit; border: none; background: none; color: var(--texte-3); cursor: pointer; padding: 0 2px; }
-.retirer-colonne:hover { color: var(--texte); }
-/* La pastille « + » d'ajout de colonne : un petit rond ; la liste s'ouvre en dessous. */
-.menu-theme.ajout-colonne .menu-theme-bouton { width: 20px; height: 20px; padding: 0; border-radius: 99px; background: color-mix(in srgb, var(--accent) 18%, transparent); border: 1px solid var(--accent); font-size: 0; position: relative; }
-.menu-theme.ajout-colonne .menu-theme-bouton::after { content: '+'; position: absolute; inset: 0; display: grid; place-items: center; font-size: 14px; font-weight: 700; color: var(--accent); }
-.menu-theme.ajout-colonne .menu-theme-bouton span { display: none; }
-.menu-theme.ajout-colonne .menu-theme-liste { font-weight: 400; text-transform: none; letter-spacing: 0; }
+/* La pastille « + » de l'aperçu, et son panneau de colonnes à cocher (posé sur la page, au-dessus de tout). */
+.bouton-colonnes { width: 20px; height: 20px; padding: 0; border-radius: 99px; display: inline-grid; place-items: center; font-size: 14px; font-weight: 700; line-height: 1; color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); border: 1px solid var(--accent); cursor: pointer; }
+.panneau-colonnes-apercu { position: fixed; z-index: 1000; min-width: 220px; width: max-content; max-width: min(420px, 90vw); background: var(--carte); border: 1px solid var(--bord-fort); border-radius: 12px; padding: 8px; box-shadow: 0 12px 30px rgba(0, 0, 0, .45); font-size: 13px; color: var(--texte); }
+.titre-colonnes-apercu { font-weight: 600; margin: 0 4px 6px; }
+.actions-colonnes-apercu { display: flex; gap: 6px; margin-bottom: 6px; }
+.corps-colonnes-apercu { max-height: min(360px, 50vh); overflow: auto; }
+.case-colonne-apercu { display: flex; gap: 8px; align-items: baseline; padding: 4px 6px; border-radius: 8px; cursor: pointer; }
+.case-colonne-apercu:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.case-colonne-apercu .discret { font-size: 11px; }
+.case-colonne-apercu.verrou { cursor: default; opacity: .75; }
+.case-colonne-apercu svg { color: var(--texte-3); align-self: center; }
 .choix-colonnes .actions { display: flex; gap: 6px; margin-bottom: 8px; }
 .liste-colonnes { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 2px 14px; max-height: 55vh; overflow: auto; }
 .case-colonne { display: flex; gap: 6px; align-items: baseline; font-size: 13px; padding: 2px 0; cursor: pointer; }
