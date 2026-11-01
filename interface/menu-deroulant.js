@@ -4,10 +4,11 @@
 // haut : la liste s'ouvre au-dessus du bouton (menus posés en bas de l'écran).
 // classe : classe en plus sur le menu ; bulle(valeur) : texte (ou promesse) montré dans une bulle à côté du choix
 // survolé, par exemple quelques valeurs d'exemple d'une colonne.
+// flottant : la liste flotte au-dessus de la page (pour un menu posé dans un cadre qui défile, comme un tableau).
 
 import { h } from '/socle/ui.js'
 
-export function menuDeroulant({ choix, valeur = '', surChoix, haut = false, classe = '', bulle = null }) {
+export function menuDeroulant({ choix, valeur = '', surChoix, haut = false, classe = '', bulle = null, flottant = false }) {
   const actuel = choix.find((c) => c.valeur === valeur) || choix[0]
   const bouton = h('button', { type: 'button', class: 'menu-theme-bouton' }, h('span', {}, actuel?.libelle || ''))
   const liste = h('div', { class: 'menu-theme-liste', hidden: true })
@@ -58,6 +59,11 @@ export function menuDeroulant({ choix, valeur = '', surChoix, haut = false, clas
     if (filtre) filtre.value = ''
     dessiner()
     liste.hidden = false
+    if (flottant) {
+      const r = bouton.getBoundingClientRect()
+      Object.assign(liste.style, { position: 'fixed', top: `${r.bottom + 6}px`, left: `${Math.min(r.left, innerWidth - liste.offsetWidth - 8)}px` })
+      addEventListener('scroll', fermer, { capture: true, once: true })
+    }
     ;(filtre || bouton).focus()
     options.querySelector('.on')?.scrollIntoView({ block: 'nearest' })
     document.addEventListener('pointerdown', dehors)

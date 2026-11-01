@@ -1,6 +1,15 @@
 {
   "versions": [
     {
+      "version": "0.12.0",
+      "date": "2026-11-01",
+      "points": [
+        "LA PHRASE : une condition peut s'arrêter à la table (« qui ont » [Personnes], sans champ) : une ligne liée existe ; « n'ont pas » : aucune",
+        "Chaque table ajoutée a sa couleur, sur sa pastille de condition et sur ses colonnes de l'aperçu",
+        "Aperçu : la pastille + à côté de la première colonne de chaque table ajoute une colonne de cette table (avec la bulle d'exemples) ; × pour la retirer. Gardé avec le rapport rouvert"
+      ]
+    },
+    {
       "version": "0.11.9",
       "date": "2026-11-01",
       "points": [

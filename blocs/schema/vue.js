@@ -1156,8 +1156,19 @@ function bandeauPhrase(vue) {
     if (!c.source) return false
     if (c.source === 'parc' || c.source === 'machine') return Boolean(c.valeur)
     if (c.source === 'fiche') return Boolean(c.modele)
+    // Une table liée seule, sans champ : « ont » = une ligne existe dans cette table, « n'ont pas » = aucune.
+    if (!c.colonne) return Boolean(c.table) && c.table !== etatPhrase.depart && ['egal', 'different'].includes(c.op)
     // « ont » / « n'ont pas » sans valeur : le champ est rempli (ou non), par exemple une table liée qui existe.
     return Boolean(c.colonne) && (SANS_VALEUR.has(c.op) || ['egal', 'different'].includes(c.op) || (c.op === 'entre' ? c.valeurs.length === 2 && c.valeurs.every(Boolean) : Boolean(c.valeurs[0])))
+  }
+
+  // ---- une couleur par table ajoutée (dans les conditions et dans l'aperçu), dans l'ordre d'arrivée
+  const COULEURS_TABLES = ['#3d9bff', '#e879f9', '#2dd4bf', '#f87171', '#a3e635', '#fbbf24', '#818cf8', '#fb923c']
+  const couleurTable = (table) => {
+    if (!table || table === etatPhrase.depart) return null
+    const tables = [...new Set([...aplatir(etatPhrase.conditions).map(tableDeCondition), ...Object.keys(etatPhrase.colonnes || {})].filter((t) => t && t !== etatPhrase.depart))]
+    const i = tables.indexOf(table)
+    return i < 0 ? null : COULEURS_TABLES[i % COULEURS_TABLES.length]
   }
 
   // ---- le texte de la phrase (gardé avec le rapport, affiché dans les vignettes)
@@ -1166,6 +1177,7 @@ function bandeauPhrase(vue) {
     if (c.source === 'parc') return `qui ${c.op === 'different' ? 'ne sont pas' : 'sont'} dans le parc ${c.valeurTexte || c.valeur}`
     if (c.source === 'machine') return `qui ${c.op === 'different' ? 'ne concernent pas' : 'concernent'} la machine ${c.valeurTexte || c.valeur} (et dessous)`
     if (c.source === 'fiche') return `qui ${op} la fiche technique ${c.modeleTexte}${c.champ ? ` › ${c.champTexte}` : ''}${c.valeurs[0] ? ` = ${c.valeurs[0]}` : ''}`
+    if (!c.colonne) return `qui ${c.op === 'different' ? 'n’ont pas de' : 'ont des'} ${libelleTable(c.table)}`
     const col = colonneDe(c.table, c.colonne)
     const nature = natureColonne(col)
     const champ = `${libelleColonne(col)}${c.table !== etatPhrase.depart ? ` (${libelleTable(c.table)})` : ''}`
@@ -1242,11 +1254,12 @@ function bandeauPhrase(vue) {
   }
 
   async function choisirDepart(nom, garder = null) {
-    etatPhrase = garder || { depart: nom || null, conditions: [], tri: [] }
+    etatPhrase = garder || { depart: nom || null, conditions: [], tri: [], colonnes: {} }
+    etatPhrase.colonnes ||= {}
     tablesDuChemin = ''
     guidesDispo = { parcs: [], machines: null, fiche: null }
     if (etatPhrase.depart) guidesDispo = await api(`/api/phrase/guides?depart=${encodeURIComponent(etatPhrase.depart)}`).catch(() => guidesDispo)
-    phraseCourante = { texte, conditions: conditionsSpec, tri: triSpec, sauvegarde: () => JSON.parse(JSON.stringify({ conditions: etatPhrase.conditions, tri: triSpec() })), origine }
+    phraseCourante = { texte, conditions: conditionsSpec, tri: triSpec, sauvegarde: () => JSON.parse(JSON.stringify({ conditions: etatPhrase.conditions, tri: triSpec(), colonnes: etatPhrase.colonnes })), origine }
     dessinerDepart()
     dessiner()
     if (etatPhrase.depart) changement()
@@ -1353,9 +1366,11 @@ function bandeauPhrase(vue) {
       dessiner()
       changement()
     }, { vide: '— dans quelle table ? —', classe: 'champ' })
+    const teinte = couleurTable(c.table)
+    if (teinte) { table.style.setProperty('--teinte', teinte); table.classList.add('teintee') }
     // Le champ : un menu à bulle, qui montre quelques valeurs d'exemple de la colonne survolée.
     const champ = c.table ? menuDeroulant({
-      choix: [{ valeur: '', libelle: '— quel champ ? —' }, ...colonnesDe(c.table, c.colonne).map((x) => ({ valeur: x.valeur, libelle: x.libelle }))],
+      choix: [{ valeur: '', libelle: c.table === etatPhrase.depart ? '— quel champ ? —' : '— la table seule —' }, ...colonnesDe(c.table, c.colonne).map((x) => ({ valeur: x.valeur, libelle: x.libelle }))],
       valeur: c.colonne || '',
       classe: `champ-phrase${c.colonne ? ' choisi' : ''}`,
       bulle: (v) => bulleExemple(c.table, v),
@@ -1462,13 +1477,48 @@ function bandeauPhrase(vue) {
     else etatPhrase.tri = etatPhrase.tri.filter((t) => t !== existant)
     changement()
   }
-  // Une colonne de l'aperçu ; celles des conditions (teintées) disent de quelle table elles viennent.
-  const enteteTri = ({ table, colonne, condition }) => {
-    const i = etatPhrase.tri.findIndex((t) => t.table === table && t.colonne === colonne)
-    const t = etatPhrase.tri[i]
-    return h('th', { class: `triable${t ? ' trie' : ''}${condition ? ' colonne-condition' : ''}`, title: `${condition ? 'Colonne d’une condition. ' : ''}Cliquer pour trier (Maj + clic : tri secondaire)`, onclick: (e) => trierPar(table, colonne, e.shiftKey) },
-      colonne, condition && table !== etatPhrase.depart ? h('span', { class: 'table-colonne' }, ` (${table})`) : null,
-      t ? h('span', { class: 'sens-tri' }, `${t.sens === 'desc' ? '↓' : '↑'}${etatPhrase.tri.length > 1 ? i + 1 : ''}`) : null)
+  // Une colonne de l'aperçu. Celles des autres tables portent la couleur de leur table ; celles des conditions de
+  // la table consultée sont teintées en orange. La première colonne de chaque table porte la pastille « + » qui
+  // ajoute une colonne de cette table ; une colonne ajoutée se retire par sa croix.
+  const styleColonne = (c) => {
+    const teinte = couleurTable(c.table)
+    return teinte ? { '--teinte': teinte } : {}
+  }
+  const classeColonne = (c) => (couleurTable(c.table) ? ' colonne-table' : c.condition ? ' colonne-condition' : '')
+  const celluleApercu = (c, v) => h('td', { class: classeColonne(c).trim(), style: styleColonne(c), title: v === null ? '' : String(v) }, v === null ? '' : String(v))
+  const enteteTri = (c, i, toutes) => {
+    const { table, colonne, ajoutee } = c
+    const k = etatPhrase.tri.findIndex((t) => t.table === table && t.colonne === colonne)
+    const t = etatPhrase.tri[k]
+    const premiere = toutes.findIndex((x) => x.table === table) === i
+    const plus = premiere ? ajoutColonne(table, toutes) : null
+    const retirer = ajoutee ? h('button', { class: 'retirer-colonne', title: 'Retirer cette colonne de l’aperçu', onclick: (e) => {
+      e.stopPropagation()
+      etatPhrase.colonnes[table] = (etatPhrase.colonnes[table] || []).filter((x) => x !== colonne)
+      if (!etatPhrase.colonnes[table].length) delete etatPhrase.colonnes[table]
+      majCompteur()
+    } }, '×') : null
+    return h('th', { class: `triable${t ? ' trie' : ''}${classeColonne(c)}`, style: styleColonne(c), title: 'Cliquer pour trier (Maj + clic : tri secondaire)', onclick: (e) => { if (!e.target.closest('.menu-theme, .retirer-colonne')) trierPar(table, colonne, e.shiftKey) } },
+      h('span', { class: 'entete-apercu' }, colonne, table !== etatPhrase.depart ? h('span', { class: 'table-colonne' }, ` (${table})`) : null,
+        t ? h('span', { class: 'sens-tri' }, `${t.sens === 'desc' ? '↓' : '↑'}${etatPhrase.tri.length > 1 ? k + 1 : ''}`) : null, retirer, plus))
+  }
+  // La pastille « + » : les colonnes (proposées) de la table pas encore affichées, avec leur bulle d'exemples.
+  function ajoutColonne(table, toutes) {
+    const deja = new Set(toutes.filter((x) => x.table === table).map((x) => x.colonne))
+    const choix = colonnesDe(table).filter((x) => !deja.has(x.valeur))
+    if (!choix.length) return null
+    return menuDeroulant({
+      choix: [{ valeur: '', libelle: `Ajouter une colonne de ${libelleTable(table)}` }, ...choix.map((x) => ({ valeur: x.valeur, libelle: x.libelle }))],
+      valeur: '',
+      classe: 'ajout-colonne',
+      flottant: true,
+      bulle: (v) => bulleExemple(table, v),
+      surChoix: (v) => {
+        if (!v) return
+        etatPhrase.colonnes[table] = [...(etatPhrase.colonnes[table] || []), v]
+        majCompteur()
+      },
+    })
   }
 
   // Le compteur et l'aperçu : relus un instant après le dernier changement (choix ou chemin).
@@ -1479,13 +1529,14 @@ function bandeauPhrase(vue) {
       const numero = ++demande
       vider(zoneResultat, h('span', { class: 'discret curseur' }, 'Comptage dans la base'))
       try {
-        const r = await api('/api/phrase/compter', { methode: 'POST', corps: { ...specDuChemin(vue.chemin, conditionsSpec(), triSpec()), apercu: true } })
+        const ajoutees = Object.entries(etatPhrase.colonnes).flatMap(([table, cols]) => cols.map((colonne) => ({ table, colonne })))
+        const r = await api('/api/phrase/compter', { methode: 'POST', corps: { ...specDuChemin(vue.chemin, conditionsSpec(), triSpec()), apercu: { colonnes: ajoutees } } })
         if (numero !== demande) return
         vider(zoneResultat,
           h('div', { class: 'compteur-phrase' }, h('b', {}, nombreFr(r.nombre)), ` ${libelleTable(vue.chemin.depart.table.nom)} correspondent`),
           r.apercu?.lignes.length ? h('div', { class: 'tableau-conteneur apercu-phrase' }, h('table', { class: 'tableau compact' },
-            h('thead', {}, h('tr', {}, r.apercu.colonnes.map(enteteTri))),
-            h('tbody', {}, r.apercu.lignes.map((l) => h('tr', {}, l.map((v, i) => h('td', { class: r.apercu.colonnes[i]?.condition ? 'colonne-condition' : '', title: v === null ? '' : String(v) }, v === null ? '' : String(v)))))))) : null,
+            h('thead', {}, h('tr', {}, r.apercu.colonnes.map((c, i) => enteteTri(c, i, r.apercu.colonnes)))),
+            h('tbody', {}, r.apercu.lignes.map((l) => h('tr', {}, l.map((v, i) => celluleApercu(r.apercu.colonnes[i], v))))))) : null,
           r.sql ? h('details', { class: 'sql-phrase' }, h('summary', {}, 'Voir le SQL pour BIRT'), h('pre', { class: 'code' }, h('code', {}, r.sql))) : null)
       } catch (e) {
         if (numero === demande) vider(zoneResultat, h('span', { class: 'rouge' }, e.message))
@@ -1501,7 +1552,7 @@ function bandeauPhrase(vue) {
     const conditions = Array.isArray(c.conditions) ? reprendre(c.conditions) : (c.filtres || []).map((f) => (f.guide
       ? { ...nouvelleCondition(), source: f.guide, valeur: f.valeur, valeurTexte: String(f.texte || '').split(' : ').slice(1).join(' : ') || f.valeur, modele: f.modele, modeleTexte: f.modele, champ: f.champ, champTexte: f.champ, valeurs: f.valeurs || [] }
       : { ...nouvelleCondition(), source: `table:${f.table}`, table: f.table, colonne: f.colonne, valeurs: [String(f.valeurs?.[0] ?? '')] }))
-    choisirDepart(depart, { depart, conditions, tri: (c.tri || []).map((t) => ({ ...t })) }).then(() => {
+    choisirDepart(depart, { depart, conditions, tri: (c.tri || []).map((t) => ({ ...t })), colonnes: { ...(c.colonnes || {}) } }).then(() => {
       // Les tables du chemin d'origine (y compris celles sans condition) sont rallumées.
       if (c.tables?.length) { tablesDuChemin = ''; vue.cheminPour(c.tables) }
     })

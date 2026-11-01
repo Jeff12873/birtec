@@ -123,10 +123,24 @@ export function routes(r) {
       // Les colonnes proposées de la table, si l'administrateur les a choisies ; sinon les premières.
       const proposees = (lireInfo('colonnes_phrase') || {})[depart.nom]
       const premieres = proposees?.length ? depart.colonnes.filter((c) => proposees.includes(c.nom)) : depart.colonnes
+      // Puis, table par table : les colonnes des conditions et celles que l'utilisateur a ajoutées (pastille +).
       const sources = premieres.slice(0, 8).map((c) => ({ table: depart.nom, colonne: c.nom }))
+      const ajouter = (c) => { if (!sources.some((x) => x.table === c.table && x.colonne === c.colonne)) sources.push(c) }
+      const jointes = new Set([depart.nom, ...(spec.jointures || []).map((j) => tableDe(schema, j.table)?.nom)])
+      const ajoutees = (Array.isArray(spec.apercu?.colonnes) ? spec.apercu.colonnes : []).map((c) => {
+        const t = tableDe(schema, c.table)
+        const col = colonneDe(t, c.colonne)
+        return t && col && jointes.has(t.nom) ? { table: t.nom, colonne: col.nom, ajoutee: true } : null
+      }).filter(Boolean)
+      for (const c of ajoutees.filter((x) => x.table === depart.nom)) ajouter(c)
       for (const c of colonnesDesConditions(spec.conditions, schema)) {
-        if (!sources.some((x) => x.table === c.table && x.colonne === c.colonne)) sources.push({ ...c, condition: true })
+        ajouter({ ...c, condition: true })
+        for (const a of ajoutees.filter((x) => x.table === c.table)) ajouter(a)
       }
+      for (const c of ajoutees) ajouter(c)
+      // Regroupées par table, dans l'ordre d'arrivée des tables.
+      const ordre = [...new Set(sources.map((c) => c.table))]
+      sources.sort((a, b) => ordre.indexOf(a.table) - ordre.indexOf(b.table))
       const colonnes = sources.map((c, i) => `${c.table}.${c.colonne} AS c_${i}`)
       const r5 = await executerRequete(`SELECT DISTINCT ${[...colonnes, ...tri.map((t, i) => `${t.expression} AS tri_${i}`)].join(', ')} ${from}${where}${tri.length ? `\nORDER BY ${tri.map((t, i) => `tri_${i} ${t.sens}`).join(', ')}` : ''}`, 5)
       reponse.apercu = { colonnes: sources, lignes: r5.lignes.map((l) => l.slice(0, colonnes.length)) }
@@ -200,7 +214,7 @@ function colonnesDesConditions(liste, schema) {
     if (c.guide === 'parc' || c.guide === 'machine') return m?.machine ? [{ table: tableDe(schema, m.machine.table)?.nom, colonne: m.machine.code }] : []
     if (c.guide) return []
     const t = tableDe(schema, c.table)
-    const col = colonneDe(t, c.colonne)
+    const col = c.colonne ? colonneDe(t, c.colonne) : t && cleDe(t)
     return t && col ? [{ table: t.nom, colonne: col.nom }] : []
   }).filter((c) => c.table)
 }
@@ -257,6 +271,13 @@ export async function morceauxSql(spec, schema) {
       const c = await conditionGuidee(f, jointes, depart, schema)
       return c && f.op === 'different' ? `NOT COALESCE((${c}), FALSE)` : c
     }
+    // Une table seule, sans champ : « ont » = une ligne liée existe dans cette table, « n'ont pas » = aucune.
+    if (f.table && !f.colonne) {
+      const t = tableDe(schema, f.table)
+      if (!t || !jointes.has(t.nom)) throw new ErreurHttp(400, `La table ${f.table} n’est pas dans le chemin.`)
+      const e = `${t.nom}.${cleDe(t).nom}`
+      return f.op === 'different' ? `${e} IS NULL` : `${e} IS NOT NULL`
+    }
     const { e, colonne } = ciblee(f)
     const v = (Array.isArray(f.valeurs) ? f.valeurs : [f.valeurs]).filter((x) => x !== undefined && x !== null && x !== '')
     const lit = (x) => litteralPour(colonne, x)
@@ -291,6 +312,8 @@ export async function morceauxSql(spec, schema) {
   return { from: lignes.join('\n'), where: where ? `\nWHERE ${where}` : '', tri }
 }
 
+// La clé d'une table (sinon sa première colonne) : sert à dire qu'une ligne liée existe.
+const cleDe = (t) => t.colonnes.find((c) => c.cle) || t.colonnes[0]
 // Un champ rempli : non nul (et, pour un texte, pas vide).
 const rempli = (e, colonne) => (NUMERIQUE.test(colonne.type || '') ? `${e} IS NOT NULL` : `(${e} IS NOT NULL AND ${e} <> '')`)
 const echapper = (v) => String(v).replace(/\\/g, '\\\\').replace(/'/g, "''")

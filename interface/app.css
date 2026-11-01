@@ -260,6 +260,18 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 .apercu-phrase .colonne-condition { background: color-mix(in srgb, #f59e0b 9%, transparent); }
 .apercu-phrase th.colonne-condition { color: #f5b544; }
 .table-colonne { font-size: 11px; opacity: .7; }
+/* Les tables ajoutées : une couleur chacune, sur leur pastille de condition et sur leurs colonnes de l'aperçu. */
+.pastille-choix.teintee { border-color: var(--teinte); background: color-mix(in srgb, var(--teinte) 16%, transparent); color: var(--texte); }
+.apercu-phrase .colonne-table { background: color-mix(in srgb, var(--teinte) 10%, transparent); }
+.apercu-phrase th.colonne-table { color: var(--teinte); }
+.entete-apercu { display: inline-flex; align-items: center; gap: 4px; }
+.retirer-colonne { font: inherit; border: none; background: none; color: var(--texte-3); cursor: pointer; padding: 0 2px; }
+.retirer-colonne:hover { color: var(--texte); }
+/* La pastille « + » d'ajout de colonne : un petit rond ; la liste s'ouvre en dessous. */
+.menu-theme.ajout-colonne .menu-theme-bouton { width: 20px; height: 20px; padding: 0; border-radius: 99px; background: color-mix(in srgb, var(--accent) 18%, transparent); border: 1px solid var(--accent); font-size: 0; position: relative; }
+.menu-theme.ajout-colonne .menu-theme-bouton::after { content: '+'; position: absolute; inset: 0; display: grid; place-items: center; font-size: 14px; font-weight: 700; color: var(--accent); }
+.menu-theme.ajout-colonne .menu-theme-bouton span { display: none; }
+.menu-theme.ajout-colonne .menu-theme-liste { font-weight: 400; text-transform: none; letter-spacing: 0; }
 .choix-colonnes .actions { display: flex; gap: 6px; margin-bottom: 8px; }
 .liste-colonnes { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 2px 14px; max-height: 55vh; overflow: auto; }
 .case-colonne { display: flex; gap: 6px; align-items: baseline; font-size: 13px; padding: 2px 0; cursor: pointer; }
