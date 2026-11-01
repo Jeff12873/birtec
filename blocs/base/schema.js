@@ -19,8 +19,12 @@ export async function obtenirSchema({ rafraichir = false } = {}) {
   if (etatConnexion().ouverte) {
     if (!schema?.direct || rafraichir) {
       const lu = await lireSchema()
-      enregistrerTables(lu.tables, `mysql:${lu.base}`)
-      enregistrerLiens(deduireLiens(lu.tables), 'déduit')
+      // La copie dans le .ktec n'est qu'une réserve pour travailler hors connexion : en consultation, le fichier
+      // n'accepte pas d'écriture, et la structure lue suffit.
+      try {
+        enregistrerTables(lu.tables, `mysql:${lu.base}`)
+        enregistrerLiens(deduireLiens(lu.tables), 'déduit')
+      } catch {}
       schema = { ...lu, direct: true }
     }
   } else if (!schema || schema.direct || rafraichir) {

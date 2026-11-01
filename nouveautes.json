@@ -1,6 +1,15 @@
 {
   "versions": [
     {
+      "version": "0.11.9",
+      "date": "2026-11-01",
+      "points": [
+        "Hors mode administrateur, les réglages disparaissent au lieu d'être grisés : type de table, nom clair, description pour l'IA, prise en compte par l'IA, liens à nommer ou ajouter, clés et SQL du chemin, clés de liaison, tables écartées",
+        "Indicateurs GMAO : l'utilisateur voit le résultat, plus les requêtes SQL ni « Enregistrer les retouches » ; le serveur refuse l'enregistrement, la suppression et l'essai de SQL libre hors mode administrateur (de même pour créer, retoucher ou supprimer un rapport)",
+        "Correction : en consultation, juste après le démarrage, la constellation refusait de s'afficher (« Modification réservée… »)"
+      ]
+    },
+    {
       "version": "0.11.8",
       "date": "2026-11-01",
       "points": [

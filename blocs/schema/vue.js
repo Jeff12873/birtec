@@ -864,7 +864,7 @@ class VueGraphe {
     c.globalAlpha = 1
 
     // Clés de liaison, écrites le long de chaque ligne (dans son axe, jamais à l'envers).
-    if (reglages.cles && !this.allumage) {
+    if (reglages.cles && modeAdmin() && !this.allumage) {
       c.font = `${Math.round(10 + Math.min(3, k))}px ui-monospace, monospace`
       c.textAlign = 'center'
       c.textBaseline = 'bottom'
@@ -1595,7 +1595,7 @@ function cadreRaccourcis() {
     ['Clic', 'choisir une table (source)'],
     ['Ctrl + clic', 'chemin le plus court jusqu’à cette table'],
     ['Ctrl + Maj + clic', 'construire le chemin, table par table'],
-    ['Clic sur un lien', 'le nommer, le décrire'],
+    ['Clic sur un lien', modeAdmin() ? 'le nommer, le décrire' : 'voir ce qu’il relie'],
   ]
   const cadre = h('div', { class: `cadre-raccourcis ${reglages.raccourcis ? '' : 'replie'}` })
   const dessiner = () => {
@@ -1628,12 +1628,12 @@ function reglagesSchema(vue, caseEcartees) {
     curseur('attraction', 'Force des liens', 'Plus fort : les tables liées se rapprochent'),
     curseur('ecartement', 'Écartement', 'Plus fort : les bulles se repoussent davantage'),
     h('label', { class: 'case-schema', title: 'Une bulle déplacée reste où on la lâche (double-clic dessus pour la libérer)' }, figer, 'Figer en lâchant'),
-    h('label', { class: 'case-schema', title: 'Écrire la clé de liaison le long de chaque ligne (zoomez si une ligne est trop courte)' },
+    !modeAdmin() ? null : h('label', { class: 'case-schema', title: 'Écrire la clé de liaison le long de chaque ligne (zoomez si une ligne est trop courte)' },
       h('input', { type: 'checkbox', checked: reglages.cles, onchange: (e) => { reglages.cles = e.target.checked; garderReglages(); vue.dessiner() } }), 'Clés de liaison'),
     h('label', { class: 'case-schema', title: 'Cache les tables de liaison (type intermédiaire) : les tables qu’elles relient sont jointes par un pointillé. Une liaison sur le chemin reste visible.' },
       h('input', { type: 'checkbox', checked: reglages.sansLiaisons, onchange: (e) => { reglages.sansLiaisons = e.target.checked; garderReglages(); vue.dessiner() } }), 'Masquer les liaisons'),
     h('button', { class: 'petit discret', title: 'Toutes les bulles reprennent leur place dans la simulation', onclick: () => vue.libererTout() }, 'Tout libérer'),
-    h('label', { class: 'case-schema' }, caseEcartees, 'Tables écartées'),
+    modeAdmin() ? h('label', { class: 'case-schema', title: 'Montrer aussi, en grisé, les tables écartées de l’IA' }, caseEcartees, 'Tables écartées') : null,
   )
 }
 
@@ -1676,6 +1676,22 @@ function panneauTable(n, vue) {
       vue.dessiner()
     },
   })
+  const voisins = [
+    h('p', { class: 'discret', style: { fontSize: '13px' } }, `${t.colonnes.length} colonnes, ${n.degre} table(s) liée(s) :`),
+    h('div', { class: 'liste-voisins' }, [...n.voisins].sort((a, b) => a.table.nom.localeCompare(b.table.nom)).map((v) =>
+      h('a', { href: '#', class: 'mono', title: v.table.libelle || '', onclick: (e) => { e.preventDefault(); vue.centrerSur(v, true) } }, v.table.nom))),
+  ]
+  // L'utilisateur : la table, son nom clair et son type, en lecture ; rien à régler (la description est pour l'IA).
+  if (!modeAdmin()) {
+    return [
+      h('div', { class: 'discret', style: { fontSize: '12px' } }, 'Source — Ctrl + clic sur une autre table pour le chemin'),
+      h('h2', { style: { margin: '4px 0 2px' } }, t.libelle || t.nom),
+      t.libelle ? h('div', { class: 'mono discret', style: { fontSize: '12px' } }, t.nom) : null,
+      h('p', { style: { fontSize: '13px', margin: '10px 0 0' } }, h('span', { class: 'point-type', style: { background: n.type.ecran } }), ` ${n.type.nom} — `, h('span', { class: 'discret' }, n.type.aide)),
+      voisins,
+      h('div', { class: 'actions', style: { marginTop: '10px' } }, h('button', { class: 'petit', onclick: () => extraireTables([t.nom]) }, ic('telecharger', 14), 'Télécharger la table')),
+    ]
+  }
   return [
     h('div', { class: 'discret', style: { fontSize: '12px' } }, 'Source — Ctrl + clic sur une autre table pour le chemin'),
     h('h2', { class: 'mono', style: { margin: '4px 0 10px' } }, t.nom),
@@ -1683,9 +1699,7 @@ function panneauTable(n, vue) {
     h('label', { class: 'champ', style: { marginTop: '10px' } }, h('span', {}, 'Description (pour l’IA)'), enregistreur(h('textarea', { rows: 4 }, t.description || ''), dico('description'))),
     h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', marginTop: '10px' } }, coche, 'Prise en compte par l’IA'),
     choixType(n, vue),
-    h('p', { class: 'discret', style: { fontSize: '13px' } }, `${t.colonnes.length} colonnes, ${n.degre} table(s) liée(s) :`),
-    h('div', { class: 'liste-voisins' }, [...n.voisins].sort((a, b) => a.table.nom.localeCompare(b.table.nom)).map((v) =>
-      h('a', { href: '#', class: 'mono', title: v.table.libelle || '', onclick: (e) => { e.preventDefault(); vue.centrerSur(v, true) } }, v.table.nom))),
+    voisins,
     h('div', { class: 'actions', style: { marginTop: '10px' } },
       h('button', { class: 'petit', onclick: () => extraireTables([t.nom]) }, ic('telecharger', 14), 'Télécharger la table'),
       h('a', { class: 'bouton petit discret', href: `#/base/${encodeURIComponent(t.nom)}` }, ic('table', 14), 'Colonnes')),
@@ -1696,7 +1710,7 @@ function panneauTable(n, vue) {
 // Le type de la table (sa couleur) : deviné par BiRTEC, corrigé ici par l'administrateur.
 function choixType(n, vue) {
   const choisi = n.table.typeChoisi || ''
-  const liste = h('select', { disabled: !modeAdmin(), title: modeAdmin() ? '' : 'Modifiable en mode administrateur' },
+  const liste = h('select', {},
     h('option', { value: '', selected: !choisi }, `Deviné : ${n.type.nom}`),
     TYPES.map((v) => h('option', { value: v.id, selected: choisi === v.id }, v.nom)))
   liste.addEventListener('change', async () => {
@@ -1725,10 +1739,11 @@ function panneauChemin(chemin, vue, panneau) {
     h('ol', { class: 'chemin-tables' }, tables.map((n, i) => h('li', { style: dejaVue(n, i) ? { opacity: 0.5 } : {} },
       h('span', { class: 'mono' }, n.table.nom),
       dejaVue(n, i) ? h('span', { class: 'discret' }, ' — déjà dans le chemin') : n.table.libelle ? h('span', { class: 'discret' }, ` — ${n.table.libelle}`) : null))),
-    h('h3', { style: { margin: '12px 0 6px' } }, 'Clés'),
-    h('ul', { class: 'chemin-cles' }, jointures.map((j) => h('li', {}, h('span', { class: 'mono' }, `${j.de}.${j.colonne} = ${j.vers}.${j.versColonne}`), j.libelle ? h('div', { class: 'discret', style: { fontSize: '12px' } }, j.libelle) : null))),
+    // Les clés et le SQL : pour l'administrateur.
+    modeAdmin() ? h('h3', { style: { margin: '12px 0 6px' } }, 'Clés') : null,
+    !modeAdmin() ? null : h('ul', { class: 'chemin-cles' }, jointures.map((j) => h('li', {}, h('span', { class: 'mono' }, `${j.de}.${j.colonne} = ${j.vers}.${j.versColonne}`), j.libelle ? h('div', { class: 'discret', style: { fontSize: '12px' } }, j.libelle) : null))),
     erreur ? h('div', { class: 'bandeau', style: { marginTop: '8px' } }, ic('alerte'), erreur) : null,
-    h('pre', { class: 'code', 'data-langue': 'sql', style: { marginTop: '10px' } }, h('code', {}, sql)),
+    modeAdmin() ? h('pre', { class: 'code', 'data-langue': 'sql', style: { marginTop: '10px' } }, h('code', {}, sql)) : null,
     chemin.autre ? h('button', { class: 'petit discret', title: 'Un chemin presque aussi court, par d’autres tables', onclick: () => {
       const autre = { ...chemin.autre, autre: { ...chemin, autre: null } }
       vue.chemin = autre
@@ -1737,7 +1752,7 @@ function panneauChemin(chemin, vue, panneau) {
     } }, ic('reseau', 14), `Autre chemin : par ${chemin.autre.etapes.slice(0, -1).map((e) => e.vers.table.nom).join(', ') || 'un lien direct'}`) : null,
     h('div', { class: 'actions' },
       h('button', { class: 'petit', onclick: () => navigator.clipboard.writeText(sql).then(() => notifier('Jointures copiées')) }, ic('copier', 14), 'Copier'),
-      h('button', { class: 'petit', title: 'Un zip pour Excel : les tables du chemin en CSV (dossier sources), un classeur avec une requête Power Query par table, l’image du chemin et ses jointures', onclick: () => extraireTables(distinctes, { image: imageDuChemin(vue, chemin, sql), sql }) }, ic('telecharger', 14), `Extraire pour Excel (${distinctes.length} tables)`),
+      h('button', { class: 'petit', title: 'Un zip pour Excel : les tables du chemin en CSV (dossier sources), un classeur avec une requête Power Query par table, l’image du chemin et ses jointures', onclick: () => extraireTables(distinctes, modeAdmin() ? { image: imageDuChemin(vue, chemin, sql), sql } : { image: imageDuChemin(vue, chemin, '') }) }, ic('telecharger', 14), `Extraire pour Excel (${distinctes.length} tables)`),
       chemin.manuel ? h('button', { class: 'petit discret', title: 'Retirer la dernière table du chemin', onclick: () => vue.retirerDernier() }, ic('retour', 14), 'Retirer la dernière') : null,
       h('button', { class: 'petit discret', onclick: () => { vue.effacerChemin(); vider(panneau, panneauTable(chemin.depart, vue)) } }, ic('x', 14), 'Effacer'),
     ),
@@ -1802,6 +1817,16 @@ export function sqlDuChemin(chemin) {
 }
 
 function panneauLien(l) {
+  // L'utilisateur : ce que relie le lien, et son nom s'il en a un.
+  if (!modeAdmin()) {
+    return [
+      h('h2', { style: { marginBottom: '6px' } }, l.jointures.length > 1 ? 'Liens' : 'Lien'),
+      l.jointures.map((j) => h('div', { style: { marginBottom: '12px' } },
+        h('p', { style: { margin: 0 } }, h('b', {}, l.a.table.libelle || l.a.table.nom), ' ↔ ', h('b', {}, l.b.table.libelle || l.b.table.nom)),
+        j.libelle ? h('p', { class: 'texte-2', style: { margin: '4px 0 0' } }, j.libelle) : null,
+        j.description ? h('p', { class: 'discret', style: { fontSize: '13px', margin: '4px 0 0' } }, j.description) : null)),
+    ]
+  }
   return [
     h('h2', { style: { marginBottom: '6px' } }, l.jointures.length > 1 ? 'Liens' : 'Lien'),
     l.jointures.map((j) => {
@@ -1864,7 +1889,7 @@ function pageConstellation(graphe, vue, schema) {
   const surChemin = new Set(vue.chemin?.etapes?.flatMap((e) => [e.de, e.vers]) || [])
   const traits = graphe.liens.map((l) => `<line x1="${l.a.x}" y1="${l.a.y}" x2="${l.b.x}" y2="${l.b.y}" class="${liensChemin.has(l) ? 'chemin' : l.jointures.some((j) => j.libelle) ? 'nomme' : ''}"/>`).join('')
   // Clés de liaison le long des lignes, si elles sont affichées à l'écran.
-  const cles = !reglages.cles ? '' : graphe.liens.map((l) => {
+  const cles = !reglages.cles || !modeAdmin() ? '' : graphe.liens.map((l) => {
     let angle = (Math.atan2(l.b.y - l.a.y, l.b.x - l.a.x) * 180) / Math.PI
     if (angle > 90 || angle < -90) angle += 180
     const mx = (l.a.x + l.b.x) / 2

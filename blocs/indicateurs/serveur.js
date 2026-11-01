@@ -36,6 +36,7 @@ export function routes(r) {
   })
 
   r.post('/api/indicateurs/reglages', async (ctx) => {
+    ctx.exigerModeAdmin?.()
     const reglages = await ctx.json()
     reglages.fenetres ||= []
     if (!Array.isArray(reglages.fenetres) || !Array.isArray(reglages.variables)) throw new ErreurHttp(400, 'Il faut deux listes : fenetres et variables.')
@@ -74,12 +75,16 @@ export function routes(r) {
   })
 
   r.post('/api/indicateurs/indicateurs', async (ctx) => {
+    ctx.exigerModeAdmin?.()
     const indicateur = await ctx.json()
     if (!indicateur.nom?.trim()) throw new ErreurHttp(400, 'L’indicateur doit avoir un nom.')
     return { id: enregistrerIndicateur(indicateur) }
   })
 
-  r.delete('/api/indicateurs/indicateurs/:id', (ctx) => supprimerIndicateur(Number(ctx.params.id)))
+  r.delete('/api/indicateurs/indicateurs/:id', (ctx) => {
+    ctx.exigerModeAdmin?.()
+    return supprimerIndicateur(Number(ctx.params.id))
+  })
 
   // La valeur seule d'un indicateur (page d'accueil) : requête indicateur, variables remplacées.
   r.get('/api/indicateurs/indicateurs/:id/valeur', async (ctx) => {
@@ -101,9 +106,16 @@ export function routes(r) {
     return { erreurs: [], definition: normaliser(definition, reglages), ...assembler(definition, reglages) }
   })
 
-  // Essaie les deux requêtes (éventuellement retouchées à la main) sur la base.
+  // Essaie les deux requêtes sur la base : celles d'un indicateur enregistré ({ id }), ou des requêtes retouchées à
+  // la main (administrateur seulement : c'est du SQL libre).
   r.post('/api/indicateurs/tester', async (ctx) => {
-    const { requeteIndicateur, requeteListe } = await ctx.json()
+    const { id, requeteIndicateur, requeteListe } = await ctx.json()
+    if (id !== undefined && id !== null) {
+      const indicateur = listerIndicateurs().find((i) => i.id === Number(id))
+      if (!indicateur) throw new ErreurHttp(404, 'Indicateur introuvable')
+      return tester(indicateur.requeteIndicateur, indicateur.requeteListe)
+    }
+    ctx.exigerModeAdmin?.()
     return tester(requeteIndicateur, requeteListe)
   })
 

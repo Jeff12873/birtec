@@ -52,7 +52,9 @@ function detail(indicateur) {
     if (!etat.connexion.ouverte) await demanderMotDePasse().catch(() => {})
     vider(resultat, h('p', { class: 'discret curseur' }, 'Essai des deux requêtes'))
     try {
-      vider(resultat, dessinerResultat(await api('/api/indicateurs/tester', { methode: 'POST', corps: { requeteIndicateur: requeteIndicateur.value, requeteListe: requeteListe.value } })))
+      // L'utilisateur essaie l'indicateur tel qu'il est enregistré ; l'administrateur, ses retouches.
+      const corps = modeAdmin() ? { requeteIndicateur: requeteIndicateur.value, requeteListe: requeteListe.value } : { id: indicateur.id }
+      vider(resultat, dessinerResultat(await api('/api/indicateurs/tester', { methode: 'POST', corps })))
     } catch (erreur) {
       vider(resultat, h('div', { class: 'bandeau' }, ic('alerte'), erreur.message))
     }
@@ -89,7 +91,8 @@ function detail(indicateur) {
         indicateur.demande || indicateur.definition?.explication || '',
         indicateur.source ? h('span', { class: 'discret' }, ` (${indicateur.source})`) : null),
     ),
-    h('div', { class: 'carte' },
+    // Les requêtes (SQL à coller dans la GMAO) : pour l'administrateur ; l'utilisateur voit le résultat.
+    !modeAdmin() ? h('div', { class: 'carte' }, resultat) : h('div', { class: 'carte' },
       h('div', { class: 'carte-entete' }, h('h2', {}, 'Requête indicateur'), copier(requeteIndicateur, 'Requête indicateur')),
       requeteIndicateur,
       h('div', { class: 'carte-entete', style: { marginTop: '16px' } }, h('h2', {}, 'Requête liste'), copier(requeteListe, 'Requête liste')),

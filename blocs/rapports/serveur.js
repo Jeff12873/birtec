@@ -93,6 +93,7 @@ export function routes(r) {
   // POST /api/rapports/generer { description, nom? }
   // Construit le rapport, le vérifie, le fait tourner ; en cas d'erreur, l'IA corrige la description (2 essais).
   r.post('/api/rapports/generer', async (ctx) => {
+    ctx.exigerModeAdmin?.()
     const { description, nom } = await ctx.json()
     return genererRapport(description, nom)
   })
@@ -101,6 +102,7 @@ export function routes(r) {
 
   // Refait un rapport créé par BiRTEC avec un autre thème, une image ou sans logo (sans passer par l'IA).
   r.post('/api/rapports/:nom/refaire', async (ctx) => {
+    ctx.exigerModeAdmin?.()
     const changements = await ctx.json()
     const fichier = fichierRapport(ctx.params.nom)
     const fichierDescription = fichier.replace(/\.rptdesign$/, '.birtec.json')
@@ -159,6 +161,7 @@ export function routes(r) {
   })
 
   r.delete('/api/rapports/:nom', (ctx) => {
+    ctx.exigerModeAdmin?.()
     const fichier = fichierRapport(ctx.params.nom)
     fs.rmSync(fichier, { force: true })
     fs.rmSync(fichier.replace(/\.rptdesign$/, '.birtec.json'), { force: true })
