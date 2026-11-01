@@ -238,35 +238,56 @@ function depart(nom, i, total) {
 // Chemin le plus court : un lien nommé dans le dictionnaire, une table de liaison qui réunit justement ses deux
 // voisines (« artmac » entre « article » et « machine »), ou une table « fille » coûtent moins (mêmes règles que les chemins donnés
 // à l'IA, interface/types.js). bannis : des tables à éviter (pour proposer un autre chemin).
+// Le chemin le moins coûteux. Une table ne se traverse pas en entrant et en sortant par la même colonne, sauf si
+// c'est sa clé : A.ID_A = X.COL = B.ID_B comparerait deux identifiants sans rapport (c'est le cas d'une colonne
+// « à type », qui pointe vers plusieurs tables selon un autre champ). On cherche donc sur des états
+// (table, colonne d'entrée).
 function cheminLePlusCourt(graphe, depart, arrivee, bannis = new Set()) {
   const cout = (lien) => coutLien(lien.a.table.nom.toLowerCase(), lien.b.table.nom.toLowerCase(), { nomme: lien.jointures.some((j) => j.libelle), composees: graphe.composees })
+  // La colonne de n par laquelle passe le lien (la première jointure du lien).
+  const colonneDans = (lien, n) => {
+    const j = lien.jointures[0]
+    return String(j?.de === n.table.nom ? j.colonne : j?.vers === n.table.nom ? j.versColonne : '').toLowerCase()
+  }
+  // La clé propre de la table : sa seule colonne de clé (un morceau de clé composée ne compte pas).
+  const estCle = (n, col) => {
+    const cles = n.table.colonnes.filter((c) => c.cle)
+    return cles.length === 1 && cles[0].nom.toLowerCase() === col
+  }
   const parNoeud = new Map(graphe.noeuds.map((n) => [n, []]))
   for (const l of graphe.liens) {
     parNoeud.get(l.a).push({ vers: l.b, lien: l })
     parNoeud.get(l.b).push({ vers: l.a, lien: l })
   }
-  const meilleurs = new Map([[depart, { cout: 0, precedent: null, lien: null }]])
-  const aTraiter = new Set([depart])
+  const cle = (n, col) => `${graphe.noeuds.indexOf(n)}|${col}`
+  const etats = new Map([[cle(depart, ''), { n: depart, col: '', cout: 0, precedent: null, lien: null }]])
+  const aTraiter = new Set([cle(depart, '')])
   const faits = new Set()
+  let fin = null
   while (aTraiter.size) {
-    let courant = null
-    for (const n of aTraiter) if (!courant || meilleurs.get(n).cout < meilleurs.get(courant).cout) courant = n
-    aTraiter.delete(courant)
-    faits.add(courant)
-    if (courant === arrivee) break
-    for (const { vers, lien } of parNoeud.get(courant)) {
-      if (faits.has(vers) || bannis.has(vers)) continue
-      const c = meilleurs.get(courant).cout + cout(lien)
-      if (!meilleurs.has(vers) || meilleurs.get(vers).cout > c) {
-        meilleurs.set(vers, { cout: c, precedent: courant, lien })
-        aTraiter.add(vers)
+    let k = null
+    for (const x of aTraiter) if (!k || etats.get(x).cout < etats.get(k).cout) k = x
+    aTraiter.delete(k)
+    faits.add(k)
+    const courant = etats.get(k)
+    if (courant.n === arrivee) { fin = courant; break }
+    for (const { vers, lien } of parNoeud.get(courant.n)) {
+      if (bannis.has(vers)) continue
+      const sortie = colonneDans(lien, courant.n)
+      if (courant.col && sortie === courant.col && !estCle(courant.n, sortie)) continue
+      const kv = cle(vers, colonneDans(lien, vers))
+      if (faits.has(kv)) continue
+      const c = courant.cout + cout(lien)
+      if (!etats.has(kv) || etats.get(kv).cout > c) {
+        etats.set(kv, { n: vers, col: colonneDans(lien, vers), cout: c, precedent: k, lien })
+        aTraiter.add(kv)
       }
     }
   }
-  if (!meilleurs.has(arrivee)) return null
+  if (!fin) return null
   const etapes = []
-  for (let n = arrivee; meilleurs.get(n).precedent; n = meilleurs.get(n).precedent) etapes.unshift({ de: meilleurs.get(n).precedent, vers: n, lien: meilleurs.get(n).lien })
-  return { depart, arrivee, etapes, cout: meilleurs.get(arrivee).cout }
+  for (let e = fin; e.precedent; e = etats.get(e.precedent)) etapes.unshift({ de: etats.get(e.precedent).n, vers: e.n, lien: e.lien })
+  return { depart, arrivee, etapes, cout: fin.cout }
 }
 
 // Un autre chemin presque aussi court, qui évite une des tables du milieu (deux tables de liaison possibles entre les mêmes tables) :

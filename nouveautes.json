@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.12.3",
+      "date": "2026-11-01",
+      "points": [
+        "Chemins : une table ne se traverse plus en entrant et en sortant par la même colonne (sauf sa clé). Fini les faux chemins qui comparaient deux identifiants sans rapport, par exemple pièce → fiche technique → RI"
+      ]
+    },
+    {
       "version": "0.12.2",
       "date": "2026-11-01",
       "points": [
