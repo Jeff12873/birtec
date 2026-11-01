@@ -36,7 +36,7 @@ const PETIT_CONCOMBRE = new URL('../../interface/concombre-petit.webp', import.m
 let imageConcombre = null
 
 // Réglages de la simulation (gardés sur ce poste).
-const reglages = { attraction: 1, ecartement: 1, figer: true, cles: false, raccourcis: true }
+const reglages = { attraction: 1, ecartement: 1, figer: true, cles: false, raccourcis: true, sansLiaisons: false }
 try {
   Object.assign(reglages, JSON.parse(localStorage.getItem('birtec-schema-reglages') || '{}'))
 } catch {
@@ -462,6 +462,7 @@ class VueGraphe {
       }
     }
     for (const l of this.graphe.liens) {
+      if (this.cachee(l.a) || this.cachee(l.b)) continue
       const dx = l.b.x - l.a.x
       const dy = l.b.y - l.a.y
       const d = Math.sqrt(dx * dx + dy * dy) || 1
@@ -501,11 +502,17 @@ class VueGraphe {
     return { x: (ex - r.width / 2) / this.vue.k + this.vue.x, y: (ey - r.height / 2) / this.vue.k + this.vue.y }
   }
 
+  // « Masquer les liaisons » : une table de liaison est cachée, sauf si elle est sur le chemin en cours.
+  cachee(n) {
+    return reglages.sansLiaisons && n.type?.id === 'intermediaire' && !this.surCheminVu?.has(n)
+  }
+
   noeudSous(ex, ey) {
     const p = this.versMonde(ex, ey)
     let meilleur = null
     let distance = Infinity
     for (const n of this.graphe.noeuds) {
+      if (this.cachee(n)) continue
       const d = Math.hypot(n.x - p.x, n.y - p.y)
       if (d < n.rayon + 4 / this.vue.k && d < distance) {
         meilleur = n
@@ -774,6 +781,7 @@ class VueGraphe {
         liensChemin.add(e.lien)
       }
     }
+    this.surCheminVu = surChemin
     const focus = this.survol
     // Les voisines du chemin : les tables qu'on peut lui ajouter, gardées nettes et nommées.
     const voisinesChemin = new Set()
@@ -807,8 +815,31 @@ class VueGraphe {
       c.globalAlpha = 1
     }
 
+    // Liaisons masquées : leurs tables reliées entre elles par un trait pointillé, à la place.
+    if (reglages.sansLiaisons && !this.allumage) {
+      c.setLineDash([4, 5])
+      c.strokeStyle = couleurs.lien
+      c.lineWidth = 0.8
+      c.globalAlpha = focus || surChemin.size ? 0.15 : 0.45
+      for (const n of this.graphe.noeuds) {
+        if (!this.cachee(n)) continue
+        const bouts = [...n.voisins].filter((v) => !this.cachee(v))
+        for (let i = 0; i < bouts.length; i++) for (let j = i + 1; j < bouts.length; j++) {
+          const a = this.versEcran(bouts[i].x, bouts[i].y)
+          const b = this.versEcran(bouts[j].x, bouts[j].y)
+          c.beginPath()
+          c.moveTo(a.x, a.y)
+          c.lineTo(b.x, b.y)
+          c.stroke()
+        }
+      }
+      c.setLineDash([])
+      c.globalAlpha = 1
+    }
+
     // Liens
     for (const l of this.graphe.liens) {
+      if (this.cachee(l.a) || this.cachee(l.b)) continue
       let a = this.versEcran(l.a.x, l.a.y)
       let b = this.versEcran(l.b.x, l.b.y)
       if (this.allumage && l.trace) {
@@ -839,7 +870,7 @@ class VueGraphe {
       c.textBaseline = 'bottom'
       for (const l of this.graphe.liens) {
         const pale = focus ? !(l.a === focus || l.b === focus) : surChemin.size > 0 && !liensChemin.has(l)
-        if (pale) continue
+        if (pale || this.cachee(l.a) || this.cachee(l.b)) continue
         const a = this.versEcran(l.a.x, l.a.y)
         const b = this.versEcran(l.b.x, l.b.y)
         const longueur = Math.hypot(b.x - a.x, b.y - a.y)
@@ -874,6 +905,7 @@ class VueGraphe {
     // Bulles et noms
     const grands = new Set([...this.graphe.noeuds].sort((x, y) => y.degre - x.degre).slice(0, 12))
     for (const n of this.graphe.noeuds) {
+      if (this.cachee(n)) continue
       const p = this.versEcran(n.x, n.y)
       const rayon = Math.max(2.5, n.rayon * Math.sqrt(k))
       if (p.x < -rayon - 80 || p.y < -rayon - 40 || p.x > r.width + rayon + 80 || p.y > r.height + rayon + 40) continue
@@ -1577,6 +1609,8 @@ function reglagesSchema(vue, caseEcartees) {
     h('label', { class: 'case-schema', title: 'Une bulle déplacée reste où on la lâche (double-clic dessus pour la libérer)' }, figer, 'Figer en lâchant'),
     h('label', { class: 'case-schema', title: 'Écrire la clé de liaison le long de chaque ligne (zoomez si une ligne est trop courte)' },
       h('input', { type: 'checkbox', checked: reglages.cles, onchange: (e) => { reglages.cles = e.target.checked; garderReglages(); vue.dessiner() } }), 'Clés de liaison'),
+    h('label', { class: 'case-schema', title: 'Cache les tables de liaison (type intermédiaire) : les tables qu’elles relient sont jointes par un pointillé. Une liaison sur le chemin reste visible.' },
+      h('input', { type: 'checkbox', checked: reglages.sansLiaisons, onchange: (e) => { reglages.sansLiaisons = e.target.checked; garderReglages(); vue.dessiner() } }), 'Masquer les liaisons'),
     h('button', { class: 'petit discret', title: 'Toutes les bulles reprennent leur place dans la simulation', onclick: () => vue.libererTout() }, 'Tout libérer'),
     h('label', { class: 'case-schema' }, caseEcartees, 'Tables écartées'),
   )

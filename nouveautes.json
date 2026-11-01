@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.11.6",
+      "date": "2026-11-01",
+      "points": [
+        "Constellation : la coche « Masquer les liaisons » cache les tables de liaison ; les tables qu'elles relient sont jointes par un pointillé, et une liaison sur le chemin reste visible"
+      ]
+    },
+    {
       "version": "0.11.5",
       "date": "2026-11-01",
       "points": [
