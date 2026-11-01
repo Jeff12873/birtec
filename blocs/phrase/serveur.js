@@ -205,6 +205,23 @@ function colonnesDesConditions(liste, schema) {
   }).filter((c) => c.table)
 }
 
+// Une jointure sur un identifiant d'objet « à type » (comme celui des fiches techniques : l'identifiant ne dit
+// rien sans le type d'objet à côté) : le type de l'autre table est ajouté à la jointure. Sans type connu pour
+// cette table, la jointure ne ramène rien (sinon elle prendrait les objets d'un autre type au même numéro).
+function conditionDeType(de, colDe, vers, colVers) {
+  const m = lireModele()
+  const v = m?.ficheTechnique?.valeurs
+  if (!v?.idObjet || !v?.typeObjet) return ''
+  for (const [cote, col, autre] of [[de, colDe, vers], [vers, colVers, de]]) {
+    if (col.nom.toLowerCase() !== v.idObjet.toLowerCase()) continue
+    const colType = colonneDe(cote, v.typeObjet)
+    if (!colType) continue
+    const type = typeDeTable(m, autre.nom)
+    return type ? ` AND ${cote.nom}.${colType.nom} = ${litteral(type)}` : ' AND 1 = 0'
+  }
+  return ''
+}
+
 const sqlComplet = (from, where, tri) => `SELECT *\n${from}${where}${tri.length ? `\nORDER BY ${tri.map((t) => `${t.expression} ${t.sens}`).join(', ')}` : ''}`
 
 // La description du chemin, des conditions et du tri, vérifiée sur la structure : chaque table et chaque colonne
@@ -226,7 +243,7 @@ export async function morceauxSql(spec, schema) {
     if (![de.nom, vers.nom].includes(table.nom) || !jointes.has(de.nom === table.nom ? vers.nom : de.nom)) throw new ErreurHttp(400, 'Jointures dans le désordre.')
     if (jointes.has(table.nom)) continue
     jointes.add(table.nom)
-    lignes.push(`LEFT JOIN ${table.nom} ON ${de.nom}.${colonneDe(de, j.colonne).nom} = ${vers.nom}.${colonneDe(vers, j.versColonne).nom}`)
+    lignes.push(`LEFT JOIN ${table.nom} ON ${de.nom}.${colonneDe(de, j.colonne).nom} = ${vers.nom}.${colonneDe(vers, j.versColonne).nom}${conditionDeType(de, colonneDe(de, j.colonne), vers, colonneDe(vers, j.versColonne))}`)
   }
   const ciblee = (f) => {
     const table = tableDe(schema, f.table)
@@ -245,8 +262,9 @@ export async function morceauxSql(spec, schema) {
     const lit = (x) => litteralPour(colonne, x)
     const motif = (x) => `'${echapper(String(x).replace(/[%_]/g, (m) => `\\${m}`))}'`
     switch (f.op || 'egal') {
-      case 'egal': return v.length ? `${e} IN (${v.map(lit).join(', ')})` : null
-      case 'different': return v.length ? `(${e} IS NULL OR ${e} NOT IN (${v.map(lit).join(', ')}))` : null
+      // Sans valeur : « ont » = le champ est rempli, « n'ont pas » = il est vide.
+      case 'egal': return v.length ? `${e} IN (${v.map(lit).join(', ')})` : rempli(e, colonne)
+      case 'different': return v.length ? `(${e} IS NULL OR ${e} NOT IN (${v.map(lit).join(', ')}))` : `NOT (${rempli(e, colonne)})`
       case 'contient': return v.length ? `${e} LIKE CONCAT('%', ${motif(v[0])}, '%')` : null
       case 'ne_contient': return v.length ? `(${e} IS NULL OR ${e} NOT LIKE CONCAT('%', ${motif(v[0])}, '%'))` : null
       case 'commence': return v.length ? `${e} LIKE CONCAT(${motif(v[0])}, '%')` : null
@@ -273,6 +291,8 @@ export async function morceauxSql(spec, schema) {
   return { from: lignes.join('\n'), where: where ? `\nWHERE ${where}` : '', tri }
 }
 
+// Un champ rempli : non nul (et, pour un texte, pas vide).
+const rempli = (e, colonne) => (NUMERIQUE.test(colonne.type || '') ? `${e} IS NOT NULL` : `(${e} IS NOT NULL AND ${e} <> '')`)
 const echapper = (v) => String(v).replace(/\\/g, '\\\\').replace(/'/g, "''")
 const litteral = (v) => (/^-?\d+(\.\d+)?$/.test(String(v)) ? String(v) : `'${echapper(v)}'`)
 // Une colonne texte garde ses zéros (« 0012 ») : la valeur reste entre apostrophes.

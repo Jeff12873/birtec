@@ -1,6 +1,14 @@
 {
   "versions": [
     {
+      "version": "0.11.8",
+      "date": "2026-11-01",
+      "points": [
+        "LA PHRASE : « ont » sans valeur = le champ est rempli (la table liée existe), « n'ont pas » sans valeur = il est vide ; « ont vide » et « ont rempli » disparaissent de la liste",
+        "Jointures sur un identifiant d'objet « à type » (comme celui des fiches techniques) : le type de l'objet est ajouté à la jointure, pour ne plus prendre les fiches d'un autre objet au même numéro"
+      ]
+    },
+    {
       "version": "0.11.7",
       "date": "2026-11-01",
       "points": [

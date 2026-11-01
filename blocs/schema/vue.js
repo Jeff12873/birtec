@@ -1081,9 +1081,10 @@ const OPERATEURS = {
   vide: 'ont vide', non_vide: 'ont rempli',
 }
 const OPERATEURS_PAR_NATURE = {
-  texte: ['egal', 'different', 'contient', 'ne_contient', 'commence', 'finit', 'vide', 'non_vide'],
-  nombre: ['egal', 'different', 'sup', 'inf', 'entre', 'vide', 'non_vide'],
-  date: ['egal', 'sup', 'inf', 'entre', 'vide', 'non_vide'],
+  // « ont » sans valeur = le champ est rempli ; « n'ont pas » sans valeur = il est vide.
+  texte: ['egal', 'different', 'contient', 'ne_contient', 'commence', 'finit'],
+  nombre: ['egal', 'different', 'sup', 'inf', 'entre'],
+  date: ['egal', 'different', 'sup', 'inf', 'entre'],
   guide: ['egal', 'different'],
 }
 const libelleOperateur = (op, nature) => (nature === 'date' && op === 'sup' ? 'ont après' : nature === 'date' && op === 'inf' ? 'ont avant' : OPERATEURS[op])
@@ -1155,7 +1156,8 @@ function bandeauPhrase(vue) {
     if (!c.source) return false
     if (c.source === 'parc' || c.source === 'machine') return Boolean(c.valeur)
     if (c.source === 'fiche') return Boolean(c.modele)
-    return Boolean(c.colonne) && (SANS_VALEUR.has(c.op) || (c.op === 'entre' ? c.valeurs.length === 2 && c.valeurs.every(Boolean) : Boolean(c.valeurs[0])))
+    // « ont » / « n'ont pas » sans valeur : le champ est rempli (ou non), par exemple une table liée qui existe.
+    return Boolean(c.colonne) && (SANS_VALEUR.has(c.op) || ['egal', 'different'].includes(c.op) || (c.op === 'entre' ? c.valeurs.length === 2 && c.valeurs.every(Boolean) : Boolean(c.valeurs[0])))
   }
 
   // ---- le texte de la phrase (gardé avec le rapport, affiché dans les vignettes)
@@ -1169,6 +1171,7 @@ function bandeauPhrase(vue) {
     const champ = `${libelleColonne(col)}${c.table !== etatPhrase.depart ? ` (${libelleTable(c.table)})` : ''}`
     const v = (x) => `« ${famille(nature) === 'date' ? dateFr(x) : c.valeurTexte || x} »`
     if (SANS_VALEUR.has(c.op)) return `qui ${op.replace(/^ont /, `ont ${champ} `)}`
+    if (['egal', 'different'].includes(c.op) && !c.valeurs[0]) return `qui ${op} ${champ}`
     if (c.op === 'entre') return `qui ont ${champ} entre ${v(c.valeurs[0])} et ${v(c.valeurs[1])}`
     if (['contient', 'ne_contient', 'commence', 'finit'].includes(c.op)) return `qui ${op} ${v(c.valeurs[0])} dans ${champ}`
     return `qui ${libelleOperateur(c.op, famille(nature))} ${champ} ${v(c.valeurs[0])}`
@@ -1194,7 +1197,7 @@ function bandeauPhrase(vue) {
     if (!complete(c)) return null
     if (c.source === 'parc' || c.source === 'machine') return { lien: c.lien, guide: c.source, op: c.op, valeur: c.valeur }
     if (c.source === 'fiche') return { lien: c.lien, guide: 'fiche', op: c.op, type: guidesDispo.fiche?.type, modele: c.modele, champ: c.champ || null, valeurs: c.valeurs.filter(Boolean) }
-    return { lien: c.lien, table: c.table, colonne: c.colonne, op: c.op, valeurs: c.valeurs }
+    return { lien: c.lien, table: c.table, colonne: c.colonne, op: c.op, valeurs: c.valeurs.filter(Boolean) }
   }).filter((c) => c && (!c.groupe || c.groupe.length))
   const conditionsSpec = () => versSpec(etatPhrase.conditions)
   const triSpec = () => etatPhrase.tri.filter((t) => t.colonne).map(({ table, colonne, sens }) => ({ table, colonne, sens }))
@@ -1337,6 +1340,7 @@ function bandeauPhrase(vue) {
     const col = c.table ? colonneDe(c.table, c.colonne) : null
     const nature = c.source && !c.source.startsWith('table:') ? 'guide' : famille(natureColonne(col))
     const ops = OPERATEURS_PAR_NATURE[nature] || OPERATEURS_PAR_NATURE.texte
+    if (c.op === 'vide' || c.op === 'non_vide') Object.assign(c, { op: c.op === 'vide' ? 'different' : 'egal', valeurs: [] })
     if (!ops.includes(c.op)) c.op = 'egal'
     const op = choixListe(ops.map((o) => ({ valeur: o, libelle: c.source === 'parc' ? (o === 'egal' ? 'sont dans' : 'ne sont pas dans') : c.source === 'machine' ? (o === 'egal' ? 'concernent' : 'ne concernent pas') : libelleOperateur(o, nature) })), c.op,
       (v) => { c.op = v; if (SANS_VALEUR.has(v)) c.valeurs = []; dessiner(); changement() }, { classe: 'operateur' })
@@ -1373,7 +1377,7 @@ function bandeauPhrase(vue) {
     const nature = natureColonne(col)
     const saisie = (i) => {
       const date = famille(nature) === 'date'
-      const champ = h('input', { type: date ? 'date' : nature === 'nombre' ? 'number' : 'text', class: 'pastille-choix libre', value: date ? versSaisie(c.valeurs[i] || '', nature) : c.valeurs[i] || '', placeholder: 'valeur…' })
+      const champ = h('input', { type: date ? 'date' : nature === 'nombre' ? 'number' : 'text', class: 'pastille-choix libre', value: date ? versSaisie(c.valeurs[i] || '', nature) : c.valeurs[i] || '', placeholder: ['egal', 'different'].includes(c.op) ? 'valeur (vide : toutes)…' : 'valeur…' })
       if (!date && ['egal', 'different'].includes(c.op)) {
         // Les valeurs de la base, proposées en tapant (avec leur désignation quand la colonne est un code).
         const id = `valeurs-${c.id}`
