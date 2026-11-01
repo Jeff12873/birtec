@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.11.5",
+      "date": "2026-11-01",
+      "points": [
+        "LA PHRASE ne propose plus jamais les tables de liaison (type intermédiaire) : elles sont traversées sans compter, si bien que la machine d'un rapport ou les pièces d'une fiche sont des tables liées directes"
+      ]
+    },
+    {
       "version": "0.11.4",
       "date": "2026-11-01",
       "points": [

@@ -1094,18 +1094,26 @@ function bandeauPhrase(vue) {
   const colonneDe = (table, nom) => noeud(table)?.table.colonnes.find((c) => c.nom === nom)
   const libelleColonne = (c) => (c ? (c.libelle ? c.libelle : c.nom) : '')
 
-  // Les tables proposées pour une condition : la table elle-même, puis ses voisines et les voisines de celles-ci.
+  // Les tables proposées pour une condition : les voisines de la table, puis les voisines de celles-ci. Les tables
+  // de liaison (type intermédiaire) ne sont jamais proposées : on les traverse sans compter de pas, si bien que la
+  // machine d'un rapport (rapport → liaison → machine) est une voisine directe.
+  const deLiaison = (n) => n.type?.id === 'intermediaire'
   function tablesLiees() {
     const depart = noeud(etatPhrase.depart)
     if (!depart) return []
-    const vues = new Map([[depart, 0]])
-    let front = [depart]
-    for (let d = 1; d <= 2; d++) {
-      const suivant = []
-      for (const n of front) for (const v of n.voisins) if (!vues.has(v)) { vues.set(v, d); suivant.push(v) }
-      front = suivant
+    const distances = new Map([[depart, 0]])
+    const file = [depart]
+    while (file.length) {
+      const n = file.shift()
+      for (const v of n.voisins) {
+        const d = distances.get(n) + (deLiaison(v) ? 0 : 1)
+        if (d > 2 || (distances.has(v) && distances.get(v) <= d)) continue
+        distances.set(v, d)
+        if (deLiaison(v)) file.unshift(v)
+        else file.push(v)
+      }
     }
-    return [...vues].filter(([, d]) => d > 0).sort((a, b) => a[1] - b[1] || a[0].table.nom.localeCompare(b[0].table.nom)).map(([n, d]) => ({ n, d }))
+    return [...distances].filter(([n, d]) => d > 0 && !deLiaison(n)).sort((a, b) => a[1] - b[1] || (a[0].table.libelle || a[0].table.nom).localeCompare(b[0].table.libelle || b[0].table.nom, 'fr')).map(([n, d]) => ({ n, d }))
   }
 
   // Toutes les conditions, groupes compris (pour le chemin, les étiquettes, le texte).
@@ -1188,7 +1196,7 @@ function bandeauPhrase(vue) {
   }
 
   function dessinerDepart() {
-    const tables = vue.graphe.noeuds.map((n) => n.table).sort((a, b) => (a.libelle || a.nom).localeCompare(b.libelle || b.nom, 'fr'))
+    const tables = vue.graphe.noeuds.filter((n) => !deLiaison(n)).map((n) => n.table).sort((a, b) => (a.libelle || a.nom).localeCompare(b.libelle || b.nom, 'fr'))
     const principales = vue.graphe.noeuds.filter((n) => n.type?.id === 'principale').map((n) => n.table.nom)
     const option = (t) => ({ valeur: t.nom, libelle: t.libelle ? `${t.libelle} (${t.nom})` : t.nom })
     const options = principales.length
