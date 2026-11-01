@@ -681,6 +681,16 @@ class VueGraphe {
     return this.chemin
   }
 
+  // Le chemin construit ailleurs (LA PHRASE) : ses étapes déjà calculées.
+  cheminEtapes(depart, etapes) {
+    this.source = depart
+    this.chemin = { depart, arrivee: etapes.at(-1)?.vers || depart, etapes, manuel: true }
+    this.rappels.surChemin(this.chemin)
+    this.toutVoirChemin()
+    this.dessiner()
+    return this.chemin
+  }
+
   // Cadre la vue sur les tables du chemin.
   toutVoirChemin() {
     if (!this.chemin) return
@@ -1142,6 +1152,9 @@ function bandeauPhrase(vue) {
   const listesValeurs = new Map()
   let colonnesProposees = {}
   api('/api/phrase/colonnes').then((x) => { colonnesProposees = x || {} }).catch(() => {})
+  // Les points de passage fixés par l'administrateur entre deux tables : { 'a|b': [tables du milieu] }.
+  let passages = {}
+  api('/api/phrase/passages').then((x) => { passages = x || {} }).catch(() => {})
 
   const noeud = (nom) => vue.graphe.parNom.get(String(nom || '').toLowerCase())
   const libelleTable = (nom) => noeud(nom)?.table.libelle || nom
@@ -1153,8 +1166,10 @@ function bandeauPhrase(vue) {
   // elle-même le chemin.
   const deLiaison = (n) => n.type?.id === 'intermediaire'
   const principalesCache = new Map()
-  function tablesPrincipales() {
-    const depart = noeud(etatPhrase.depart)
+  // ancre : la table d'où part la condition (la table consultée, ou celle de la condition parente).
+  const ancreDe = (c) => c.ancre || etatPhrase.depart
+  function tablesPrincipales(ancre = etatPhrase.depart) {
+    const depart = noeud(ancre)
     if (!depart) return []
     if (!principalesCache.has(depart)) {
       principalesCache.set(depart, vue.graphe.noeuds
@@ -1165,14 +1180,14 @@ function bandeauPhrase(vue) {
   }
 
   // Toutes les conditions, groupes compris (pour le chemin, les étiquettes, le texte).
-  const aplatir = (liste) => liste.flatMap((c) => (c.groupe ? aplatir(c.groupe) : [c]))
+  const aplatir = (liste) => liste.flatMap((c) => (c.groupe ? aplatir(c.groupe) : [c, ...aplatir(c.sous || [])]))
   const tableDeCondition = (c) => (c.source === 'parc' || c.source === 'machine' ? guidesDispo.machines?.table : c.source === 'fiche' ? guidesDispo.fiche?.table : c.table)
   const complete = (c) => {
     if (!c.source) return false
     if (c.source === 'parc' || c.source === 'machine') return Boolean(c.valeur)
     if (c.source === 'fiche') return Boolean(c.modele)
     // Une table liée seule, sans champ : « ont » = une ligne existe dans cette table, « n'ont pas » = aucune.
-    if (!c.colonne) return Boolean(c.table) && c.table !== etatPhrase.depart && ['egal', 'different'].includes(c.op)
+    if (!c.colonne) return Boolean(c.table) && c.table !== ancreDe(c) && ['egal', 'different'].includes(c.op)
     // « ont » / « n'ont pas » sans valeur : le champ est rempli (ou non), par exemple une table liée qui existe.
     return Boolean(c.colonne) && (SANS_VALEUR.has(c.op) || ['egal', 'different'].includes(c.op) || (c.op === 'entre' ? c.valeurs.length === 2 && c.valeurs.every(Boolean) : Boolean(c.valeurs[0])))
   }
@@ -1206,7 +1221,8 @@ function bandeauPhrase(vue) {
   function texteListe(liste) {
     const morceaux = []
     for (const c of liste) {
-      const t = c.groupe ? (() => { const x = texteListe(c.groupe); return x ? `(${x})` : '' })() : complete(c) ? texteCondition(c) : ''
+      const sous = c.sous?.length ? texteListe(c.sous) : ''
+      const t = c.groupe ? (() => { const x = texteListe(c.groupe); return x ? `(${x})` : '' })() : complete(c) ? `${texteCondition(c)}${sous ? ` (${sous})` : ''}` : ''
       if (t) morceaux.push(`${morceaux.length ? (c.lien === 'ou' ? ' ou ' : ' et ') : ''}${t}`)
     }
     return morceaux.join('')
@@ -1224,7 +1240,8 @@ function bandeauPhrase(vue) {
     if (!complete(c)) return null
     if (c.source === 'parc' || c.source === 'machine') return { lien: c.lien, guide: c.source, op: c.op, valeur: c.valeur }
     if (c.source === 'fiche') return { lien: c.lien, guide: 'fiche', op: c.op, type: guidesDispo.fiche?.type, modele: c.modele, champ: c.champ || null, valeurs: c.valeurs.filter(Boolean) }
-    return { lien: c.lien, table: c.table, colonne: c.colonne, op: c.op, valeurs: c.valeurs.filter(Boolean) }
+    const sous = c.sous?.length ? versSpec(c.sous) : []
+    return { lien: c.lien, table: c.table, colonne: c.colonne, op: c.op, valeurs: c.valeurs.filter(Boolean), ...(sous.length ? { sous } : {}) }
   }).filter((c) => c && (!c.groupe || c.groupe.length))
   const conditionsSpec = () => versSpec(etatPhrase.conditions)
   const triSpec = () => etatPhrase.tri.filter((t) => t.colonne).map(({ table, colonne, sens }) => ({ table, colonne, sens }))
@@ -1232,11 +1249,11 @@ function bandeauPhrase(vue) {
   // ---- après chaque changement : le chemin (si les tables ont changé), les étiquettes, le compteur
   function changement() {
     if (!etatPhrase.depart) return
-    const tables = [etatPhrase.depart, ...aplatir(etatPhrase.conditions).filter(complete).map(tableDeCondition), ...etatPhrase.tri.filter((t) => t.colonne).map((t) => t.table)].filter(Boolean)
-    const cle = [...new Set(tables)].join('|')
+    const { depart, etapes } = construireChemin()
+    const cle = etapes.map((e) => `${e.de.table.nom}>${e.vers.table.nom}`).join('|')
     if (cle !== tablesDuChemin) {
       tablesDuChemin = cle
-      vue.cheminPour([...new Set(tables)]) // rappelle majCompteur
+      vue.cheminEtapes(depart, etapes) // rappelle majCompteur
     } else majCompteur()
     vue.filtres = new Map()
     for (const c of aplatir(etatPhrase.conditions).filter(complete)) {
@@ -1244,6 +1261,61 @@ function bandeauPhrase(vue) {
       vue.filtres.set(t, [...(vue.filtres.get(t) || []), texteCondition(c)])
     }
     vue.dessiner()
+  }
+
+  // ---- le chemin : chaque condition relie sa table à son ancre, par ses points de passage s'il y en a
+  const cleRoute = (vias) => (vias.length ? vias.join('>') : '-')
+  // Les points de passage par défaut entre deux tables (fixés par l'administrateur), dans le sens a → b.
+  function passageParDefaut(a, b) {
+    if (passages[`${a}|${b}`]) return passages[`${a}|${b}`]
+    if (passages[`${b}|${a}`]) return [...passages[`${b}|${a}`]].reverse()
+    return null
+  }
+  const viasDe = (c) => c.par || passageParDefaut(ancreDe(c), c.table) || []
+  // Les chemins possibles entre deux tables : le plus court, puis ceux qui évitent une de ses tables du milieu.
+  const routesCache = new Map()
+  function routesPossibles(a, b) {
+    const cle = `${a}|${b}`
+    if (routesCache.has(cle)) return routesCache.get(cle)
+    const na = noeud(a)
+    const nb = noeud(b)
+    const routes = new Map()
+    const noter = (m) => { if (m) { const vias = m.etapes.slice(0, -1).map((e) => e.vers.table.nom); if (!routes.has(cleRoute(vias))) routes.set(cleRoute(vias), vias) } }
+    const base = na && nb ? cheminLePlusCourt(vue.graphe, na, nb) : null
+    noter(base)
+    for (const e of base?.etapes.slice(0, -1) || []) {
+      const autre = cheminLePlusCourt(vue.graphe, na, nb, new Set([e.vers]))
+      noter(autre)
+      for (const f of autre?.etapes.slice(0, -1) || []) if (routes.size < 6) noter(cheminLePlusCourt(vue.graphe, na, nb, new Set([e.vers, f.vers])))
+    }
+    const liste = [...routes.values()].slice(0, 6)
+    routesCache.set(cle, liste)
+    return liste
+  }
+  const libelleRoute = (vias) => (vias.length ? `par ${vias.map((t) => libelleTable(t)).join(' → ')}` : 'en direct')
+  function construireChemin() {
+    const depart = noeud(etatPhrase.depart)
+    const prises = [depart]
+    const etapes = []
+    const relier = (a, b) => {
+      if (!a || !b || prises.includes(b)) return
+      const m = cheminLePlusCourt(vue.graphe, a, b)
+      for (const e of m?.etapes || []) if (!prises.includes(e.vers)) { etapes.push(e); prises.push(e.vers) }
+    }
+    const parcourir = (liste) => {
+      for (const c of liste) {
+        if (c.groupe) { parcourir(c.groupe); continue }
+        if (!complete(c)) continue
+        const t = noeud(tableDeCondition(c))
+        const points = [noeud(ancreDe(c)), ...(c.source?.startsWith('table:') ? viasDe(c) : []).map(noeud).filter(Boolean), t]
+        for (let i = 1; i < points.length; i++) relier(points[i - 1], points[i])
+        parcourir(c.sous || [])
+      }
+    }
+    parcourir(etatPhrase.conditions)
+    for (const t of etatPhrase.tri) if (t.colonne) relier(depart, noeud(t.table))
+    for (const table of Object.keys(etatPhrase.affichees || {})) if (!prises.includes(noeud(table))) delete etatPhrase.affichees[table]
+    return { depart, etapes }
   }
 
   // ---- le dessin
@@ -1287,15 +1359,18 @@ function bandeauPhrase(vue) {
   }
 
   // Une liste de conditions (la phrase entière, ou l'intérieur d'un groupe), avec ses boutons d'ajout.
-  function listeConditions(liste, racine) {
+  // ancre : la table d'où partent ces conditions (la table consultée, ou celle d'une condition parente).
+  function listeConditions(liste, racine, ancre = etatPhrase.depart) {
     const lignes = liste.map((c, i) => {
-      const lien = i === 0 ? null : h('button', { class: `pastille-lien ${c.lien}`, title: 'Changer ET / OU', onclick: () => { c.lien = c.lien === 'ou' ? 'et' : 'ou'; dessiner(); changement() } }, c.lien === 'ou' ? 'OU' : 'ET')
+      // ET / OU dans une colonne de largeur fixe : les « qui » restent alignés.
+      const lien = h('span', { class: 'emplacement-lien' }, i === 0 ? null : h('button', { class: `pastille-lien ${c.lien}`, title: 'Changer ET / OU', onclick: () => { c.lien = c.lien === 'ou' ? 'et' : 'ou'; dessiner(); changement() } }, c.lien === 'ou' ? 'OU' : 'ET'))
       const retirer = h('button', { class: 'discret icone-seule petit', title: c.groupe ? 'Retirer le groupe' : 'Retirer la condition', onclick: () => { liste.splice(liste.indexOf(c), 1); dessiner(); changement() } }, ic('x', 13))
-      if (c.groupe) return h('div', { class: 'ligne-condition' }, lien, h('div', { class: 'groupe-condition' }, h('span', { class: 'parenthese' }, '('), listeConditions(c.groupe, false), h('span', { class: 'parenthese' }, ')')), retirer)
-      return h('div', { class: 'ligne-condition' }, lien, editeurCondition(c), retirer)
+      if (c.groupe) return h('div', { class: 'ligne-condition' }, lien, h('div', { class: 'groupe-condition' }, h('span', { class: 'parenthese' }, '('), listeConditions(c.groupe, false, ancre), h('span', { class: 'parenthese' }, ')')), retirer)
+      const sous = c.sous?.length ? h('div', { class: 'sous-conditions', style: couleurTable(c.table) ? { '--teinte': couleurTable(c.table) } : {} }, listeConditions(c.sous, false, c.table)) : null
+      return h('div', { class: 'bloc-condition' }, h('div', { class: 'ligne-condition' }, lien, editeurCondition(c), retirer), sous)
     })
-    // Une nouvelle condition cherche d'abord dans la table consultée.
-    const neuve = () => ({ ...nouvelleCondition(), source: `table:${etatPhrase.depart}`, table: etatPhrase.depart })
+    // Une nouvelle condition cherche d'abord dans la table d'où elle part.
+    const neuve = () => ({ ...nouvelleCondition(), ancre, source: `table:${ancre}`, table: ancre })
     const ajouter = (quoi) => { liste.push(quoi === 'groupe' ? { id: ++numeroCondition, lien: 'et', groupe: [neuve()] } : neuve()); dessiner() }
     return h('div', { class: `liste-conditions${racine ? '' : ' interieur'}` }, lignes,
       h('div', { class: 'ajouts-condition' },
@@ -1306,14 +1381,14 @@ function bandeauPhrase(vue) {
   // Les tables où chercher : celle qu'on consulte, les choix guidés, puis les tables liées (et un peu plus loin).
   // La table consultée et les tables principales. garder : ce qui est déjà choisi dans la condition (rapport
   // rouvert), même si ce n'est plus proposé (autre table, ou ancien choix guidé : parc, machine, fiche technique).
-  function sourcesCondition(garder = null) {
+  function sourcesCondition(garder = null, ancre = etatPhrase.depart) {
     const option = (n) => ({ valeur: n.table.nom, libelle: n.table.libelle ? `${n.table.libelle} (${n.table.nom})` : n.table.nom })
     const GUIDES = { parc: 'le parc (AITEC)', machine: 'la machine (et dessous)', fiche: 'la fiche technique' }
     const deja = GUIDES[garder] ? { valeur: garder, libelle: GUIDES[garder] }
-      : garder && garder !== etatPhrase.depart && !tablesPrincipales().some((n) => n.table.nom === garder) && noeud(garder) ? option(noeud(garder)) : null
+      : garder && garder !== ancre && !tablesPrincipales(ancre).some((n) => n.table.nom === garder) && noeud(garder) ? option(noeud(garder)) : null
     return [
-      { groupe: 'La table consultée', options: [option(noeud(etatPhrase.depart))] },
-      { groupe: 'Tables principales', options: tablesPrincipales().map(option) },
+      { groupe: ancre === etatPhrase.depart ? 'La table consultée' : 'Cette table', options: [option(noeud(ancre))] },
+      { groupe: 'Tables principales', options: tablesPrincipales(ancre).filter((n) => n.table.nom !== etatPhrase.depart || ancre === etatPhrase.depart).map(option) },
       deja ? { groupe: 'Déjà choisi', options: [deja] } : null,
     ].filter((g) => g && g.options.length)
   }
@@ -1372,10 +1447,11 @@ function bandeauPhrase(vue) {
       (v) => { c.op = v; if (SANS_VALEUR.has(v)) c.valeurs = []; dessiner(); changement() }, { classe: 'operateur' })
 
     // D'abord où chercher (la table, une table liée, ou un choix guidé), puis la colonne de cette table.
-    const table = choixListe(sourcesCondition(c.source && !c.source.startsWith('table:') ? c.source : c.table), c.source && !c.source.startsWith('table:') ? c.source : c.table || '', (v) => {
+    const ancre = ancreDe(c)
+    const table = choixListe(sourcesCondition(c.source && !c.source.startsWith('table:') ? c.source : c.table, ancre), c.source && !c.source.startsWith('table:') ? c.source : c.table || '', (v) => {
       Object.assign(c, { valeurs: [], valeur: null, valeurTexte: null, modele: null, champ: null, colonne: null })
       if (['parc', 'machine', 'fiche'].includes(v)) Object.assign(c, { source: v, table: null })
-      else Object.assign(c, { source: v ? `table:${v}` : '', table: v || null })
+      else Object.assign(c, { source: v ? `table:${v}` : '', table: v || null, par: null, sous: [] })
       dessiner()
       changement()
     }, { vide: '— dans quelle table ? —', classe: 'champ' })
@@ -1383,7 +1459,7 @@ function bandeauPhrase(vue) {
     if (teinte) { table.style.setProperty('--teinte', teinte); table.classList.add('teintee') }
     // Le champ : un menu à bulle, qui montre quelques valeurs d'exemple de la colonne survolée.
     const champ = c.table ? menuDeroulant({
-      choix: [{ valeur: '', libelle: c.table === etatPhrase.depart ? '— quel champ ? —' : '— la table seule —' }, ...colonnesDe(c.table, c.colonne).map((x) => ({ valeur: x.valeur, libelle: x.libelle }))],
+      choix: [{ valeur: '', libelle: c.table === ancre ? '— quel champ ? —' : '— la table seule —' }, ...colonnesDe(c.table, c.colonne).map((x) => ({ valeur: x.valeur, libelle: x.libelle }))],
       valeur: c.colonne || '',
       classe: `champ-phrase${c.colonne ? ' choisi' : ''}`,
       bulle: (v) => bulleExemple(c.table, v),
@@ -1394,7 +1470,34 @@ function bandeauPhrase(vue) {
       },
     }) : null
     const reglerColonnes = c.table && modeAdmin() ? h('button', { class: 'discret icone-seule petit', title: 'Choisir les colonnes proposées pour cette table (administrateur)', onclick: () => choisirColonnes(c.table) }, ic('reglages', 14)) : null
-    return h('div', { class: 'condition' }, h('span', { class: 'mot-phrase' }, 'qui'), op, table, champ, reglerColonnes, editeurValeur(c, col))
+    const autreTable = c.table && c.table !== ancre && c.source?.startsWith('table:')
+    return h('div', { class: 'condition' }, h('span', { class: 'mot-phrase' }, 'qui'), op, table, champ, reglerColonnes, editeurValeur(c, col),
+      autreTable ? choixPassage(c, ancre) : null,
+      // Une condition dans la condition : « qui ont des pièces (qui ont telle famille) ».
+      autreTable && !c.sous?.length ? h('button', { class: 'pastille-ajout', title: `Préciser : des ${libelleTable(c.table)} qui…`, onclick: () => { c.sous = [{ ...nouvelleCondition(), ancre: c.table, source: `table:${c.table}`, table: c.table }]; dessiner() } }, ic('plus', 13), 'qui…') : null)
+  }
+
+  // Le point de passage entre la table d'où part la condition et la sienne : le chemin par défaut (le plus court,
+  // ou celui fixé par l'administrateur), ou un autre. L'administrateur peut fixer le choix pour toutes les phrases.
+  function choixPassage(c, ancre) {
+    const routes = routesPossibles(ancre, c.table)
+    const defaut = passageParDefaut(ancre, c.table) || routes[0] || []
+    const autres = routes.filter((r) => cleRoute(r) !== cleRoute(defaut))
+    if (!autres.length && !c.par) return null
+    const options = [{ valeur: '', libelle: `${libelleRoute(defaut)}${passageParDefaut(ancre, c.table) ? ' (fixé)' : ''}` }, ...autres.map((r) => ({ valeur: cleRoute(r), libelle: libelleRoute(r) }))]
+    const choix = choixListe(options, c.par ? cleRoute(c.par) : '', (v) => {
+      c.par = v ? (v === '-' ? [] : v.split('>')) : null
+      dessiner()
+      changement()
+    }, { classe: 'passage' })
+    const fixer = modeAdmin() && c.par ? h('button', { class: 'discret icone-seule petit', title: `Toujours passer ${libelleRoute(c.par)} entre ${libelleTable(ancre)} et ${libelleTable(c.table)} (administrateur)`, onclick: async () => {
+      passages = await api('/api/phrase/passages', { methode: 'POST', corps: { de: ancre, vers: c.table, par: c.par } })
+      notifier(`Entre ${libelleTable(ancre)} et ${libelleTable(c.table)} : ${libelleRoute(c.par)}, pour toutes les phrases`)
+      c.par = null
+      dessiner()
+      changement()
+    } }, ic('cadenas', 14)) : null
+    return h('span', { class: 'choix-passage' }, choix, fixer)
   }
 
   function editeurValeur(c, col) {
@@ -1612,12 +1715,12 @@ function bandeauPhrase(vue) {
       ? { ...nouvelleCondition(), source: f.guide, valeur: f.valeur, valeurTexte: String(f.texte || '').split(' : ').slice(1).join(' : ') || f.valeur, modele: f.modele, modeleTexte: f.modele, champ: f.champ, champTexte: f.champ, valeurs: f.valeurs || [] }
       : { ...nouvelleCondition(), source: `table:${f.table}`, table: f.table, colonne: f.colonne, valeurs: [String(f.valeurs?.[0] ?? '')] }))
     choisirDepart(depart, { depart, conditions, tri: (c.tri || []).map((t) => ({ ...t })), affichees: { ...(c.affichees || {}) } }).then(() => {
-      // Les tables du chemin d'origine (y compris celles sans condition) sont rallumées.
-      if (c.tables?.length) { tablesDuChemin = ''; vue.cheminPour(c.tables) }
+      // Une ancienne constellation sans conditions : ses tables sont rallumées telles quelles.
+      if (!conditions.length && c.tables?.length) { tablesDuChemin = ''; vue.cheminPour(c.tables) }
     })
   }
   // Les conditions enregistrées → l'état de l'éditeur (identifiants neufs).
-  const reprendre = (liste) => liste.map((x) => (x.groupe ? { ...x, id: ++numeroCondition, groupe: reprendre(x.groupe) } : { ...nouvelleCondition(x.lien), ...x, id: ++numeroCondition, valeurs: x.valeurs || [] }))
+  const reprendre = (liste) => liste.map((x) => (x.groupe ? { ...x, id: ++numeroCondition, groupe: reprendre(x.groupe) } : { ...nouvelleCondition(x.lien), ...x, id: ++numeroCondition, valeurs: x.valeurs || [], sous: reprendre(x.sous || []) }))
 
   dessinerDepart()
   const element = h('div', { class: 'carte bandeau-phrase' }, zoneDepart, zoneConditions, zoneResultat)
@@ -1873,6 +1976,7 @@ function panneauChemin(chemin, vue, panneau) {
 // L'image jointe à l'extraction : la constellation telle qu'elle est à l'écran (le chemin allumé), et à droite
 // les tables du chemin et son SQL.
 function imageDuChemin(vue, chemin, sql) {
+  if (!toileLisible()) return null // image brouillée par le navigateur : l'extraction se fait sans
   const source = vue.toile
   const ratio = vue.ratio || 1
   const largeurTexte = 520 * ratio
@@ -2067,7 +2171,24 @@ function pageConstellation(graphe, vue, schema) {
 
 // Télécharge la constellation en fichier PDF (A3 paysage). Le SVG est dessiné sur une toile en haute
 // définition, puis glissé tel quel (JPEG) dans un PDF d'une page.
+// Certains navigateurs (LibreWolf, Firefox réglé contre le pistage) brouillent les images qu'une page relit sur
+// une toile : le PDF ne contiendrait que du bruit. On le vérifie sur un petit carré de couleur connue.
+function toileLisible() {
+  const t = document.createElement('canvas')
+  t.width = t.height = 4
+  const c = t.getContext('2d')
+  c.fillStyle = 'rgb(10, 200, 90)'
+  c.fillRect(0, 0, 4, 4)
+  const d = c.getImageData(0, 0, 4, 4).data
+  for (let i = 0; i < d.length; i += 4) if (d[i] !== 10 || d[i + 1] !== 200 || d[i + 2] !== 90) return false
+  return true
+}
+
 async function telechargerPdf(graphe, vue, schema) {
+  if (!toileLisible()) {
+    notifier('Ce navigateur brouille les images (protection contre le pistage) : choisissez « Enregistrer en PDF » dans la fenêtre d’impression.', 'erreur')
+    return imprimer(graphe, vue, schema)
+  }
   const { svg, base } = pageConstellation(graphe, vue, schema)
   const image = new Image()
   image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)

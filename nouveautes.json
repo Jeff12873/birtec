@@ -1,6 +1,16 @@
 {
   "versions": [
     {
+      "version": "0.13.0",
+      "date": "2026-11-01",
+      "points": [
+        "LA PHRASE : quand une condition porte sur une autre table, le menu « par … » choisit le point de passage (RI → Pièce par les mouvements de stock, ou par les pièces prévues d'une fiche…) ; l'administrateur le fixe pour toutes les phrases avec le cadenas",
+        "Conditions dans une condition : « + qui… » au bout de la ligne précise la table choisie (des pièces qui ont telle famille), en retrait avec la couleur de sa table",
+        "Les « qui » sont alignés : ET / OU dans une colonne fixe",
+        "Constellation en PDF : si le navigateur brouille les images (LibreWolf, protection contre le pistage), BiRTEC ouvre la fenêtre d'impression pour « Enregistrer en PDF » au lieu d'un PDF rayé"
+      ]
+    },
+    {
       "version": "0.12.5",
       "date": "2026-11-01",
       "points": [

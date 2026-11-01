@@ -60,6 +60,23 @@ export function routes(r) {
     return toutes
   })
 
+  // Les points de passage fixés entre deux tables : { 'a|b': [tables du milieu] } (l'administrateur les fixe).
+  r.get('/api/phrase/passages', () => lireInfo('passages_phrase') || {})
+  r.post('/api/phrase/passages', async (ctx) => {
+    ctx.exigerModeAdmin?.()
+    const { de, vers, par } = await ctx.json()
+    const schema = await obtenirSchema()
+    const a = tableDe(schema, de)
+    const b = tableDe(schema, vers)
+    if (!a || !b) throw new ErreurHttp(400, 'Table inconnue.')
+    const tous = { ...(lireInfo('passages_phrase') || {}) }
+    delete tous[`${b.nom}|${a.nom}`]
+    if (Array.isArray(par)) tous[`${a.nom}|${b.nom}`] = par.map((t) => tableDe(schema, t)?.nom).filter(Boolean)
+    else delete tous[`${a.nom}|${b.nom}`]
+    ecrireInfo('passages_phrase', tous)
+    return tous
+  })
+
   // Les choix guidés possibles pour une table de départ : parcs d'AITEC, table des machines, type de fiche technique.
   r.get('/api/phrase/guides', async (ctx) => {
     const m = lireModele()
@@ -212,6 +229,7 @@ function colonnesDesConditions(liste, schema) {
   const m = lireModele()
   return (Array.isArray(liste) ? liste : []).flatMap((c) => {
     if (Array.isArray(c.groupe)) return colonnesDesConditions(c.groupe, schema)
+    if (Array.isArray(c.sous) && c.sous.length) return [...colonnesDesConditions([{ ...c, sous: null }], schema), ...colonnesDesConditions(c.sous, schema)]
     if (c.guide === 'parc' || c.guide === 'machine') return m?.machine ? [{ table: tableDe(schema, m.machine.table)?.nom, colonne: m.machine.code }] : []
     if (c.guide) return []
     const t = tableDe(schema, c.table)
@@ -302,7 +320,10 @@ export async function morceauxSql(spec, schema) {
   const combiner = async (liste) => {
     const morceaux = []
     for (const f of Array.isArray(liste) ? liste : []) {
-      const sql = Array.isArray(f.groupe) ? await combiner(f.groupe) : await conditionDe(f)
+      // Une condition peut porter ses propres conditions (« des pièces qui ont telle famille ») : elles s'y ajoutent.
+      const propre = Array.isArray(f.groupe) ? await combiner(f.groupe) : await conditionDe(f)
+      const sous = !Array.isArray(f.groupe) && Array.isArray(f.sous) && f.sous.length ? await combiner(f.sous) : null
+      const sql = propre && sous ? `${propre} AND (${sous})` : propre || sous
       if (sql) morceaux.push(`${morceaux.length ? (f.lien === 'ou' ? '\n  OR ' : '\n  AND ') : ''}(${sql})`)
     }
     return morceaux.length ? morceaux.join('') : null

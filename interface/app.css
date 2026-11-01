@@ -236,7 +236,15 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 .conditions-phrase:empty, .tri-phrase:empty { display: none; }
 .liste-conditions { display: grid; gap: 8px; }
 .liste-conditions.interieur { gap: 6px; }
-.ligne-condition { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+.ligne-condition { display: flex; align-items: flex-start; gap: 8px; }
+/* ET / OU dans une colonne fixe, pour que les « qui » s'alignent. */
+.emplacement-lien { flex: none; width: 42px; display: flex; justify-content: flex-end; }
+.emplacement-lien .pastille-lien { margin-top: 4px; }
+.bloc-condition { display: grid; gap: 6px; }
+/* Les conditions dans une condition : en retrait, sous elle, avec un filet à la couleur de sa table. */
+.sous-conditions { margin-left: 50px; padding-left: 12px; border-left: 2px solid var(--teinte, var(--bord)); }
+.choix-passage { display: inline-flex; gap: 4px; align-items: center; }
+.pastille-choix.passage { font-size: 13px; border-style: dotted; border-color: var(--texte-3); background: none; max-width: 300px; }
 .condition { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .condition .pastille-choix { max-width: 280px; }
 .groupe-condition { flex: 1 1 0; min-width: 0; }
