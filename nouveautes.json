@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.12.5",
+      "date": "2026-11-01",
+      "points": [
+        "LA PHRASE : « dans quelle table ? » ne propose plus que la table consultée et les tables principales (les choix guidés parc, machine, fiche technique sont retirés de la liste ; ceux d'un rapport rouvert restent)"
+      ]
+    },
+    {
       "version": "0.12.4",
       "date": "2026-11-01",
       "points": [

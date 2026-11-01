@@ -1304,19 +1304,17 @@ function bandeauPhrase(vue) {
   }
 
   // Les tables où chercher : celle qu'on consulte, les choix guidés, puis les tables liées (et un peu plus loin).
-  // garder : la table déjà choisie dans la condition, même si elle n'est pas principale (rapport rouvert).
+  // La table consultée et les tables principales. garder : ce qui est déjà choisi dans la condition (rapport
+  // rouvert), même si ce n'est plus proposé (autre table, ou ancien choix guidé : parc, machine, fiche technique).
   function sourcesCondition(garder = null) {
     const option = (n) => ({ valeur: n.table.nom, libelle: n.table.libelle ? `${n.table.libelle} (${n.table.nom})` : n.table.nom })
-    const guides = [
-      guidesDispo.parcs.length ? { valeur: 'parc', libelle: 'le parc (AITEC)' } : null,
-      guidesDispo.machines ? { valeur: 'machine', libelle: 'la machine (et dessous)' } : null,
-      guidesDispo.fiche ? { valeur: 'fiche', libelle: 'la fiche technique' } : null,
-    ].filter(Boolean)
+    const GUIDES = { parc: 'le parc (AITEC)', machine: 'la machine (et dessous)', fiche: 'la fiche technique' }
+    const deja = GUIDES[garder] ? { valeur: garder, libelle: GUIDES[garder] }
+      : garder && garder !== etatPhrase.depart && !tablesPrincipales().some((n) => n.table.nom === garder) && noeud(garder) ? option(noeud(garder)) : null
     return [
       { groupe: 'La table consultée', options: [option(noeud(etatPhrase.depart))] },
-      guides.length ? { groupe: 'Choix guidés', options: guides } : null,
       { groupe: 'Tables principales', options: tablesPrincipales().map(option) },
-      garder && garder !== etatPhrase.depart && !tablesPrincipales().some((n) => n.table.nom === garder) && noeud(garder) ? { groupe: 'Déjà choisie', options: [option(noeud(garder))] } : null,
+      deja ? { groupe: 'Déjà choisi', options: [deja] } : null,
     ].filter((g) => g && g.options.length)
   }
   // Les colonnes proposées d'une table (le choix de l'administrateur, sinon toutes) ; garder : celle déjà choisie.
@@ -1374,7 +1372,7 @@ function bandeauPhrase(vue) {
       (v) => { c.op = v; if (SANS_VALEUR.has(v)) c.valeurs = []; dessiner(); changement() }, { classe: 'operateur' })
 
     // D'abord où chercher (la table, une table liée, ou un choix guidé), puis la colonne de cette table.
-    const table = choixListe(sourcesCondition(c.table), c.source && !c.source.startsWith('table:') ? c.source : c.table || '', (v) => {
+    const table = choixListe(sourcesCondition(c.source && !c.source.startsWith('table:') ? c.source : c.table), c.source && !c.source.startsWith('table:') ? c.source : c.table || '', (v) => {
       Object.assign(c, { valeurs: [], valeur: null, valeurTexte: null, modele: null, champ: null, colonne: null })
       if (['parc', 'machine', 'fiche'].includes(v)) Object.assign(c, { source: v, table: null })
       else Object.assign(c, { source: v ? `table:${v}` : '', table: v || null })
