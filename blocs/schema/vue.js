@@ -140,6 +140,8 @@ export default {
           h('div', { class: `voile-arrivee${premiereVisite ? '' : ' rapide'}`, 'aria-hidden': 'true' }),
           pluie,
           toile,
+          // Les bords flous qui fondent le ciel dans la page.
+          h('div', { class: 'brume-bords', 'aria-hidden': 'true' }),
           cadreRaccourcis(),
           reglagesSchema(vue, caseEcartees),
         ),

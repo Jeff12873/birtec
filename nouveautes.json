@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.10.1",
+      "date": "2026-11-01",
+      "points": [
+        "La constellation n'a plus de cadre : ses bords se floutent et se fondent dans la page, pour plus d'immersion"
+      ]
+    },
+    {
       "version": "0.10.0",
       "date": "2026-11-01",
       "points": [

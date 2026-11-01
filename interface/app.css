@@ -40,12 +40,20 @@ input.champ-dico.enregistre { border-color: var(--accent); }
 /* Constellation des tables (graphe en bulles) */
 canvas.toile-schema { position: relative; display: block; width: 100%; height: calc(100vh - 210px); min-height: 480px; cursor: grab; touch-action: none; }
 /* Constellation : un ciel de nuit (la nébuleuse, fixe ; les étoiles en parallaxe par-dessus) */
-.carte-ciel { background: linear-gradient(180deg, rgba(4, 7, 15, 0.30), rgba(4, 7, 15, 0.55)), url('nebuleuse.webp') center / cover no-repeat, #04070f; }
+.carte-ciel { border-color: transparent; box-shadow: none; background: linear-gradient(180deg, rgba(4, 7, 15, 0.30), rgba(4, 7, 15, 0.55)), url('nebuleuse.webp') center / cover no-repeat, #04070f; }
 .pluie-constellation { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .pluie-constellation img { position: absolute; top: -70px; height: calc(42px * var(--taille, 1)); width: auto; opacity: 0.8; animation-name: constellation-chute; animation-timing-function: linear; animation-fill-mode: forwards; }
 @keyframes constellation-chute { to { transform: translateY(var(--chute, 800px)) rotate(var(--tour, 360deg)); } }
 @media (prefers-reduced-motion: reduce) { .pluie-constellation { display: none; } }
 .zone-motif { display: flex; gap: 6px; align-items: center; }
+/* Les bords du ciel : floutés puis fondus dans le fond de la page, sans cadre net. */
+.brume-bords { position: absolute; inset: 0; pointer-events: none; --b: 70px;
+  -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
+  background:
+    linear-gradient(to right, var(--fond), transparent var(--b), transparent calc(100% - var(--b)), var(--fond)),
+    linear-gradient(to bottom, var(--fond), transparent var(--b), transparent calc(100% - var(--b)), var(--fond));
+  -webkit-mask-image: linear-gradient(to right, #000, transparent calc(var(--b) * 1.6), transparent calc(100% - var(--b) * 1.6), #000), linear-gradient(to bottom, #000, transparent calc(var(--b) * 1.6), transparent calc(100% - var(--b) * 1.6), #000);
+  mask-image: linear-gradient(to right, #000, transparent calc(var(--b) * 1.6), transparent calc(100% - var(--b) * 1.6), #000), linear-gradient(to bottom, #000, transparent calc(var(--b) * 1.6), transparent calc(100% - var(--b) * 1.6), #000); }
 canvas.ciel-schema { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .voile-arrivee { position: absolute; inset: 0; background: #04070f; pointer-events: none; animation: voile-arrivee 1.8s ease-out forwards; }
 .voile-arrivee.rapide { animation-duration: .6s; }
