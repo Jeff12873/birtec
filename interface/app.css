@@ -244,3 +244,18 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 .mini-constellation circle { animation: scintille 2.4s ease-in-out infinite; }
 @keyframes scintille { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .mini-constellation circle { animation: none; } }
+
+/* LA PHRASE : les choix guidés (parc, machine, fiche technique) */
+.guides-phrase { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: flex-end; }
+.guides-phrase:empty { display: none; }
+.etape-guide { display: grid; gap: 4px; font-size: 12px; color: var(--texte-3); }
+.etape-guide .pastille-choix { font-size: 14px; max-width: 340px; }
+.choix-machine { display: grid; gap: 4px; min-width: 320px; }
+.recherche-machine { font-size: 13px; padding: 5px 10px; }
+.chemin-machine { font-size: 12px; max-width: 420px; }
+.etiquette-filtre.guide { border-color: #c45bff; background: color-mix(in srgb, #c45bff 12%, transparent); }
+.etiquette-filtre.guide svg { color: #c45bff; }
+
+/* Configuration : le modèle de données */
+.ligne-modele { display: flex; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--bord); font-size: 13px; }
+.ligne-modele > span:first-child { min-width: 170px; }

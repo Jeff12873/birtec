@@ -1042,15 +1042,30 @@ function bandeauPhrase(vue) {
   const zonePhrase = h('div', { class: 'phrase-construite' })
   const zoneFiltres = h('div', { class: 'filtres-phrase' })
   const zoneResultat = h('div', { class: 'resultat-phrase' })
+  const zoneGuides = h('div', { class: 'guides-phrase' })
   let p = null
   const valeurs = {}
+  // Les choix guidés (parc, machine, fiche technique) : { parc, machine: { code, texte }, fiche: { type, modele,
+  // modeleTexte, champ, champTexte, valeur } } ; restaures : filtres guidés repris d'un rapport rouvert.
+  let guides = {}
+  let restaures = []
   let minuterie = null
   let demande = 0
 
   const libelleTable = (nom) => vue.graphe.parNom.get(String(nom).toLowerCase())?.table.libelle || nom
   const choixActifs = () => (p ? p.choix.filter((c) => valeurs[c.id] !== undefined) : [])
   const libelleValeur = (c) => c.options.find((o) => o.valeur === valeurs[c.id])?.libelle ?? valeurs[c.id]
-  const filtres = () => choixActifs().map((c) => ({ table: c.table, colonne: c.colonne, valeurs: [valeurs[c.id]], texte: `${c.question.replace(/\s*\?\s*$/, '')} : ${libelleValeur(c)}` }))
+  const filtresGuides = () => {
+    const liste = [...restaures]
+    const g = p?.guides || {}
+    const tableMachines = g.machine?.table
+    if (guides.machine?.code) liste.push({ guide: 'machine', valeur: guides.machine.code, table: tableMachines, texte: `Machine : ${guides.machine.texte} (et dessous)` })
+    else if (guides.parc) liste.push({ guide: 'parc', valeur: guides.parc, table: tableMachines, texte: `Parc : ${g.parc?.options.find((o) => o.valeur === guides.parc)?.libelle || guides.parc}` })
+    const f = guides.fiche
+    if (f?.modele) liste.push({ guide: 'fiche', type: f.type, modele: f.modele, champ: f.champ || null, valeurs: f.valeur ? [f.valeur] : [], table: p?.depart, texte: `Fiche ${f.modeleTexte}${f.champ ? ` › ${f.champTexte}` : ''}${f.valeur ? ` : ${f.valeur}` : ''}` })
+    return liste
+  }
+  const filtres = () => [...choixActifs().map((c) => ({ table: c.table, colonne: c.colonne, valeurs: [valeurs[c.id]], texte: `${c.question.replace(/\s*\?\s*$/, '')} : ${libelleValeur(c)}` })), ...filtresGuides()]
   const texte = () => (p ? p.phrase.map((m) => (m.choix ? (() => { const c = p.choix.find((x) => x.id === m.choix); return valeurs[c.id] !== undefined ? libelleValeur(c) : c.question.replace(/\s*\?\s*$/, '') })() : m.table ? libelleTable(m.table) : m.texte)).join('').replace(/\s+/g, ' ').trim() : '')
 
   async function construire() {
@@ -1066,9 +1081,80 @@ function bandeauPhrase(vue) {
       return
     }
     for (const cle of Object.keys(valeurs)) delete valeurs[cle]
+    guides = { parc: p.guides?.parc?.choisi || null }
+    restaures = []
     phraseCourante = { texte, filtres }
     dessiner()
+    dessinerGuides()
     vue.cheminPour(p.tables)
+  }
+
+  // Les choix guidés, l'un après l'autre : où (parc), quelle machine du parc, quelle fiche technique, quel champ,
+  // quelle valeur. Les listes viennent de la base (modèle de données du site) ; ce que l'IA a compris est déjà choisi.
+  async function dessinerGuides() {
+    const g = p?.guides || {}
+    const etapes = []
+    const select = (titre, options, choisi, surChoix, vide = '— au choix —') => {
+      const s = h('select', { class: `pastille-choix guide${choisi ? ' choisie' : ''}`, title: titre }, h('option', { value: '' }, vide), options.map((o) => h('option', { value: o.valeur, selected: String(choisi ?? '') === String(o.valeur), title: o.chemin || '' }, o.libelle)))
+      s.addEventListener('change', () => surChoix(s.value, s.selectedOptions[0]?.textContent || ''))
+      return h('label', { class: 'etape-guide' }, h('span', {}, titre), s)
+    }
+    if (g.parc) {
+      etapes.push(select('Où ? (parc)', g.parc.options, guides.parc, (v) => { guides.parc = v || null; guides.machine = null; apresGuide() }, '— tous les parcs —'))
+      // La machine : cherchée dans le parc, d'après les mots de la phrase (modifiables).
+      const recherche = h('input', { type: 'search', class: 'recherche-machine', placeholder: 'Chercher une machine (repère, nom)…', value: guides.machineMots ?? g.machine?.mots ?? '' })
+      const liste = h('select', { class: `pastille-choix guide${guides.machine ? ' choisie' : ''}` }, h('option', { value: '' }, '— toute la zone —'))
+      const chemin = h('div', { class: 'chemin-machine discret' }, guides.machine?.chemin || '')
+      const charger = async (choisirMeilleure) => {
+        guides.machineMots = recherche.value
+        const machines = await api(`/api/phrase/machines?parc=${encodeURIComponent(guides.parc || '')}&q=${encodeURIComponent(recherche.value)}`).catch(() => [])
+        vider(liste, h('option', { value: '' }, '— toute la zone —'), machines.slice(0, 200).map((m) => h('option', { value: m.code, selected: guides.machine?.code === m.code, title: m.chemin }, m.libelle)))
+        if (choisirMeilleure && machines[0]?.score > 0 && !guides.machine) {
+          guides.machine = { code: machines[0].code, texte: machines[0].libelle, chemin: machines[0].chemin }
+          liste.value = machines[0].code
+          liste.classList.add('choisie')
+          chemin.textContent = machines[0].chemin
+          apresGuide(false)
+        }
+      }
+      let minuterieRecherche = null
+      recherche.addEventListener('input', () => { clearTimeout(minuterieRecherche); minuterieRecherche = setTimeout(() => charger(false), 300) })
+      liste.addEventListener('change', () => {
+        const o = liste.selectedOptions[0]
+        guides.machine = liste.value ? { code: liste.value, texte: o.textContent, chemin: o.title } : null
+        liste.classList.toggle('choisie', Boolean(liste.value))
+        chemin.textContent = o?.title || ''
+        apresGuide(false)
+      })
+      etapes.push(h('label', { class: 'etape-guide machine' }, h('span', {}, 'Quelle machine ?'), h('div', { class: 'choix-machine' }, recherche, liste, chemin)))
+      charger(!guides.machine && Boolean(recherche.value.trim()))
+    }
+    if (g.fiche) {
+      const f = (guides.fiche ||= { type: g.fiche.type, modele: g.fiche.choisi, modeleTexte: g.fiche.modeles.find((m) => m.valeur === g.fiche.choisi)?.code || '', voulu: g.fiche.valeur })
+      etapes.push(select('Quelle fiche technique ?', g.fiche.modeles, f.modele, (v, texte) => { Object.assign(f, { modele: v || null, modeleTexte: texte.split(' — ')[0], champ: null, valeur: null }); apresGuide() }))
+      if (f.modele) {
+        const champs = await api(`/api/phrase/fiche/champs?type=${encodeURIComponent(f.type)}&modele=${encodeURIComponent(f.modele)}`).catch(() => [])
+        etapes.push(select('Quel champ ?', champs, f.champ, (v, texte) => { Object.assign(f, { champ: v || null, champTexte: texte, valeur: null }); apresGuide() }))
+        if (f.champ) {
+          const vals = await api(`/api/phrase/fiche/valeurs?type=${encodeURIComponent(f.type)}&modele=${encodeURIComponent(f.modele)}&champ=${encodeURIComponent(f.champ)}`).catch(() => [])
+          if (!f.valeur && f.voulu) f.valeur = vals.find((x) => x.valeur.toLowerCase() === f.voulu)?.valeur || null
+          etapes.push(select('Quelle valeur ?', vals.map((x) => ({ ...x, libelle: `${x.libelle} (${nombreFr(x.nombre)})` })), f.valeur, (v) => { f.valeur = v || null; apresGuide(false) }))
+        }
+      }
+    }
+    vider(zoneGuides, etapes)
+  }
+
+  // Après un choix guidé : les étiquettes, le compteur, et (si besoin) les étapes suivantes.
+  function apresGuide(redessiner = true) {
+    // Un parc ou une machine choisi : la table des machines doit être dans le chemin (elle y est ajoutée).
+    const tableMachines = p?.guides?.machine?.table
+    if ((guides.parc || guides.machine) && tableMachines && vue.chemin) {
+      const presentes = [vue.chemin.depart, ...vue.chemin.etapes.map((e) => e.vers)].map((n) => n.table.nom)
+      if (!presentes.some((nom) => nom.toLowerCase() === tableMachines.toLowerCase())) vue.cheminPour([...new Set(presentes), tableMachines])
+    }
+    dessiner()
+    if (redessiner) dessinerGuides()
   }
 
   function pastille(c) {
@@ -1091,11 +1177,21 @@ function bandeauPhrase(vue) {
     vider(zonePhrase, p.phrase.map((m) => m.choix ? pastille(p.choix.find((c) => c.id === m.choix))
       : m.table ? h('button', { class: 'table-phrase', title: `La table ${m.table}`, onclick: () => { const n = vue.graphe.parNom.get(m.table.toLowerCase()); if (n) vue.centrerSur(n) } }, libelleTable(m.table))
         : h('span', {}, m.texte)))
-    vider(zoneFiltres, choixActifs().map((c) => h('span', { class: 'etiquette-filtre' }, ic('loupe', 13),
-      h('span', {}, `${c.question.replace(/\s*\?\s*$/, '')} : `, h('b', {}, libelleValeur(c))),
-      h('button', { class: 'discret icone-seule', title: 'Retirer ce filtre', onclick: () => { delete valeurs[c.id]; dessiner() } }, ic('x', 12)))))
+    const retirerGuide = (f) => {
+      if (restaures.includes(f)) restaures = restaures.filter((x) => x !== f)
+      else if (f.guide === 'machine') guides.machine = null
+      else if (f.guide === 'parc') guides.parc = null
+      else if (f.guide === 'fiche') guides.fiche = { ...guides.fiche, modele: null, champ: null, valeur: null }
+      apresGuide()
+    }
+    vider(zoneFiltres,
+      choixActifs().map((c) => h('span', { class: 'etiquette-filtre' }, ic('loupe', 13),
+        h('span', {}, `${c.question.replace(/\s*\?\s*$/, '')} : `, h('b', {}, libelleValeur(c))),
+        h('button', { class: 'discret icone-seule', title: 'Retirer ce filtre', onclick: () => { delete valeurs[c.id]; dessiner() } }, ic('x', 12)))),
+      filtresGuides().map((f) => h('span', { class: 'etiquette-filtre guide' }, ic('loupe', 13), h('span', {}, f.texte),
+        h('button', { class: 'discret icone-seule', title: 'Retirer ce filtre', onclick: () => retirerGuide(f) }, ic('x', 12)))))
     vue.filtres = new Map()
-    for (const c of choixActifs()) vue.filtres.set(c.table, [...(vue.filtres.get(c.table) || []), libelleValeur(c)])
+    for (const f of filtres()) if (f.table) vue.filtres.set(f.table, [...(vue.filtres.get(f.table) || []), f.texte])
     vue.dessiner()
     majCompteur()
   }
@@ -1128,7 +1224,9 @@ function bandeauPhrase(vue) {
   // Un rapport ou un indicateur rouvert depuis sa vignette : sa phrase, son chemin et ses filtres reviennent.
   function restaurer(c) {
     saisie.value = c.phrase || ''
-    const choix = (c.filtres || []).map((f, i) => {
+    restaures = (c.filtres || []).filter((f) => f.guide)
+    guides = {}
+    const choix = (c.filtres || []).filter((f) => !f.guide).map((f, i) => {
       const [question, ...valeur] = String(f.texte || '').split(' : ')
       const v = String(f.valeurs?.[0] ?? '')
       return { id: `r${i}`, question: `${question || f.colonne} ?`, table: f.table, colonne: f.colonne, options: [{ valeur: v, libelle: valeur.join(' : ') || v }] }
@@ -1144,7 +1242,7 @@ function bandeauPhrase(vue) {
   saisie.addEventListener('keydown', (e) => e.key === 'Enter' && construire())
   const element = h('div', { class: 'carte bandeau-phrase' },
     h('div', { class: 'ligne-saisie-phrase' }, ic('etincelle', 18), saisie, h('button', { class: 'principal', onclick: construire }, 'Construire la phrase')),
-    zonePhrase, zoneFiltres, zoneResultat)
+    zonePhrase, zoneGuides, zoneFiltres, zoneResultat)
   return { element, majCompteur, restaurer }
 }
 
@@ -1154,7 +1252,7 @@ function specDuChemin(chemin, filtres = []) {
   return {
     depart: chemin.depart.table.nom,
     jointures: ordre.map(({ table, j }) => ({ table, de: j.de, colonne: j.colonne, vers: j.vers, versColonne: j.versColonne })),
-    filtres: filtres.map(({ table, colonne, valeurs }) => ({ table, colonne, valeurs })),
+    filtres: filtres.map((f) => (f.guide ? { guide: f.guide, valeur: f.valeur, type: f.type, modele: f.modele, champ: f.champ, valeurs: f.valeurs } : { table: f.table, colonne: f.colonne, valeurs: f.valeurs })),
   }
 }
 

@@ -1,6 +1,14 @@
 {
   "versions": [
     {
+      "version": "0.10.0",
+      "date": "2026-11-01",
+      "points": [
+        "LA PHRASE guide pas à pas : le parc (ceux d'AITEC), la machine cherchée dans le parc avec son chemin lisible (elle et ses sous-ensembles), la fiche technique, son champ et sa valeur, avec les vraies valeurs de la base",
+        "Configuration › Modèle de données : BiRTEC reconnaît la table des machines et les fiches techniques par la forme des tables ; l'administrateur valide. Rangé dans le .ktec, rien de la base dans le logiciel"
+      ]
+    },
+    {
       "version": "0.9.11",
       "date": "2026-10-31",
       "points": [
