@@ -44,6 +44,9 @@ canvas.toile-schema { position: relative; display: block; width: 100%; height: c
 /* Le halo (derrière, flou, qui déborde) et le ciel net (dans l'encart) partagent le même cadre : la nébuleuse
    tombe au même endroit, et l'encart n'a plus de bord, seulement un passage du net au flou. */
 .halo-ciel, .ciel-net { background: linear-gradient(180deg, rgba(4, 7, 15, 0.30), rgba(4, 7, 15, 0.55)), url('nebuleuse.webp') center / cover no-repeat, #04070f; }
+/* Le halo prend une image déjà floutée (petite, agrandie) : un filtre de flou CSS sur une si grande surface
+   ralentissait toute l'animation. */
+.halo-ciel { background-image: linear-gradient(180deg, rgba(4, 7, 15, 0.30), rgba(4, 7, 15, 0.55)), url('nebuleuse-floue.webp'); }
 .ciel-net { position: absolute; top: -170px; left: -170px; right: -170px; bottom: -40px; pointer-events: none;
   -webkit-mask-image: linear-gradient(to right, transparent 170px, #000 310px, #000 calc(100% - 310px), transparent calc(100% - 170px)), linear-gradient(to bottom, transparent 170px, #000 310px, #000 calc(100% - 180px), transparent calc(100% - 40px));
   -webkit-mask-composite: source-in;
@@ -56,7 +59,7 @@ canvas.toile-schema { position: relative; display: block; width: 100%; height: c
 .zone-motif { display: flex; gap: 6px; align-items: center; }
 /* Le halo autour de l'encart : la même nébuleuse, très floutée, qui s'efface vers l'extérieur. */
 .halo-ciel { position: absolute; z-index: -1; top: -170px; left: -170px; bottom: -40px; right: calc(336px - 170px); pointer-events: none;
-  filter: blur(28px); animation: halo-arrivee 1.8s ease-out;
+  animation: halo-arrivee 1.8s ease-out;
   -webkit-mask-image: linear-gradient(to right, transparent, #000 170px, #000 calc(100% - 170px), transparent), linear-gradient(to bottom, transparent, #000 170px, #000 calc(100% - 40px), transparent);
   -webkit-mask-composite: source-in;
   mask-image: linear-gradient(to right, transparent, #000 170px, #000 calc(100% - 170px), transparent), linear-gradient(to bottom, transparent, #000 170px, #000 calc(100% - 40px), transparent);

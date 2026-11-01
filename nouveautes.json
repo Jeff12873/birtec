@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.10.3",
+      "date": "2026-11-01",
+      "points": [
+        "Constellation de nouveau fluide : le halo flou autour de l'encart utilise une image déjà floutée au lieu d'un filtre coûteux"
+      ]
+    },
+    {
       "version": "0.10.2",
       "date": "2026-11-01",
       "points": [
