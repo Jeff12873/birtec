@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.11.4",
+      "date": "2026-11-01",
+      "points": [
+        "LA PHRASE : en mode administrateur, la roue à côté du champ choisit les colonnes proposées pour chaque table (Toutes, Aucune, Sans les techniques) ; les utilisateurs ne voient plus que celles-là, et l'aperçu les montre en premier"
+      ]
+    },
+    {
       "version": "0.11.3",
       "date": "2026-11-01",
       "points": [

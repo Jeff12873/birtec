@@ -8,7 +8,7 @@
 
 import { ErreurHttp } from 'ktec/http.js'
 import { executerRequete, etatConnexion } from 'ktec/mysql.js'
-import { enregistrerRequete } from 'ktec/ktec.js'
+import { enregistrerRequete, lireInfo, ecrireInfo } from 'ktec/ktec.js'
 import { obtenirSchema } from '../base/schema.js'
 import { lireModele, enregistrerModele, reconnaitreModele, lireArbre, lireParcs, sousLesNoeuds, cheminDe } from './modele.js'
 
@@ -24,6 +24,20 @@ export function routes(r) {
     if (!table || !colonne) throw new ErreurHttp(400, 'Colonne inconnue.')
     const affichage = colonneLisible(table, colonne)
     return valeursDe(table, colonne, affichage, affichage ? null : libelleParLien(schema, table, colonne))
+  })
+
+  // Les colonnes proposées dans LA PHRASE, table par table (choisies par l'administrateur ; absent : toutes).
+  r.get('/api/phrase/colonnes', () => lireInfo('colonnes_phrase') || {})
+  r.post('/api/phrase/colonnes', async (ctx) => {
+    ctx.exigerModeAdmin?.()
+    const { table, colonnes } = await ctx.json()
+    const t = tableDe(await obtenirSchema(), table)
+    if (!t) throw new ErreurHttp(400, 'Table inconnue.')
+    const toutes = { ...(lireInfo('colonnes_phrase') || {}) }
+    if (Array.isArray(colonnes)) toutes[t.nom] = colonnes.map((c) => colonneDe(t, c)?.nom).filter(Boolean)
+    else delete toutes[t.nom]
+    ecrireInfo('colonnes_phrase', toutes)
+    return toutes
   })
 
   // Les choix guidés possibles pour une table de départ : parcs d'AITEC, table des machines, type de fiche technique.
@@ -86,7 +100,10 @@ export function routes(r) {
     if (spec.apercu) {
       // Les premières colonnes de la table de départ, puis celles des conditions (pour voir ce qui est filtré).
       // Les colonnes du tri sont lues en plus (DISTINCT l'exige), puis retirées de l'aperçu.
-      const sources = depart.colonnes.slice(0, 8).map((c) => ({ table: depart.nom, colonne: c.nom }))
+      // Les colonnes proposées de la table, si l'administrateur les a choisies ; sinon les premières.
+      const proposees = (lireInfo('colonnes_phrase') || {})[depart.nom]
+      const premieres = proposees?.length ? depart.colonnes.filter((c) => proposees.includes(c.nom)) : depart.colonnes
+      const sources = premieres.slice(0, 8).map((c) => ({ table: depart.nom, colonne: c.nom }))
       for (const c of colonnesDesConditions(spec.conditions, schema)) {
         if (!sources.some((x) => x.table === c.table && x.colonne === c.colonne)) sources.push({ ...c, condition: true })
       }

@@ -254,6 +254,10 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 .apercu-phrase .colonne-condition { background: color-mix(in srgb, #f59e0b 9%, transparent); }
 .apercu-phrase th.colonne-condition { color: #f5b544; }
 .table-colonne { font-size: 11px; opacity: .7; }
+.choix-colonnes .actions { display: flex; gap: 6px; margin-bottom: 8px; }
+.liste-colonnes { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 2px 14px; max-height: 55vh; overflow: auto; }
+.case-colonne { display: flex; gap: 6px; align-items: baseline; font-size: 13px; padding: 2px 0; cursor: pointer; }
+.case-colonne .discret { font-size: 11px; }
 .apercu-phrase td { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ligne-saisie-phrase { display: flex; align-items: center; gap: 10px; }
 .ligne-saisie-phrase > svg { color: var(--accent); flex: none; }

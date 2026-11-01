@@ -1086,6 +1086,8 @@ function bandeauPhrase(vue) {
   let demande = 0
   let tablesDuChemin = ''
   const listesValeurs = new Map()
+  let colonnesProposees = {}
+  api('/api/phrase/colonnes').then((x) => { colonnesProposees = x || {} }).catch(() => {})
 
   const noeud = (nom) => vue.graphe.parNom.get(String(nom || '').toLowerCase())
   const libelleTable = (nom) => noeud(nom)?.table.libelle || nom
@@ -1246,7 +1248,39 @@ function bandeauPhrase(vue) {
       { groupe: 'Un peu plus loin', options: liees.filter(({ d }) => d === 2).map(({ n }) => option(n)) },
     ].filter((g) => g && g.options.length)
   }
-  const colonnesDe = (table) => (noeud(table)?.table.colonnes || []).map((x) => ({ valeur: x.nom, libelle: libelleColonne(x), titre: x.nom }))
+  // Les colonnes proposées d'une table (le choix de l'administrateur, sinon toutes) ; garder : celle déjà choisie.
+  const colonnesDe = (table, garder = null) => {
+    const liste = colonnesProposees[noeud(table)?.table.nom]
+    return (noeud(table)?.table.colonnes || []).filter((x) => !liste?.length || liste.includes(x.nom) || x.nom === garder).map((x) => ({ valeur: x.nom, libelle: libelleColonne(x), titre: x.nom }))
+  }
+
+  // Administrateur : cocher les colonnes de la table que LA PHRASE propose (les autres sont cachées aux utilisateurs).
+  async function choisirColonnes(table) {
+    const t = noeud(table).table
+    const liste = colonnesProposees[t.nom]
+    const cases = t.colonnes.map((x) => ({ x, c: h('input', { type: 'checkbox', checked: !liste?.length || liste.includes(x.nom) }) }))
+    const technique = (x) => /^id_|_id$/i.test(x.nom) || /^(date_(cre|mod|export|import|inactif)|num_(export|import)|export|import|id_user)$/i.test(x.nom)
+    const cocher = (f) => cases.forEach(({ x, c }) => { c.checked = f(x) })
+    const contenu = h('div', { class: 'choix-colonnes' },
+      h('p', { class: 'texte-2', style: { marginTop: 0 } }, `Les colonnes de ${t.libelle || t.nom} proposées dans LA PHRASE. Les autres restent utilisables par le SQL, mais ne sont plus proposées.`),
+      h('div', { class: 'actions' },
+        h('button', { class: 'petit discret', onclick: () => cocher(() => true) }, 'Toutes'),
+        h('button', { class: 'petit discret', onclick: () => cocher(() => false) }, 'Aucune'),
+        h('button', { class: 'petit discret', title: 'Décoche les identifiants (ID_…) et les colonnes techniques (dates de création, exports…)', onclick: () => cocher((x) => !technique(x)) }, 'Sans les techniques')),
+      h('div', { class: 'liste-colonnes' }, cases.map(({ x, c }) => h('label', { class: 'case-colonne' }, c, h('span', {}, libelleColonne(x)), x.libelle ? h('span', { class: 'discret' }, x.nom) : null))))
+    const choix = await fenetre({ titre: 'Colonnes proposées', contenu, boutons: [
+      { texte: 'Annuler', classe: 'discret', valeur: null },
+      { texte: 'Enregistrer', classe: 'principal', action: () => {
+        const cochees = cases.filter(({ c }) => c.checked).map(({ x }) => x.nom)
+        return cochees.length === t.colonnes.length ? [] : cochees
+      } },
+    ] })
+    if (!choix) return
+    colonnesProposees = await api('/api/phrase/colonnes', { methode: 'POST', corps: { table: t.nom, colonnes: choix.length ? choix : null } })
+    notifier(choix.length ? `${choix.length} colonne(s) proposée(s) pour ${t.libelle || t.nom}` : `Toutes les colonnes de ${t.libelle || t.nom} sont proposées`)
+    dessiner()
+    majCompteur()
+  }
 
   // Une condition : « qui » [opérateur] [table] [champ] [valeur].
   function editeurCondition(c) {
@@ -1265,12 +1299,13 @@ function bandeauPhrase(vue) {
       dessiner()
       changement()
     }, { vide: '— dans quelle table ? —', classe: 'champ' })
-    const champ = c.table ? choixListe(colonnesDe(c.table), c.colonne || '', (v) => {
+    const champ = c.table ? choixListe(colonnesDe(c.table, c.colonne), c.colonne || '', (v) => {
       Object.assign(c, { colonne: v || null, valeurs: [], valeurTexte: null })
       dessiner()
       changement()
     }, { vide: '— quel champ ? —', classe: 'champ' }) : null
-    return h('div', { class: 'condition' }, h('span', { class: 'mot-phrase' }, 'qui'), op, table, champ, editeurValeur(c, col))
+    const reglerColonnes = c.table && modeAdmin() ? h('button', { class: 'discret icone-seule petit', title: 'Choisir les colonnes proposées pour cette table (administrateur)', onclick: () => choisirColonnes(c.table) }, ic('reglages', 14)) : null
+    return h('div', { class: 'condition' }, h('span', { class: 'mot-phrase' }, 'qui'), op, table, champ, reglerColonnes, editeurValeur(c, col))
   }
 
   function editeurValeur(c, col) {
