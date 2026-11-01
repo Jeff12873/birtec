@@ -1223,14 +1223,34 @@ function bandeauPhrase(vue) {
       if (c.groupe) return h('div', { class: 'ligne-condition' }, lien, h('div', { class: 'groupe-condition' }, h('span', { class: 'parenthese' }, '('), listeConditions(c.groupe, false), h('span', { class: 'parenthese' }, ')')), retirer)
       return h('div', { class: 'ligne-condition' }, lien, editeurCondition(c), retirer)
     })
-    const ajouter = (quoi) => { liste.push(quoi === 'groupe' ? { id: ++numeroCondition, lien: 'et', groupe: [nouvelleCondition()] } : nouvelleCondition()); dessiner() }
+    // Une nouvelle condition cherche d'abord dans la table consultée.
+    const neuve = () => ({ ...nouvelleCondition(), source: `table:${etatPhrase.depart}`, table: etatPhrase.depart })
+    const ajouter = (quoi) => { liste.push(quoi === 'groupe' ? { id: ++numeroCondition, lien: 'et', groupe: [neuve()] } : neuve()); dessiner() }
     return h('div', { class: `liste-conditions${racine ? '' : ' interieur'}` }, lignes,
       h('div', { class: 'ajouts-condition' },
         h('button', { class: 'pastille-ajout', onclick: () => ajouter('condition') }, ic('plus', 13), liste.length ? 'et qui…' : 'qui…'),
         racine ? h('button', { class: 'pastille-ajout', title: 'Un groupe entre parenthèses : ses conditions sont lues ensemble', onclick: () => ajouter('groupe') }, ic('plus', 13), '( groupe )') : null))
   }
 
-  // Une condition : « qui » [opérateur] [champ] [valeur].
+  // Les tables où chercher : celle qu'on consulte, les choix guidés, puis les tables liées (et un peu plus loin).
+  function sourcesCondition() {
+    const liees = tablesLiees()
+    const option = (n) => ({ valeur: n.table.nom, libelle: n.table.libelle ? `${n.table.libelle} (${n.table.nom})` : n.table.nom })
+    const guides = [
+      guidesDispo.parcs.length ? { valeur: 'parc', libelle: 'le parc (AITEC)' } : null,
+      guidesDispo.machines ? { valeur: 'machine', libelle: 'la machine (et dessous)' } : null,
+      guidesDispo.fiche ? { valeur: 'fiche', libelle: 'la fiche technique' } : null,
+    ].filter(Boolean)
+    return [
+      { groupe: 'La table consultée', options: [option(noeud(etatPhrase.depart))] },
+      guides.length ? { groupe: 'Choix guidés', options: guides } : null,
+      { groupe: 'Tables liées', options: liees.filter(({ d }) => d === 1).map(({ n }) => option(n)) },
+      { groupe: 'Un peu plus loin', options: liees.filter(({ d }) => d === 2).map(({ n }) => option(n)) },
+    ].filter((g) => g && g.options.length)
+  }
+  const colonnesDe = (table) => (noeud(table)?.table.colonnes || []).map((x) => ({ valeur: x.nom, libelle: libelleColonne(x), titre: x.nom }))
+
+  // Une condition : « qui » [opérateur] [table] [champ] [valeur].
   function editeurCondition(c) {
     const col = c.table ? colonneDe(c.table, c.colonne) : null
     const nature = c.source && !c.source.startsWith('table:') ? 'guide' : famille(natureColonne(col))
@@ -1239,26 +1259,20 @@ function bandeauPhrase(vue) {
     const op = choixListe(ops.map((o) => ({ valeur: o, libelle: c.source === 'parc' ? (o === 'egal' ? 'sont dans' : 'ne sont pas dans') : c.source === 'machine' ? (o === 'egal' ? 'concernent' : 'ne concernent pas') : libelleOperateur(o, nature) })), c.op,
       (v) => { c.op = v; if (SANS_VALEUR.has(v)) c.valeurs = []; dessiner(); changement() }, { classe: 'operateur' })
 
-    // Le champ : ceux de la table, ceux des tables liées, et les choix guidés (parc, machine, fiche technique).
-    const sources = [{ groupe: `${libelleTable(etatPhrase.depart)}`, options: noeud(etatPhrase.depart).table.colonnes.map((x) => ({ valeur: `${etatPhrase.depart}.${x.nom}`, libelle: libelleColonne(x), titre: x.nom })) }]
-    const guides = [
-      guidesDispo.parcs.length ? { valeur: 'parc', libelle: 'le parc (AITEC)' } : null,
-      guidesDispo.machines ? { valeur: 'machine', libelle: 'la machine (et dessous)' } : null,
-      guidesDispo.fiche ? { valeur: 'fiche', libelle: 'la fiche technique' } : null,
-    ].filter(Boolean)
-    if (guides.length) sources.push({ groupe: 'Choix guidés', options: guides })
-    for (const { n, d } of tablesLiees()) sources.push({ groupe: `${d === 1 ? 'Liée' : 'Plus loin'} : ${n.table.libelle || n.table.nom}`, options: n.table.colonnes.map((x) => ({ valeur: `${n.table.nom}.${x.nom}`, libelle: libelleColonne(x), titre: `${n.table.nom}.${x.nom}` })) })
-    const valeurSource = c.source && !c.source.startsWith('table:') ? c.source : c.colonne ? `${c.table}.${c.colonne}` : ''
-    const champ = choixListe(sources, valeurSource, (v) => {
-      Object.assign(c, { valeurs: [], valeur: null, valeurTexte: null, modele: null, champ: null })
-      if (['parc', 'machine', 'fiche'].includes(v)) Object.assign(c, { source: v, table: null, colonne: null })
-      else if (v) { const [table, ...reste] = v.split('.'); Object.assign(c, { source: `table:${table}`, table, colonne: reste.join('.') }) }
-      else Object.assign(c, { source: '', table: null, colonne: null })
+    // D'abord où chercher (la table, une table liée, ou un choix guidé), puis la colonne de cette table.
+    const table = choixListe(sourcesCondition(), c.source && !c.source.startsWith('table:') ? c.source : c.table || '', (v) => {
+      Object.assign(c, { valeurs: [], valeur: null, valeurTexte: null, modele: null, champ: null, colonne: null })
+      if (['parc', 'machine', 'fiche'].includes(v)) Object.assign(c, { source: v, table: null })
+      else Object.assign(c, { source: v ? `table:${v}` : '', table: v || null })
       dessiner()
       changement()
-    }, { vide: '— quel champ ? —', classe: 'champ' })
-
-    return h('div', { class: 'condition' }, h('span', { class: 'mot-phrase' }, 'qui'), op, champ, editeurValeur(c, col))
+    }, { vide: '— dans quelle table ? —', classe: 'champ' })
+    const champ = c.table ? choixListe(colonnesDe(c.table), c.colonne || '', (v) => {
+      Object.assign(c, { colonne: v || null, valeurs: [], valeurTexte: null })
+      dessiner()
+      changement()
+    }, { vide: '— quel champ ? —', classe: 'champ' }) : null
+    return h('div', { class: 'condition' }, h('span', { class: 'mot-phrase' }, 'qui'), op, table, champ, editeurValeur(c, col))
   }
 
   function editeurValeur(c, col) {
@@ -1345,15 +1359,14 @@ function bandeauPhrase(vue) {
   }
 
   function dessinerTri() {
-    const depart = noeud(etatPhrase.depart)
-    const sources = [{ groupe: libelleTable(etatPhrase.depart), options: depart.table.colonnes.map((x) => ({ valeur: `${depart.table.nom}.${x.nom}`, libelle: libelleColonne(x) })) },
-      ...tablesLiees().filter(({ d }) => d === 1).map(({ n }) => ({ groupe: `Liée : ${n.table.libelle || n.table.nom}`, options: n.table.colonnes.map((x) => ({ valeur: `${n.table.nom}.${x.nom}`, libelle: libelleColonne(x) })) }))]
+    const sources = sourcesCondition().filter((g) => g.groupe !== 'Choix guidés')
     const lignes = etatPhrase.tri.map((t, i) => h('span', { class: 'ligne-tri' },
       h('span', { class: 'mot-phrase' }, i ? 'puis par' : 'triés par'),
-      choixListe(sources, t.colonne ? `${t.table}.${t.colonne}` : '', (v) => { const [table, ...reste] = v.split('.'); Object.assign(t, { table: v ? table : null, colonne: v ? reste.join('.') : null }); dessiner(); changement() }, { vide: '— quel champ ? —' }),
+      choixListe(sources, t.table || '', (v) => { Object.assign(t, { table: v || null, colonne: null }); dessiner(); changement() }, { vide: '— dans quelle table ? —' }),
+      t.table ? choixListe(colonnesDe(t.table), t.colonne || '', (v) => { t.colonne = v || null; dessiner(); changement() }, { vide: '— quel champ ? —' }) : null,
       h('button', { class: 'pastille-lien', title: 'Changer le sens', onclick: () => { t.sens = t.sens === 'desc' ? 'asc' : 'desc'; dessiner(); changement() } }, t.sens === 'desc' ? 'décroissant ↓' : 'croissant ↑'),
       h('button', { class: 'discret icone-seule petit', title: 'Retirer ce tri', onclick: () => { etatPhrase.tri.splice(i, 1); dessiner(); changement() } }, ic('x', 13))))
-    vider(zoneTri, lignes, h('button', { class: 'pastille-ajout', onclick: () => { etatPhrase.tri.push({ table: null, colonne: null, sens: 'asc' }); dessiner() } }, ic('plus', 13), etatPhrase.tri.length ? 'puis par…' : 'triés par…'))
+    vider(zoneTri, lignes, h('button', { class: 'pastille-ajout', onclick: () => { etatPhrase.tri.push({ table: etatPhrase.depart, colonne: null, sens: 'asc' }); dessiner() } }, ic('plus', 13), etatPhrase.tri.length ? 'puis par…' : 'triés par…'))
   }
 
   // Le compteur et l'aperçu : relus un instant après le dernier changement (choix ou chemin).

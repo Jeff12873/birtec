@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.11.1",
+      "date": "2026-11-01",
+      "points": [
+        "LA PHRASE : on choisit d'abord la table (la table consultée, les choix guidés, les tables liées, un peu plus loin), puis la colonne ; même chose pour le tri"
+      ]
+    },
+    {
       "version": "0.11.0",
       "date": "2026-11-01",
       "points": [
