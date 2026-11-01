@@ -1358,8 +1358,7 @@ function bandeauPhrase(vue) {
 
   // Le tri se fait dans l'aperçu : un clic sur une colonne trie (croissant, puis décroissant, puis plus de tri) ;
   // Maj + clic ajoute un tri secondaire. C'est ce tri qui fait l'ORDER BY de la requête.
-  function trierPar(colonne, ajouter) {
-    const table = etatPhrase.depart
+  function trierPar(table, colonne, ajouter) {
     const existant = etatPhrase.tri.find((t) => t.table === table && t.colonne === colonne)
     if (!ajouter) etatPhrase.tri = existant ? [existant] : []
     if (!existant) etatPhrase.tri.push({ table, colonne, sens: 'asc' })
@@ -1367,11 +1366,13 @@ function bandeauPhrase(vue) {
     else etatPhrase.tri = etatPhrase.tri.filter((t) => t !== existant)
     changement()
   }
-  const enteteTri = (colonne) => {
-    const i = etatPhrase.tri.findIndex((t) => t.table === etatPhrase.depart && t.colonne === colonne)
+  // Une colonne de l'aperçu ; celles des conditions (teintées) disent de quelle table elles viennent.
+  const enteteTri = ({ table, colonne, condition }) => {
+    const i = etatPhrase.tri.findIndex((t) => t.table === table && t.colonne === colonne)
     const t = etatPhrase.tri[i]
-    return h('th', { class: `triable${t ? ' trie' : ''}`, title: 'Cliquer pour trier (Maj + clic : tri secondaire)', onclick: (e) => trierPar(colonne, e.shiftKey) },
-      colonne, t ? h('span', { class: 'sens-tri' }, `${t.sens === 'desc' ? '↓' : '↑'}${etatPhrase.tri.length > 1 ? i + 1 : ''}`) : null)
+    return h('th', { class: `triable${t ? ' trie' : ''}${condition ? ' colonne-condition' : ''}`, title: `${condition ? 'Colonne d’une condition. ' : ''}Cliquer pour trier (Maj + clic : tri secondaire)`, onclick: (e) => trierPar(table, colonne, e.shiftKey) },
+      colonne, condition && table !== etatPhrase.depart ? h('span', { class: 'table-colonne' }, ` (${table})`) : null,
+      t ? h('span', { class: 'sens-tri' }, `${t.sens === 'desc' ? '↓' : '↑'}${etatPhrase.tri.length > 1 ? i + 1 : ''}`) : null)
   }
 
   // Le compteur et l'aperçu : relus un instant après le dernier changement (choix ou chemin).
@@ -1388,7 +1389,7 @@ function bandeauPhrase(vue) {
           h('div', { class: 'compteur-phrase' }, h('b', {}, nombreFr(r.nombre)), ` ${libelleTable(vue.chemin.depart.table.nom)} correspondent`),
           r.apercu?.lignes.length ? h('div', { class: 'tableau-conteneur apercu-phrase' }, h('table', { class: 'tableau compact' },
             h('thead', {}, h('tr', {}, r.apercu.colonnes.map(enteteTri))),
-            h('tbody', {}, r.apercu.lignes.map((l) => h('tr', {}, l.map((v) => h('td', {}, v === null ? '' : String(v)))))))) : null,
+            h('tbody', {}, r.apercu.lignes.map((l) => h('tr', {}, l.map((v, i) => h('td', { class: r.apercu.colonnes[i]?.condition ? 'colonne-condition' : '', title: v === null ? '' : String(v) }, v === null ? '' : String(v)))))))) : null,
           r.sql ? h('details', { class: 'sql-phrase' }, h('summary', {}, 'Voir le SQL pour BIRT'), h('pre', { class: 'code' }, h('code', {}, r.sql))) : null)
       } catch (e) {
         if (numero === demande) vider(zoneResultat, h('span', { class: 'rouge' }, e.message))

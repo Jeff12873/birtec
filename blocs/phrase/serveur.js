@@ -84,10 +84,15 @@ export function routes(r) {
     const compte = await executerRequete(`SELECT COUNT(${cle ? `DISTINCT ${depart.nom}.${cle.nom}` : '*'}) AS n ${from}${where}`, 1)
     const reponse = { nombre: Number(compte.lignes[0]?.[0] ?? 0) }
     if (spec.apercu) {
+      // Les premières colonnes de la table de départ, puis celles des conditions (pour voir ce qui est filtré).
       // Les colonnes du tri sont lues en plus (DISTINCT l'exige), puis retirées de l'aperçu.
-      const colonnes = depart.colonnes.slice(0, 8).map((c) => `${depart.nom}.${c.nom}`)
+      const sources = depart.colonnes.slice(0, 8).map((c) => ({ table: depart.nom, colonne: c.nom }))
+      for (const c of colonnesDesConditions(spec.conditions, schema)) {
+        if (!sources.some((x) => x.table === c.table && x.colonne === c.colonne)) sources.push({ ...c, condition: true })
+      }
+      const colonnes = sources.map((c, i) => `${c.table}.${c.colonne} AS c_${i}`)
       const r5 = await executerRequete(`SELECT DISTINCT ${[...colonnes, ...tri.map((t, i) => `${t.expression} AS tri_${i}`)].join(', ')} ${from}${where}${tri.length ? `\nORDER BY ${tri.map((t, i) => `tri_${i} ${t.sens}`).join(', ')}` : ''}`, 5)
-      reponse.apercu = { colonnes: r5.colonnes.slice(0, colonnes.length).map((c) => c.nom), lignes: r5.lignes.map((l) => l.slice(0, colonnes.length)) }
+      reponse.apercu = { colonnes: sources, lignes: r5.lignes.map((l) => l.slice(0, colonnes.length)) }
     }
     if (ctx.modeAdmin) reponse.sql = sqlComplet(from, where, tri)
     return reponse
@@ -149,6 +154,19 @@ async function valeursDe(table, colonne, affichage, parLien = null) {
 }
 
 // ---------------------------------------------------------------- SQL construit ici
+
+// Les colonnes que touchent les conditions (groupes compris) ; parc et machine : le repère de la table des machines.
+function colonnesDesConditions(liste, schema) {
+  const m = lireModele()
+  return (Array.isArray(liste) ? liste : []).flatMap((c) => {
+    if (Array.isArray(c.groupe)) return colonnesDesConditions(c.groupe, schema)
+    if (c.guide === 'parc' || c.guide === 'machine') return m?.machine ? [{ table: tableDe(schema, m.machine.table)?.nom, colonne: m.machine.code }] : []
+    if (c.guide) return []
+    const t = tableDe(schema, c.table)
+    const col = colonneDe(t, c.colonne)
+    return t && col ? [{ table: t.nom, colonne: col.nom }] : []
+  }).filter((c) => c.table)
+}
 
 const sqlComplet = (from, where, tri) => `SELECT *\n${from}${where}${tri.length ? `\nORDER BY ${tri.map((t) => `${t.expression} ${t.sens}`).join(', ')}` : ''}`
 
