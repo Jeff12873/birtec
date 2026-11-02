@@ -620,7 +620,7 @@ async function editeurRapport(zone) {
       h('div', { class: 'actions' },
         h('a', { class: 'bouton discret', href: '#/constructeur' }, ic('retour', 16), 'Rapport ou indicateur'),
         h('button', { class: 'discret', onclick: async () => { if (await confirmer('Tout recommencer ? Le rapport en cours sera effacé.', { texte: 'Recommencer', danger: true })) { brouillon = null; window.ktec.recharger() } } }, ic('rafraichir', 16), 'Recommencer'))),
-    h('div', { class: 'carte phrase-ia' }, ic('etincelle', 18), phrase, boutonIA),
+    etatAppli.ia?.installee ? h('div', { class: 'carte phrase-ia' }, ic('etincelle', 18), phrase, boutonIA) : null, // sans IA sur le poste : pas de phrase
     h('div', { class: 'constructeur-grille' }, h('div', { class: 'grille' }, listeBlocs, editeur, reglages), apercu),
   )
   for (const b of rapport.blocs) if (b.etat?.sujet) await catalogueDe(b.etat.sujet)

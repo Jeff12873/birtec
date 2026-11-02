@@ -117,7 +117,7 @@ function afficherTable(zone, table, console_) {
         h('button', { onclick: () => console_.executer(`SELECT * FROM ${table.nom}`, 20) }, ic('lecture', 15), 'Voir les 20 premières lignes'),
         h('button', { onclick: () => extraireTables([table.nom]) }, ic('telecharger', 15), 'Télécharger cette table'),
         h('a', { class: 'bouton', href: `#/schema/${encodeURIComponent(table.nom)}` }, ic('reseau', 15), 'Constellation'),
-        h('a', { class: 'bouton', href: '#/assistant', onclick: () => sessionStorage.setItem('birtec-question', `Explique à quoi sert la table ${table.nom} et ses principales colonnes.`) }, ic('oiseau', 15), 'Demander à l’IA'),
+        !etat.ia?.installee ? null : h('a', { class: 'bouton', href: '#/assistant', onclick: () => sessionStorage.setItem('birtec-question', `Explique à quoi sert la table ${table.nom} et ses principales colonnes.`) }, ic('oiseau', 15), 'Demander à l’IA'),
       ),
     ),
   )

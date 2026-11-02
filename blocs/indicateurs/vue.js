@@ -82,7 +82,7 @@ function detail(indicateur) {
           h('button', { class: 'petit', onclick: tester }, ic('lecture', 14), 'Tester'),
           !modeAdmin() ? null : indicateur.definition?.constructeur
             ? h('button', { class: 'petit discret', onclick: () => { sessionStorage.setItem('birtec-indicateur', JSON.stringify({ etat: indicateur.definition.constructeur, nom: indicateur.nom, dateIndicateur: indicateur.definition.dateIndicateur, arborescence: indicateur.definition.arborescence, id: indicateur.id, constellation: indicateur.definition.constellation })); location.hash = '#/indicateur' } }, ic('crayon', 14), 'Modifier (formulaire)')
-            : h('button', { class: 'petit discret', onclick: () => demanderALAssistant(`Modifie l’indicateur GMAO « ${indicateur.nom} » : `) }, ic('etincelle', 14), 'Modifier avec l’assistant'),
+            : !etat.ia?.installee ? null : h('button', { class: 'petit discret', onclick: () => demanderALAssistant(`Modifie l’indicateur GMAO « ${indicateur.nom} » : `) }, ic('etincelle', 14), 'Modifier avec l’assistant'),
           modeAdmin() ? h('button', { class: 'petit discret danger', onclick: supprimer }, ic('poubelle', 14)) : null,
         ),
       ),

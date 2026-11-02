@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.13.1",
+      "date": "2026-11-02",
+      "points": [
+        "L'IA devient facultative : sans IA sur le poste, BiRTEC s'installe quand même (LA PHRASE, constellation, rapports, indicateurs) ; « Remplir avec l'IA », « Demander à l'IA » et « Modifier avec l'assistant » sont alors masqués"
+      ]
+    },
+    {
       "version": "0.13.0",
       "date": "2026-11-01",
       "points": [
