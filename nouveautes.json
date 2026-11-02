@@ -1,6 +1,17 @@
 {
   "versions": [
     {
+      "version": "0.13.6",
+      "date": "2026-11-02",
+      "points": [
+        "Nouvelle disposition « Galaxie (tout, pour l'impression) » : toutes les tables (écartées et liaisons comprises), chacune dans sa case d'un quadrillage taillé pour l'A3 ; plus aucun nom ne se chevauche à l'impression",
+        "Extraction pour Excel : l'image ne montre plus que le tracé (tables du chemin, liaisons comprises même masquées, noms des liens ; clés et SQL pour l'administrateur), sur fond blanc",
+        "Curseurs « Noms » et « Descriptions » : la distance d'apparition des noms et des descriptions se règle",
+        "« Écartement » agit dans toutes les dispositions (et à l'impression) ; « Force des liens », « Figer » et « Tout libérer » ne s'affichent que dans « Ma disposition »",
+        "« Galaxies (groupes liés) » s'appelle maintenant « Amas (groupes liés) »"
+      ]
+    },
+    {
       "version": "0.13.5",
       "date": "2026-11-02",
       "points": [

@@ -10,10 +10,11 @@ const ECART = 46 // distance visée entre deux bulles voisines
 export const MOTIFS = [
   { id: 'libre', nom: 'Ma disposition' },
   { id: 'types', nom: 'Par types (axe des principales)' },
+  { id: 'galaxie', nom: 'Galaxie (tout, pour l’impression)' },
   { id: 'anneaux', nom: 'Anneaux par importance' },
   { id: 'autour', nom: 'Autour de la table choisie' },
   { id: 'hierarchie', nom: 'Hiérarchie (mères en haut)' },
-  { id: 'galaxies', nom: 'Galaxies (groupes liés)' },
+  { id: 'galaxies', nom: 'Amas (groupes liés)' },
   { id: 'familles', nom: 'Familles de noms' },
   { id: 'cercle', nom: 'Cercle' },
   { id: 'spirale', nom: 'Spirale' },
@@ -27,7 +28,7 @@ export function disposer(id, graphe, options = {}) {
   const etiquettes = []
   const noeuds = [...graphe.noeuds]
   if (!noeuds.length) return { positions, etiquettes }
-  const faire = { types, anneaux, autour, hierarchie, galaxies, familles, cercle, spirale, concombre }[id]
+  const faire = { types, galaxie: plan, anneaux, autour, hierarchie, galaxies, familles, cercle, spirale, concombre }[id]
   const extra = faire?.(noeuds, graphe, positions, etiquettes, options) || {}
   return { positions, etiquettes, ...extra }
 }
@@ -123,6 +124,141 @@ function types(noeuds, graphe, positions, etiquettes) {
 }
 
 const liees = (a, b) => a.voisins.has(b)
+
+// ---------------------------------------------------------------- galaxie : tout, pour l'impression
+
+// La taille d'une case de la galaxie : un nom de table (et sa description en dessous) y tient sans toucher ses
+// voisines. L'impression écrit les noms à cette échelle (voir pageConstellation).
+export const CASE_GALAXIE = { largeur: 190, hauteur: 62 }
+
+// Toutes les tables (écartées et liaisons comprises : vue.js les montre pendant ce motif), en un plan à lire sur
+// papier. Chaque table a SA case dans un quadrillage : deux noms ne peuvent pas se chevaucher.
+//   - les tables PRINCIPALES d'abord, en grille, les plus reliées côte à côte ;
+//   - puis chaque table prend la case libre la plus proche de ce qu'elle relie : une liaison entre deux
+//     principales au milieu d'elles, une table d'une seule principale autour d'elle ;
+//   - les tables qui ne tiennent à rien : en rangées sous le plan.
+// L'ensemble est tassé pour remplir une feuille A3 paysage.
+function plan(noeuds, graphe, positions, etiquettes) {
+  const { largeur: CL, hauteur: CH } = CASE_GALAXIE
+  const type = (n) => n.type?.id || 'secondaire'
+  const principales = noeuds.filter((n) => type(n) === 'principale').sort(tri)
+  if (!principales.length) return types(noeuds, graphe, positions, etiquettes)
+  const estPrincipale = new Set(principales)
+  const principalesDe = (n) => {
+    const directes = [...n.voisins].filter((v) => estPrincipale.has(v))
+    return directes.length ? directes : [...new Set([...n.voisins].flatMap((v) => [...v.voisins].filter((w) => estPrincipale.has(w) && w !== n)))]
+  }
+
+  // Le poids entre deux principales : lien direct, ou par une table de liaison.
+  const poids = new Map()
+  const cleDe = (a, b) => [a.table.nom, b.table.nom].sort().join('|')
+  const ajouterPoids = (a, b, p) => { if (a !== b) poids.set(cleDe(a, b), (poids.get(cleDe(a, b)) || 0) + p) }
+  for (const l of graphe.liens) if (estPrincipale.has(l.a) && estPrincipale.has(l.b)) ajouterPoids(l.a, l.b, 2)
+  const reliees = noeuds.filter((n) => !estPrincipale.has(n) && n.voisins.size)
+  for (const n of reliees) {
+    const p = principalesDe(n)
+    for (let i = 0; i < p.length; i++) for (let j = i + 1; j < p.length; j++) ajouterPoids(p[i], p[j], 1)
+  }
+  const lien = (a, b) => poids.get(cleDe(a, b)) || 0
+
+  // 1. Le quadrillage entier est taillé pour la feuille A3 paysage (400 × 248 mm utiles), rempli aux trois cinquièmes
+  //    environ ; les tables sans lien en occupent les dernières lignes. Les principales sont réparties dessus en
+  //    blocs à peu près carrés, puis échangées entre elles tant que leurs liens raccourcissent.
+  const isoleesNb = noeuds.filter((n) => !n.voisins.size && !estPrincipale.has(n)).length
+  const total = noeuds.length / 0.6
+  const C = Math.max(6, Math.round(Math.sqrt(total * (400 / 248) * (CH / CL))))
+  const R = Math.max(4, Math.ceil(total / C))
+  const lignesIsolees = Math.ceil(isoleesNb / C)
+  const RP = Math.max(3, R - lignesIsolees - (lignesIsolees ? 1 : 0))
+  const colonnes = Math.max(1, Math.min(principales.length, Math.round(Math.sqrt(principales.length * (C * CL) / (RP * CH)))))
+  const lignes = Math.ceil(principales.length / colonnes)
+  const PAS_X = C / colonnes
+  const PAS_Y = RP / lignes
+  const cases = []
+  for (let i = 0; i < colonnes * lignes; i++) cases.push({ c: Math.floor((i % colonnes) * PAS_X + PAS_X / 2), l: Math.floor(Math.floor(i / colonnes) * PAS_Y + PAS_Y / 2) })
+  const dist = (a, b) => Math.hypot((a.c - b.c) * CL, (a.l - b.l) * CH)
+  const milieu = { c: ((colonnes - 1) * PAS_X) / 2, l: ((lignes - 1) * PAS_Y) / 2 }
+  const libres = [...cases].sort((a, b) => dist(a, milieu) - dist(b, milieu))
+  const place = new Map()
+  const reste = new Set(principales)
+  while (reste.size) {
+    const n = [...reste].sort((a, b) => [...place.keys()].reduce((s, m) => s + lien(b, m) - lien(a, m), 0) || tri(a, b))[0]
+    const cout = (c) => [...place].reduce((s, [m, pm]) => s + lien(n, m) * dist(c, pm), 0)
+    const c = place.size ? [...libres].sort((a, b) => cout(a) - cout(b))[0] : libres[0]
+    place.set(n, c)
+    libres.splice(libres.indexOf(c), 1)
+    reste.delete(n)
+  }
+  const longueur = () => [...poids].reduce((s, [cle, p]) => {
+    const [a, b] = cle.split('|').map((nom) => principales.find((n) => n.table.nom === nom))
+    return s + p * dist(place.get(a), place.get(b))
+  }, 0)
+  let meilleure = longueur()
+  for (let tour = 0, mieux = true; mieux && tour < 20; tour++) {
+    mieux = false
+    for (const a of principales) {
+      for (const c of [...principales.filter((b) => b !== a).map((b) => place.get(b)), ...libres]) {
+        const b = principales.find((x) => place.get(x) === c)
+        const ca = place.get(a)
+        place.set(a, c)
+        if (b) place.set(b, ca)
+        const l = longueur()
+        if (l < meilleure - 1e-6) {
+          meilleure = l
+          mieux = true
+          if (!b) libres.splice(libres.indexOf(c), 1, ca)
+        } else {
+          place.set(a, ca)
+          if (b) place.set(b, c)
+        }
+      }
+    }
+  }
+
+  // 2. Les cases fines : chaque table prend la case libre la plus proche de la place voulue.
+  const prises = new Set()
+  const occuper = (n, c, l) => { prises.add(`${c},${l}`); positions.set(n, { x: c * CL, y: l * CH }) }
+  const poser = (n, cible) => {
+    for (let r = 0; r < 400; r++) {
+      // Les cases à distance r (en anneau), les plus proches d'abord.
+      const anneau = []
+      for (let dc = -r; dc <= r; dc++) for (let dl = -r; dl <= r; dl++) if (Math.max(Math.abs(dc), Math.abs(dl)) === r) anneau.push({ c: Math.round(cible.c) + dc, l: Math.round(cible.l) + dl })
+      anneau.sort((a, b) => dist(a, cible) - dist(b, cible))
+      const libre = anneau.find((x) => !prises.has(`${x.c},${x.l}`))
+      if (libre) return occuper(n, libre.c, libre.l)
+    }
+  }
+  for (const n of principales) occuper(n, place.get(n).c, place.get(n).l)
+  const ou = (n) => {
+    const p = principalesDe(n).map((x) => place.get(x))
+    return { c: p.reduce((s, q) => s + q.c, 0) / p.length, l: p.reduce((s, q) => s + q.l, 0) / p.length + (p.length === 1 ? 0.5 : 0) }
+  }
+  // Les liaisons entre principales d'abord (elles tiennent au milieu), puis les tables d'une seule principale,
+  // les plus reliées en premier (au plus près), puis celles reliées seulement à d'autres non principales.
+  const avecPrincipales = reliees.filter((n) => principalesDe(n).length).sort((a, b) => principalesDe(b).length - principalesDe(a).length || tri(a, b))
+  for (const n of avecPrincipales) poser(n, ou(n))
+  const sansPrincipale = reliees.filter((n) => !principalesDe(n).length).sort(tri)
+  for (let tour = 0; tour < 3; tour++) {
+    for (const n of sansPrincipale) {
+      if (positions.has(n)) continue
+      const placees = [...n.voisins].map((v) => positions.get(v)).filter(Boolean)
+      if (placees.length || tour === 2) poser(n, placees.length ? { c: placees.reduce((s, q) => s + q.x / CL, 0) / placees.length, l: placees.reduce((s, q) => s + q.y / CH, 0) / placees.length } : milieu)
+    }
+  }
+
+  // 3. Les tables isolées : en rangées sous le plan, aussi large que lui.
+  const isolees = noeuds.filter((n) => !positions.has(n)).sort((a, b) => a.table.nom.localeCompare(b.table.nom))
+  if (isolees.length) {
+    const cs = [...prises].map((k) => Number(k.split(',')[0]))
+    const ls = [...prises].map((k) => Number(k.split(',')[1]))
+    const gauche = Math.min(0, ...cs)
+    const parLigne = Math.max(C, Math.max(...cs) - gauche + 1)
+    const bas = Math.max(...ls) + 2
+    isolees.forEach((n, i) => occuper(n, gauche + (i % parLigne), bas + Math.floor(i / parLigne)))
+    etiquettes.push({ x: gauche * CL + 40, y: (bas - 0.9) * CH, texte: 'Tables sans lien' })
+  }
+  return { galaxie: true }
+}
 
 // Des bulles réparties sur un cercle ; le rayon grandit s'il n'y a pas la place. Renvoie le rayon pris.
 function surCercle(liste, positions, rayon, cx = 0, cy = 0, depart = -Math.PI / 2) {

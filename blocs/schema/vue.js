@@ -21,7 +21,7 @@ import { api } from '/socle/api.js'
 import { etat, modeAdmin } from '/socle/etat.js'
 import { extraireTables } from '../base/vue.js'
 import { pdfDepuisJpeg } from '/socle/pdf.js'
-import { MOTIFS, disposer } from '../../interface/motifs.js'
+import { MOTIFS, disposer, CASE_GALAXIE } from '../../interface/motifs.js'
 import { menuDeroulant } from '../../interface/menu-deroulant.js'
 import { TYPES, typeParId, devinerTypes, coutLien } from '../../interface/types.js'
 
@@ -36,7 +36,11 @@ const PETIT_CONCOMBRE = new URL('../../interface/concombre-petit.webp', import.m
 let imageConcombre = null
 
 // Réglages de la simulation (gardés sur ce poste).
-const reglages = { attraction: 1, ecartement: 1, figer: true, cles: false, raccourcis: true, sansLiaisons: false }
+// distanceNoms / distanceDescriptions : de combien plus loin (dézoomé) les noms et les descriptions restent écrits.
+const reglages = { attraction: 1, ecartement: 1, figer: true, cles: false, raccourcis: true, sansLiaisons: false, distanceNoms: 1, distanceDescriptions: 1 }
+// La galaxie montre tout : les tables écartées sont chargées pour elle, et le motif est remis après le rechargement.
+let galaxieForcee = false
+let motifEnAttente = null
 try {
   Object.assign(reglages, JSON.parse(localStorage.getItem('birtec-schema-reglages') || '{}'))
 } catch {
@@ -93,7 +97,7 @@ export default {
         bandeau?.majCompteur()
       },
       surLien: (l) => vider(panneau, panneauLien(l)),
-      surMotif: () => { dessinerMotif(); faireTomber(pluie, vue.pluie) },
+      surMotif: () => { dessinerMotif(); faireTomber(pluie, vue.pluie); montrerReglagesLibres() },
     })
 
     // Le menu des motifs.
@@ -101,9 +105,34 @@ export default {
     function dessinerMotif() {
       vider(zoneMotif,
         // Un motif caché n'apparaît dans le menu que pendant qu'il est affiché.
-        menuDeroulant({ choix: MOTIFS.filter((m) => !m.cache || m.id === vue.motif).map((m) => ({ valeur: m.id, libelle: m.nom })), valeur: vue.motif || 'libre', surChoix: (id) => vue.appliquerMotif(id) }))
+        menuDeroulant({ choix: MOTIFS.filter((m) => !m.cache || m.id === vue.motif).map((m) => ({ valeur: m.id, libelle: m.nom })), valeur: vue.motif || 'libre', surChoix: choisirMotif }))
+    }
+    // La galaxie a besoin de toutes les tables, écartées comprises : on recharge avec elles, puis on la dispose.
+    function choisirMotif(id) {
+      if (id === 'galaxie' && !voirEcartees) {
+        galaxieForcee = true
+        voirEcartees = true
+        motifEnAttente = 'galaxie'
+        return window.ktec.recharger()
+      }
+      if (id !== 'galaxie' && galaxieForcee) {
+        galaxieForcee = false
+        voirEcartees = false
+        motifEnAttente = id
+        return window.ktec.recharger()
+      }
+      vue.appliquerMotif(id)
     }
     dessinerMotif()
+    // Les forces de la simulation ne servent qu'à « Ma disposition » : cachées pendant un motif.
+    function montrerReglagesLibres() {
+      document.querySelectorAll('.reglages-schema .seulement-libre').forEach((e) => { e.hidden = Boolean(vue.motif) })
+    }
+    if (motifEnAttente) {
+      const id = motifEnAttente
+      motifEnAttente = null
+      setTimeout(() => { vue.appliquerMotif(id); dessinerMotif() }, 400)
+    }
 
     const recherche = h('input', { type: 'search', placeholder: 'Chercher une table…', list: 'birtec-tables' })
     const chercher = () => {
@@ -423,7 +452,8 @@ class VueGraphe {
     } else {
       if (!this.utilisateur) this.utilisateur = new Map(this.graphe.noeuds.map((n) => [n, { x: n.x, y: n.y, fige: n.fige }]))
       const r = disposer(id, this.graphe, { source: this.source })
-      cibles = r.positions
+      cibles = ecarter(r.positions, reglages.ecartement || 1)
+      r.etiquettes = ecarterEtiquettes(r.etiquettes, r.positions, reglages.ecartement || 1)
       this.etiquettes = r.etiquettes
       this.trace = r.trace || null
       this.liensDiscrets = Boolean(r.liensDiscrets)
@@ -525,6 +555,7 @@ class VueGraphe {
 
   // « Masquer les liaisons » : une table de liaison est cachée, sauf si elle est sur le chemin en cours.
   cachee(n) {
+    if (this.motif === 'galaxie') return false // la galaxie montre tout
     return reglages.sansLiaisons && n.type?.id === 'intermediaire' && !this.surCheminVu?.has(n)
   }
 
@@ -983,14 +1014,16 @@ class VueGraphe {
         c.fill()
       }
       // Noms : en zoomant, ou pour les tables importantes, survolées, choisies, sur le chemin.
-      const visible = k > 1.1 || n === focus || n === this.source || surChemin.has(n) || voisinesChemin.has(n) || (focus && focus.voisins.has(n)) || (k > 0.45 && grands.has(n))
+      // La distance d'apparition se règle sous le graphe (plus loin : écrits même en dézoomant).
+      const dn = reglages.distanceNoms || 1
+      const visible = k > 1.1 / dn || n === focus || n === this.source || surChemin.has(n) || voisinesChemin.has(n) || (focus && focus.voisins.has(n)) || (k > 0.45 / dn && grands.has(n))
       if (visible && !pale && t > DUREE_ALLUMAGE - 1) {
         c.globalAlpha = (n.table.exclue ? 0.5 : 1) * borne(t - (DUREE_ALLUMAGE - 1))
         c.fillStyle = couleurs.texte
         c.font = `${n === focus || surChemin.has(n) ? '600 ' : ''}${Math.round(11 + Math.min(4, k))}px system-ui, sans-serif`
         c.textAlign = 'center'
         c.fillText(n.table.nom, p.x, p.y + rayon + 12)
-        if (n.table.libelle && (k > 1.8 || n === focus || surChemin.has(n))) {
+        if (n.table.libelle && (k > 1.8 / (reglages.distanceDescriptions || 1) || n === focus || surChemin.has(n))) {
           c.fillStyle = couleurs.texte2
           c.font = `${Math.round(10 + Math.min(3, k / 2))}px system-ui, sans-serif`
           c.fillText(n.table.libelle.length > 34 ? n.table.libelle.slice(0, 33) + '…' : n.table.libelle, p.x, p.y + rayon + 25)
@@ -1918,28 +1951,50 @@ function cadreRaccourcis() {
 
 // ---------------------------------------------------------------- réglages sous le graphe
 
+// L'écartement vaut aussi pour les motifs : leurs places s'éloignent (ou se rapprochent) de leur centre.
+function centreDe(positions) {
+  const ps = [...positions.values()]
+  return { x: ps.reduce((s, p) => s + p.x, 0) / (ps.length || 1), y: ps.reduce((s, p) => s + p.y, 0) / (ps.length || 1) }
+}
+function ecarter(positions, e) {
+  if (e === 1) return positions
+  const c = centreDe(positions)
+  return new Map([...positions].map(([n, p]) => [n, { ...p, x: c.x + (p.x - c.x) * e, y: c.y + (p.y - c.y) * e }]))
+}
+function ecarterEtiquettes(etiquettes, positions, e) {
+  if (e === 1 || !etiquettes?.length) return etiquettes
+  const c = centreDe(positions)
+  return etiquettes.map((t) => ({ ...t, x: c.x + (t.x - c.x) * e, y: c.y + (t.y - c.y) * e }))
+}
+
 function reglagesSchema(vue, caseEcartees) {
-  const curseur = (cle, libelle, aide) => {
-    const entree = h('input', { type: 'range', min: '0.2', max: '3', step: '0.1', value: String(reglages[cle]), title: aide })
+  const curseur = (cle, libelle, aide, { max = 3, dessin = false } = {}) => {
+    const entree = h('input', { type: 'range', min: '0.2', max: String(max), step: '0.1', value: String(reglages[cle] ?? 1), title: aide })
     const valeur = h('span', { class: 'valeur-curseur' }, `×${Number(reglages[cle]).toFixed(1)}`)
     entree.addEventListener('input', () => {
       reglages[cle] = Number(entree.value)
       valeur.textContent = `×${reglages[cle].toFixed(1)}`
       garderReglages()
-      vue.relancer(0.5)
+      if (dessin) vue.dessiner()
+      else if (cle === 'ecartement' && vue.motif) {
+        clearTimeout(entree._minuterie)
+        entree._minuterie = setTimeout(() => vue.appliquerMotif(vue.motif), 200)
+      } else vue.relancer(0.5)
     })
-    return h('label', { class: 'curseur-schema', title: aide }, h('span', {}, libelle), entree, valeur)
+    return h('label', { class: `curseur-schema${cle === 'attraction' ? ' seulement-libre' : ''}`, title: aide }, h('span', {}, libelle), entree, valeur)
   }
   const figer = h('input', { type: 'checkbox', checked: reglages.figer, onchange: () => { reglages.figer = figer.checked; garderReglages() } })
   return h('div', { class: 'reglages-schema' },
     curseur('attraction', 'Force des liens', 'Plus fort : les tables liées se rapprochent'),
     curseur('ecartement', 'Écartement', 'Plus fort : les bulles se repoussent davantage'),
-    h('label', { class: 'case-schema', title: 'Une bulle déplacée reste où on la lâche (double-clic dessus pour la libérer)' }, figer, 'Figer en lâchant'),
+    curseur('distanceNoms', 'Noms', 'Plus fort : les noms des tables restent écrits de plus loin (en dézoomant)', { max: 8, dessin: true }),
+    curseur('distanceDescriptions', 'Descriptions', 'Plus fort : les descriptions des tables restent écrites de plus loin (en dézoomant)', { max: 8, dessin: true }),
+    h('label', { class: 'case-schema seulement-libre', title: 'Une bulle déplacée reste où on la lâche (double-clic dessus pour la libérer)' }, figer, 'Figer en lâchant'),
     !modeAdmin() ? null : h('label', { class: 'case-schema', title: 'Écrire la clé de liaison le long de chaque ligne (zoomez si une ligne est trop courte)' },
       h('input', { type: 'checkbox', checked: reglages.cles, onchange: (e) => { reglages.cles = e.target.checked; garderReglages(); vue.dessiner() } }), 'Clés de liaison'),
     h('label', { class: 'case-schema', title: 'Cache les tables de liaison (type intermédiaire) : les tables qu’elles relient sont jointes par un pointillé. Une liaison sur le chemin reste visible.' },
       h('input', { type: 'checkbox', checked: reglages.sansLiaisons, onchange: (e) => { reglages.sansLiaisons = e.target.checked; garderReglages(); vue.dessiner() } }), 'Masquer les liaisons'),
-    h('button', { class: 'petit discret', title: 'Toutes les bulles reprennent leur place dans la simulation', onclick: () => vue.libererTout() }, 'Tout libérer'),
+    h('button', { class: 'petit discret seulement-libre', title: 'Toutes les bulles reprennent leur place dans la simulation', onclick: () => vue.libererTout() }, 'Tout libérer'),
     modeAdmin() ? h('label', { class: 'case-schema', title: 'Montrer aussi, en grisé, les tables écartées de l’IA' }, caseEcartees, 'Tables écartées') : null,
   )
 }
@@ -2068,32 +2123,111 @@ function panneauChemin(chemin, vue, panneau) {
   ]
 }
 
-// L'image jointe à l'extraction : la constellation telle qu'elle est à l'écran (le chemin allumé), et à droite
-// les tables du chemin et son SQL.
+// L'image jointe à l'extraction : le tracé seul, sur fond blanc (pour l'imprimer). Les tables du chemin de gauche à
+// droite dans l'ordre des jointures, toutes les tables de liaison comprises (même masquées dans la constellation) ;
+// sur chaque trait, le nom du lien, et pour l'administrateur ses clés ; à droite, le SQL (administrateur).
 function imageDuChemin(vue, chemin, sql) {
   if (!toileLisible()) return null // image brouillée par le navigateur : l'extraction se fait sans
-  const source = vue.toile
-  const ratio = vue.ratio || 1
-  const largeurTexte = 520 * ratio
-  const lignes = [`Chemin : ${[chemin.depart, ...chemin.etapes.map((e) => e.vers)].map((n) => n.table.nom).filter((n, i, l) => l.indexOf(n) === i).join(' → ')}`, '', ...sql.split('\n')]
-  const toile = document.createElement('canvas')
-  toile.width = source.width + largeurTexte
-  toile.height = Math.max(source.height, (lignes.length * 18 + 60) * ratio)
-  const c = toile.getContext('2d')
-  c.fillStyle = '#04070f'
-  c.fillRect(0, 0, toile.width, toile.height)
-  c.drawImage(source, 0, 0)
-  c.fillStyle = '#0b1210'
-  c.fillRect(source.width, 0, largeurTexte, toile.height)
-  c.scale(ratio, ratio)
-  c.fillStyle = '#e6f2ea'
-  c.font = '600 15px system-ui, sans-serif'
-  c.fillText('Jointures', source.width / ratio + 20, 32)
-  c.font = '12px ui-monospace, Consolas, monospace'
-  lignes.forEach((ligne, i) => {
-    c.fillStyle = i === 0 ? '#f59e0b' : '#c7d2cc'
-    c.fillText(ligne.length > 70 ? ligne.slice(0, 69) + '…' : ligne, source.width / ratio + 20, 60 + i * 18)
+  const { ordre } = sqlDuChemin(chemin)
+  const noeuds = new Map([chemin.depart, ...chemin.etapes.flatMap((e) => [e.de, e.vers])].map((n) => [n.table.nom, n]))
+  const liens = new Map(chemin.etapes.map((e) => [e.lien.jointures[0], e.lien]))
+  // Colonnes : la table de départ, puis chaque table jointe une colonne après celle à laquelle elle se rattache.
+  const colonne = new Map([[chemin.depart.table.nom, 0]])
+  const aretes = []
+  for (const { table, j } of ordre) {
+    const parent = j.de === table ? j.vers : j.de
+    colonne.set(table, (colonne.get(parent) ?? 0) + 1)
+    aretes.push({ de: parent, vers: table, j, lien: liens.get(j) })
+  }
+  const parColonne = []
+  for (const [nom, c] of colonne) (parColonne[c] ||= []).push(nom)
+
+  const L = 210, H = 58, ECART_X = 150, ECART_Y = 34, MARGE = 40, HAUT = 80
+  const hauteurColonnes = Math.max(...parColonne.map((l) => l.length)) * (H + ECART_Y) - ECART_Y
+  const place = new Map()
+  parColonne.forEach((liste, c) => {
+    const decalage = (hauteurColonnes - (liste.length * (H + ECART_Y) - ECART_Y)) / 2
+    liste.forEach((nom, i) => place.set(nom, { x: MARGE + c * (L + ECART_X), y: HAUT + decalage + i * (H + ECART_Y) }))
   })
+  const lignesSql = sql ? sql.split('\n') : []
+  const largeurSql = sql ? 460 : 0
+  const largeurPlan = MARGE * 2 + parColonne.length * L + (parColonne.length - 1) * ECART_X
+  const largeur = largeurPlan + largeurSql
+  const hauteur = Math.max(HAUT + hauteurColonnes + MARGE, lignesSql.length * 17 + HAUT + MARGE)
+  const ratio = 2 // net à l'impression
+  const toile = document.createElement('canvas')
+  toile.width = largeur * ratio
+  toile.height = hauteur * ratio
+  const c = toile.getContext('2d')
+  c.scale(ratio, ratio)
+  c.fillStyle = '#fff'
+  c.fillRect(0, 0, largeur, hauteur)
+  const coupe = (t, max) => { t = String(t || ''); while (t && c.measureText(t).width > max) t = t.slice(0, -2) + '…'; return t }
+
+  // Le titre.
+  c.fillStyle = '#1e3a8a'
+  c.font = '600 18px system-ui, sans-serif'
+  c.fillText(`Chemin : ${[...colonne.keys()].join(' → ')}`, MARGE, 34)
+  c.fillStyle = '#6b7280'
+  c.font = '12px system-ui, sans-serif'
+  c.fillText(`${colonne.size} tables, ${aretes.length} jointure(s) — ${new Date().toLocaleDateString('fr-FR')} — BiRTEC`, MARGE, 54)
+
+  // Les traits, puis leur nom (et les clés pour l'administrateur) à mi-chemin.
+  for (const a of aretes) {
+    const p = place.get(a.de)
+    const q = place.get(a.vers)
+    const x1 = p.x + L, y1 = p.y + H / 2, x2 = q.x, y2 = q.y + H / 2
+    c.strokeStyle = '#f59e0b'
+    c.lineWidth = 2.5
+    c.beginPath()
+    c.moveTo(x1, y1)
+    c.bezierCurveTo(x1 + ECART_X / 2, y1, x2 - ECART_X / 2, y2, x2, y2)
+    c.stroke()
+    const textes = [a.j.libelle, modeAdmin() ? `${a.j.colonne} = ${a.j.versColonne}` : ''].filter(Boolean)
+    textes.forEach((t, i) => {
+      c.font = i === 0 && a.j.libelle ? 'italic 11px system-ui, sans-serif' : '10px ui-monospace, Consolas, monospace'
+      const texte = coupe(t, ECART_X - 8)
+      const mx = (x1 + x2) / 2 - c.measureText(texte).width / 2
+      const my = (y1 + y2) / 2 - 8 - (textes.length - 1 - i) * 13
+      c.fillStyle = 'rgba(255,255,255,0.9)'
+      c.fillRect(mx - 2, my - 10, c.measureText(texte).width + 4, 13)
+      c.fillStyle = '#374151'
+      c.fillText(texte, mx, my)
+    })
+  }
+
+  // Les tables : une carte bordée de la couleur de leur type.
+  for (const [nom, pos] of place) {
+    const n = noeuds.get(nom)
+    const couleur = n?.type?.papier || '#6b7280'
+    c.fillStyle = '#fff'
+    c.strokeStyle = couleur
+    c.lineWidth = nom === chemin.depart.table.nom ? 3 : 2
+    c.beginPath()
+    c.roundRect(pos.x, pos.y, L, H, 10)
+    c.fill()
+    c.stroke()
+    c.fillStyle = couleur
+    c.fillRect(pos.x + 1, pos.y + 8, 5, H - 16)
+    c.fillStyle = '#111827'
+    c.font = '600 15px system-ui, sans-serif'
+    c.fillText(coupe(nom, L - 24), pos.x + 14, pos.y + 24)
+    c.fillStyle = '#4b5563'
+    c.font = '12px system-ui, sans-serif'
+    c.fillText(coupe([n?.table.libelle, n?.type?.nom].filter(Boolean).join(' · '), L - 24), pos.x + 14, pos.y + 44)
+  }
+
+  // Le SQL, à droite (administrateur).
+  if (sql) {
+    c.fillStyle = '#f3f4f6'
+    c.fillRect(largeurPlan, 0, largeurSql, hauteur)
+    c.fillStyle = '#111827'
+    c.font = '600 14px system-ui, sans-serif'
+    c.fillText('SQL', largeurPlan + 20, 34)
+    c.font = '11px ui-monospace, Consolas, monospace'
+    c.fillStyle = '#374151'
+    lignesSql.forEach((ligne, i) => c.fillText(coupe(ligne, largeurSql - 36), largeurPlan + 20, HAUT + i * 17))
+  }
   return toile.toDataURL('image/png')
 }
 
@@ -2179,6 +2313,8 @@ function ajoutLien(t) {
 // La page A3 paysage (420 × 297, en millimètres), fond blanc, dessinée en SVG : tout le graphe avec le nom
 // de chaque table, le chemin en surbrillance s'il y en a un, une légende. Sert au PDF et à l'impression.
 function pageConstellation(graphe, vue, schema) {
+  // Un motif encore en train de se poser : on imprime ses places d'arrivée.
+  if (vue.transition) { vue.transition.debut = -Infinity; vue.avancerTransition() }
   const noeuds = graphe.noeuds
   const xs = noeuds.map((n) => n.x)
   const ys = noeuds.map((n) => n.y)
@@ -2190,8 +2326,11 @@ function pageConstellation(graphe, vue, schema) {
   // Taille du texte fixée sur la feuille : environ 4,5 mm pour un nom de table, quelle que soit l'étendue du graphe
   // (le graphe tient dans un cadre de 400 × 248 mm).
   const echelle = Math.min(400 / largeur, 248 / hauteur) // millimètres par unité du graphe
-  const taille = 4.5 / echelle
-  const rayon = (n) => Math.max(n.rayon, 2 / echelle) // une bulle fait au moins 4 mm
+  // La galaxie : chaque table a sa case ; le texte prend la taille de la case (il ne déborde pas chez la voisine).
+  const galaxie = vue.motif === 'galaxie'
+  const taille = galaxie ? CASE_GALAXIE.hauteur * 0.26 : 4.5 / echelle
+  const rayon = (n) => (galaxie ? Math.min(n.rayon, CASE_GALAXIE.hauteur * 0.14) : Math.max(n.rayon, 2 / echelle)) // une bulle fait au moins 4 mm
+  const serre = (texte, t) => (galaxie && texte.length * t * 0.58 > CASE_GALAXIE.largeur - 12 ? ` textLength="${CASE_GALAXIE.largeur - 12}" lengthAdjust="spacingAndGlyphs"` : '')
   const x = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 
   const liensChemin = new Set(vue.chemin?.etapes?.map((e) => e.lien) || [])
@@ -2207,10 +2346,10 @@ function pageConstellation(graphe, vue, schema) {
   }).join('')
   const bulles = noeuds.map((n) => {
     const classe = surChemin.has(n) ? 'chemin' : n.table.exclue ? 'ecartee' : ''
-    const grand = n.degre > 8 ? 1.25 : 1
+    const grand = n.degre > 8 && !galaxie ? 1.25 : 1
     return `<g class="${classe}"><circle cx="${n.x}" cy="${n.y}" r="${rayon(n)}" fill="${n.type.papier}"/>`
-      + `<text x="${n.x}" y="${n.y + rayon(n) + taille * 1.1}" font-size="${grand * taille}">${x(n.table.nom)}</text>`
-      + (n.table.libelle && n.degre > 3 ? `<text class="libelle" x="${n.x}" y="${n.y + rayon(n) + taille * 2}" font-size="${taille * 0.7}">${x(n.table.libelle)}</text>` : '')
+      + `<text x="${n.x}" y="${n.y + rayon(n) + taille * 1.1}" font-size="${grand * taille}"${serre(n.table.nom, grand * taille)}>${x(n.table.nom)}</text>`
+      + (n.table.libelle && (n.degre > 3 || vue.motif === 'galaxie') ? `<text class="libelle" x="${n.x}" y="${n.y + rayon(n) + taille * 2}" font-size="${taille * 0.7}"${serre(n.table.libelle, taille * 0.7)}>${x(n.table.libelle)}</text>` : '')
       + '</g>'
   }).join('')
 
@@ -2237,7 +2376,7 @@ function pageConstellation(graphe, vue, schema) {
   .pied text { font-size: 3.2px; fill: #374151; }
   .pied text.mono { font-family: ui-monospace, "DejaVu Sans Mono", monospace; font-size: 3px; }
   .pied text.gras { font-weight: 600; }
-  .graphe line { stroke: #b4b9d6; stroke-width: ${taille * 0.15}; }
+  .graphe line { stroke: ${galaxie ? '#d5d9ea' : '#b4b9d6'}; stroke-width: ${taille * (galaxie ? 0.07 : 0.15)}; }
   .graphe line.nomme { stroke: #0d9488; }
   .graphe line.chemin { stroke: #f59e0b; stroke-width: ${taille * 0.45}; }
   .graphe g.ecartee circle { fill: #e5e7eb; }

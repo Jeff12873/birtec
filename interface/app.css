@@ -363,3 +363,4 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 .separateur-ou::before, .separateur-ou::after { content: ''; flex: 1; border-top: 1px dashed color-mix(in srgb, #3d9bff 55%, transparent); }
 .separateur-ou .pastille-lien { margin: 0; }
 .pastille-ajout.ou { border-color: color-mix(in srgb, #3d9bff 50%, transparent); }
+.reglages-schema [hidden] { display: none !important; }
