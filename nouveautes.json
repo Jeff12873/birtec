@@ -1,6 +1,16 @@
 {
   "versions": [
     {
+      "version": "0.13.4",
+      "date": "2026-11-02",
+      "points": [
+        "LA PHRASE : vrai mode date — le, avant le, depuis le, entre le … et le …, dans les N derniers jours/semaines/mois/années, il y a plus de N…, pendant (aujourd'hui, cette semaine, le mois dernier, cette année…) ; recalculé chaque jour",
+        "Les dates AAAAMMJJ (texte de 8) sont enfin reconnues comme des dates ; une date vide n'est plus comptée « avant » une autre",
+        "LA PHRASE : accolade sur fond teinté autour de chaque suite de conditions liées par ET dès qu'il y a un OU",
+        "LA PHRASE : les référentiels reliés directement (ex. avancement des DI) sont proposés à la place des tables secondaires"
+      ]
+    },
+    {
       "version": "0.13.3",
       "date": "2026-11-02",
       "points": [

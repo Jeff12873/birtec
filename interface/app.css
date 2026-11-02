@@ -347,3 +347,15 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 /* Configuration : le modèle de données */
 .ligne-modele { display: flex; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--bord); font-size: 13px; }
 .ligne-modele > span:first-child { min-width: 170px; }
+
+/* LA PHRASE : une date (« dans les 3 derniers mois ») : le choix et ses valeurs restent sur une ligne, à leur taille */
+.pastille-choix.quand, .valeurs-entre .pastille-choix { width: auto; flex: none; }
+.condition .valeurs-entre { flex-wrap: nowrap; }
+.pastille-choix.nombre-duree { width: 74px; min-width: 0; }
+
+/* LA PHRASE : ET avant OU. Une suite de conditions liées par ET est entourée d'une accolade sur un fond teinté. */
+.liste-conditions.avec-ou > .paquet-et, .liste-conditions.avec-ou > .hors-paquet { display: grid; gap: inherit; padding-left: 18px; }
+.paquet-et { position: relative; padding: 5px 6px 5px 18px; margin: -5px 0; border-radius: 12px; background: color-mix(in srgb, #c45bff 9%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, #c45bff 22%, transparent); }
+.paquet-et > .accolade { position: absolute; left: 3px; top: 5px; bottom: 5px; width: 12px; pointer-events: none; }
+.paquet-et > .accolade svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.paquet-et > .accolade path { fill: none; stroke: #c45bff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }

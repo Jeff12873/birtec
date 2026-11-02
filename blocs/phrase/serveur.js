@@ -299,6 +299,14 @@ export async function morceauxSql(spec, schema) {
     }
     const { e, colonne } = ciblee(f)
     const v = (Array.isArray(f.valeurs) ? f.valeurs : [f.valeurs]).filter((x) => x !== undefined && x !== null && x !== '')
+    // Une date (AAAAMMJJ en texte, DATE/DATETIME, ou horodatage Unix) : comparée comme une date, jamais comme un texte.
+    const format = formatDate(colonne)
+    if (format) {
+      const quand = f.quand ?? { egal: v.length ? 'le' : '', different: v.length ? 'le' : '', sup: 'apres', inf: 'avant', entre: 'entre' }[f.op || 'egal']
+      if (quand === undefined) throw new ErreurHttp(400, `Opérateur inconnu pour une date : ${f.op}`)
+      const c = conditionDate(e, format, quand, v)
+      return f.op === 'different' ? `NOT COALESCE((${c}), FALSE)` : c
+    }
     const lit = (x) => litteralPour(colonne, x)
     const motif = (x) => `'${echapper(String(x).replace(/[%_]/g, (m) => `\\${m}`))}'`
     switch (f.op || 'egal') {
@@ -332,6 +340,78 @@ export async function morceauxSql(spec, schema) {
   const where = await combiner([...anciens, ...(Array.isArray(spec.conditions) ? spec.conditions : [])])
   const tri = (Array.isArray(spec.tri) ? spec.tri : []).map((t) => ({ expression: ciblee(t).e, sens: t.sens === 'desc' ? 'DESC' : 'ASC' }))
   return { from: lignes.join('\n'), where: where ? `\nWHERE ${where}` : '', tri }
+}
+
+// ---------------------------------------------------------------- dates
+
+// Le format d'une colonne de date, ou null : 'date8' (AAAAMMJJ dans un texte de 8, le cas de la GMAO), 'sql'
+// (DATE, DATETIME, TIMESTAMP) ou 'unix' (secondes depuis 1970 dans un entier dont le nom parle de date).
+export function formatDate(colonne) {
+  const type = String(colonne?.type || '')
+  if (/^(date|datetime|timestamp)\b/i.test(type)) return 'sql'
+  // Le type arrive seul (« VARCHAR », taille à part) ou avec sa taille (« varchar(8) »).
+  const huit = Number(colonne.taille) === 8 || /\(8\)/.test(type)
+  if (/^(var)?char/i.test(type) && huit && /^date|_date|^dt_/i.test(colonne.nom)) return 'date8'
+  if (/^(int|bigint)\b/i.test(type) && /^date|_date/i.test(colonne.nom)) return 'unix'
+  return null
+}
+
+const UNITES_SQL = { jours: 'DAY', semaines: 'WEEK', mois: 'MONTH', annees: 'YEAR' }
+// Les périodes du calendrier : [début, fin[ en expressions SQL, recalculées chaque jour (un rapport enregistré suit).
+const LUNDI = 'CURDATE() - INTERVAL WEEKDAY(CURDATE()) DAY'
+const PREMIER_DU_MOIS = "DATE_FORMAT(CURDATE(), '%Y-%m-01')"
+const PREMIER_JANVIER = 'MAKEDATE(YEAR(CURDATE()), 1)'
+const PERIODES_SQL = {
+  aujourdhui: ['CURDATE()', 'CURDATE() + INTERVAL 1 DAY'],
+  hier: ['CURDATE() - INTERVAL 1 DAY', 'CURDATE()'],
+  cette_semaine: [LUNDI, `${LUNDI} + INTERVAL 7 DAY`],
+  semaine_derniere: [`${LUNDI} - INTERVAL 7 DAY`, LUNDI],
+  ce_mois: [PREMIER_DU_MOIS, `${PREMIER_DU_MOIS} + INTERVAL 1 MONTH`],
+  mois_dernier: [`${PREMIER_DU_MOIS} - INTERVAL 1 MONTH`, PREMIER_DU_MOIS],
+  cette_annee: [PREMIER_JANVIER, `${PREMIER_JANVIER} + INTERVAL 1 YEAR`],
+  annee_derniere: [`${PREMIER_JANVIER} - INTERVAL 1 YEAR`, PREMIER_JANVIER],
+}
+
+// Une date saisie (AAAA-MM-JJ ou AAAAMMJJ) → DATE 'AAAA-MM-JJ'.
+function jourSql(x) {
+  const m = String(x).match(/^(\d{4})-?(\d{2})-?(\d{2})$/)
+  if (!m) throw new ErreurHttp(400, `Date illisible : ${x}`)
+  return `DATE '${m[1]}-${m[2]}-${m[3]}'`
+}
+
+// « qui ont <date> <quand> » : la date de la colonne tombe dans l'intervalle [début, fin[. Une borne est écrite dans
+// le format de la colonne, pour comparer sans convertir chaque ligne. Une date vide ('', 00000000, 0) ne tombe
+// jamais dans un intervalle : en AAAAMMJJ, '' passerait sinon pour « avant » n'importe quelle date.
+function conditionDate(e, format, quand, v) {
+  const borne = (d) => (format === 'date8' ? `DATE_FORMAT(${d}, '%Y%m%d')` : format === 'unix' ? `UNIX_TIMESTAMP(${d})` : d)
+  const garde = format === 'date8' ? `${e} >= '19000101'` : format === 'unix' ? `${e} > 0` : `${e} >= DATE '1900-01-01'`
+  const intervalle = (debut, fin) => [garde, debut && `${e} >= ${borne(debut)}`, fin && `${e} < ${borne(fin)}`].filter(Boolean).join(' AND ')
+  const lendemain = (x) => `${jourSql(x)} + INTERVAL 1 DAY`
+  const duree = () => {
+    const n = Number(v[0])
+    if (!Number.isInteger(n) || n < 1 || n > 9999 || !UNITES_SQL[v[1]]) throw new ErreurHttp(400, 'Durée illisible.')
+    return `CURDATE() - INTERVAL ${n} ${UNITES_SQL[v[1]]}`
+  }
+  switch (quand) {
+    case '': return garde // la date est remplie
+    case 'le': return v.map((x) => `(${intervalle(jourSql(x), lendemain(x))})`).join(' OR ') || garde
+    case 'avant': return intervalle(null, jourSql(v[0]))
+    case 'apres': return intervalle(lendemain(v[0]), null)
+    case 'depuis': return intervalle(jourSql(v[0]), null)
+    case 'entre': {
+      if (v.length !== 2) throw new ErreurHttp(400, 'Il faut deux dates.')
+      const [a, b] = [...v].sort((x, y) => String(x).replace(/-/g, '').localeCompare(String(y).replace(/-/g, '')))
+      return intervalle(jourSql(a), lendemain(b))
+    }
+    case 'derniers': return intervalle(duree(), 'CURDATE() + INTERVAL 1 DAY')
+    case 'plus_de': return intervalle(null, duree())
+    case 'periode': {
+      const p = PERIODES_SQL[v[0]]
+      if (!p) throw new ErreurHttp(400, `Période inconnue : ${v[0]}`)
+      return intervalle(...p)
+    }
+    default: throw new ErreurHttp(400, `Choix de date inconnu : ${quand}`)
+  }
 }
 
 // La clé d'une table (sinon sa première colonne) : sert à dire qu'une ligne liée existe.

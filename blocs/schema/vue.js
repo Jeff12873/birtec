@@ -1115,21 +1115,30 @@ const OPERATEURS_PAR_NATURE = {
   // « ont » sans valeur = le champ est rempli ; « n'ont pas » sans valeur = il est vide.
   texte: ['egal', 'different', 'contient', 'ne_contient', 'commence', 'finit'],
   nombre: ['egal', 'different', 'sup', 'inf', 'entre'],
-  date: ['egal', 'different', 'sup', 'inf', 'entre'],
+  // Les dates : « ont / n'ont pas », puis quand, après le champ (QUAND).
+  date: ['egal', 'different'],
   guide: ['egal', 'different'],
 }
 const libelleOperateur = (op, nature) => (nature === 'date' && op === 'sup' ? 'ont après' : nature === 'date' && op === 'inf' ? 'ont avant' : OPERATEURS[op])
 const SANS_VALEUR = new Set(['vide', 'non_vide'])
+// Une date : quand elle tombe. Les périodes et les durées se recalculent chaque jour (un rapport enregistré suit).
+const QUAND = { '': '— n’importe quand —', le: 'le', avant: 'avant le', depuis: 'depuis le', entre: 'entre le', derniers: 'dans les derniers', plus_de: 'il y a plus de', periode: 'pendant' }
+const UNITES = { jours: 'jours', semaines: 'semaines', mois: 'mois', annees: 'années' }
+const PERIODES = { aujourdhui: 'aujourd’hui', hier: 'hier', cette_semaine: 'cette semaine', semaine_derniere: 'la semaine dernière', ce_mois: 'ce mois-ci', mois_dernier: 'le mois dernier', cette_annee: 'cette année', annee_derniere: 'l’année dernière' }
+// Combien de valeurs demande chaque choix de date (durée : nombre + unité).
+const valeursQuand = (q) => ({ le: 1, avant: 1, depuis: 1, entre: 2, derniers: 2, plus_de: 2, periode: 1 })[q] || 0
 
 // La nature d'une colonne, d'après son type : les dates rangées en AAAAMMJJ (texte de 8) comptent pour des dates.
 function natureColonne(c) {
   const type = String(c?.type || '')
+  if (/^(int|bigint)\b/i.test(type) && /^date|_date/i.test(c.nom)) return 'dateunix' // secondes depuis 1970
   if (/^(int|bigint|smallint|tinyint|mediumint|decimal|numeric|float|double)/i.test(type)) return 'nombre'
   if (/^(date|datetime|timestamp)/i.test(type)) return 'date'
-  if (/^(var)?char\(8\)/i.test(type) && /^date|_date|^dt_/i.test(c.nom)) return 'date8'
+  // Le type arrive seul (« VARCHAR », taille à part) ou avec sa taille (« varchar(8) »).
+  if (/^(var)?char/i.test(type) && (Number(c.taille) === 8 || /\(8\)/.test(type)) && /^date|_date|^dt_/i.test(c.nom)) return 'date8'
   return 'texte'
 }
-const famille = (nature) => (nature === 'date8' ? 'date' : nature)
+const famille = (nature) => (nature === 'date8' || nature === 'dateunix' ? 'date' : nature)
 // Saisie d'une date (AAAA-MM-JJ) → valeur de la base, et inversement.
 const versBase = (v, nature) => (nature === 'date8' ? String(v).replace(/-/g, '') : v)
 const versSaisie = (v, nature) => (nature === 'date8' && /^\d{8}$/.test(String(v)) ? `${v.slice(0, 4)}-${v.slice(4, 6)}-${v.slice(6)}` : v)
@@ -1184,6 +1193,14 @@ function bandeauPhrase(vue) {
     return principalesCache.get(cle)
   }
 
+  // Les référentiels (listes de codes : avancement, types…) reliés directement à la table d'ancrage.
+  function referentielsVoisins(ancre = etatPhrase.depart) {
+    const depart = noeud(ancre)
+    if (!depart) return []
+    return [...depart.voisins].filter((n) => n.type?.id === 'referentiel')
+      .sort((x, y) => (x.table.libelle || x.table.nom).localeCompare(y.table.libelle || y.table.nom, 'fr'))
+  }
+
   // Toutes les conditions, groupes compris (pour le chemin, les étiquettes, le texte).
   const aplatir = (liste) => liste.flatMap((c) => (c.groupe ? aplatir(c.groupe) : [c, ...aplatir(c.sous || [])]))
   const tableDeCondition = (c) => (c.source === 'parc' || c.source === 'machine' ? guidesDispo.machines?.table : c.source === 'fiche' ? guidesDispo.fiche?.table : c.table)
@@ -1193,6 +1210,7 @@ function bandeauPhrase(vue) {
     if (c.source === 'fiche') return Boolean(c.modele)
     // Une table liée seule, sans champ : « ont » = une ligne existe dans cette table, « n'ont pas » = aucune.
     if (!c.colonne) return Boolean(c.table) && c.table !== ancreDe(c) && ['egal', 'different'].includes(c.op)
+    if (c.quand !== undefined && c.quand !== null) return Boolean(c.colonne) && c.valeurs.slice(0, valeursQuand(c.quand)).filter(Boolean).length === valeursQuand(c.quand)
     // « ont » / « n'ont pas » sans valeur : le champ est rempli (ou non), par exemple une table liée qui existe.
     return Boolean(c.colonne) && (SANS_VALEUR.has(c.op) || ['egal', 'different'].includes(c.op) || (c.op === 'entre' ? c.valeurs.length === 2 && c.valeurs.every(Boolean) : Boolean(c.valeurs[0])))
   }
@@ -1218,10 +1236,20 @@ function bandeauPhrase(vue) {
     const champ = `${libelleColonne(col)}${c.table !== etatPhrase.depart ? ` (${libelleTable(c.table)})` : ''}`
     const v = (x) => `« ${famille(nature) === 'date' ? dateFr(x) : c.valeurTexte || x} »`
     if (SANS_VALEUR.has(c.op)) return `qui ${op.replace(/^ont /, `ont ${champ} `)}`
+    if (c.quand) return `qui ${op} ${champ} ${texteQuand(c)}`
     if (['egal', 'different'].includes(c.op) && !c.valeurs[0]) return `qui ${op} ${champ}`
     if (c.op === 'entre') return `qui ont ${champ} entre ${v(c.valeurs[0])} et ${v(c.valeurs[1])}`
     if (['contient', 'ne_contient', 'commence', 'finit'].includes(c.op)) return `qui ${op} ${v(c.valeurs[0])} dans ${champ}`
     return `qui ${libelleOperateur(c.op, famille(nature))} ${champ} ${v(c.valeurs[0])}`
+  }
+  function texteQuand(c) {
+    const [a, b] = c.valeurs
+    const f = (x) => `« ${dateFr(x)} »`
+    if (c.quand === 'entre') return `entre le ${f(a)} et le ${f(b)}`
+    if (c.quand === 'derniers') return `dans les ${a} ${['semaines', 'annees'].includes(b) ? 'dernières' : 'derniers'} ${UNITES[b]}`
+    if (c.quand === 'plus_de') return `il y a plus de ${a} ${UNITES[b]}`
+    if (c.quand === 'periode') return PERIODES[a]
+    return `${QUAND[c.quand]} ${f(a)}`
   }
   function texteListe(liste) {
     const morceaux = []
@@ -1246,7 +1274,8 @@ function bandeauPhrase(vue) {
     if (c.source === 'parc' || c.source === 'machine') return { lien: c.lien, guide: c.source, op: c.op, valeur: c.valeur }
     if (c.source === 'fiche') return { lien: c.lien, guide: 'fiche', op: c.op, type: guidesDispo.fiche?.type, modele: c.modele, champ: c.champ || null, valeurs: c.valeurs.filter(Boolean) }
     const sous = c.sous?.length ? versSpec(c.sous) : []
-    return { lien: c.lien, table: c.table, colonne: c.colonne, op: c.op, valeurs: c.valeurs.filter(Boolean), ...(sous.length ? { sous } : {}) }
+    const quand = c.quand !== undefined && c.quand !== null ? { quand: c.quand, valeurs: c.valeurs.slice(0, valeursQuand(c.quand)) } : {}
+    return { lien: c.lien, table: c.table, colonne: c.colonne, op: c.op, valeurs: c.valeurs.filter(Boolean), ...quand, ...(sous.length ? { sous } : {}) }
   }).filter((c) => c && (!c.groupe || c.groupe.length))
   const conditionsSpec = () => versSpec(etatPhrase.conditions)
   const triSpec = () => etatPhrase.tri.filter((t) => t.colonne).map(({ table, colonne, sens }) => ({ table, colonne, sens }))
@@ -1364,6 +1393,13 @@ function bandeauPhrase(vue) {
     vider(zoneConditions, listeConditions(etatPhrase.conditions, true))
   }
 
+  // L'accolade d'un paquet de conditions liées par ET : étirée sur toute sa hauteur, le trait garde son épaisseur.
+  function accolade() {
+    const a = h('span', { class: 'accolade' })
+    a.innerHTML = '<svg viewBox="0 0 12 100" preserveAspectRatio="none"><path d="M11 1 Q5 1 5 8 L5 44 Q5 50 1 50 Q5 50 5 56 L5 92 Q5 99 11 99" vector-effect="non-scaling-stroke"/></svg>'
+    return a
+  }
+
   // Une liste de conditions (la phrase entière, ou l'intérieur d'un groupe), avec ses boutons d'ajout.
   // ancre : la table d'où partent ces conditions (la table consultée, ou celle d'une condition parente).
   function listeConditions(liste, racine, ancre = etatPhrase.depart) {
@@ -1375,10 +1411,20 @@ function bandeauPhrase(vue) {
       const sous = c.sous?.length ? h('div', { class: 'sous-conditions', style: couleurTable(c.table) ? { '--teinte': couleurTable(c.table) } : {} }, listeConditions(c.sous, false, c.table)) : null
       return h('div', { class: 'bloc-condition' }, h('div', { class: 'ligne-condition' }, lien, editeurCondition(c), retirer), sous)
     })
+    // ET passe avant OU : dès qu'il y a un OU, chaque suite de conditions liées par ET est lue ensemble.
+    // Une accolade (et un fond teinté) la montre ; elle suit chaque changement de ET / OU.
+    let contenu = lignes
+    if (liste.some((c, i) => i > 0 && c.lien === 'ou')) {
+      const paquets = []
+      liste.forEach((c, i) => { if (i === 0 || c.lien === 'ou') paquets.push([]); paquets.at(-1).push(lignes[i]) })
+      contenu = paquets.map((p) => (p.length > 1
+        ? h('div', { class: 'paquet-et', title: 'Lues ensemble : ces conditions doivent être vraies toutes à la fois' }, accolade(), p)
+        : h('div', { class: 'hors-paquet' }, p)))
+    }
     // Une nouvelle condition cherche d'abord dans la table d'où elle part.
     const neuve = () => ({ ...nouvelleCondition(), ancre, source: `table:${ancre}`, table: ancre })
     const ajouter = (quoi) => { liste.push(quoi === 'groupe' ? { id: ++numeroCondition, lien: 'et', groupe: [neuve()] } : neuve()); dessiner() }
-    return h('div', { class: `liste-conditions${racine ? '' : ' interieur'}` }, lignes,
+    return h('div', { class: `liste-conditions${racine ? '' : ' interieur'}${contenu !== lignes ? ' avec-ou' : ''}` }, contenu,
       h('div', { class: 'ajouts-condition' },
         h('button', { class: 'pastille-ajout', onclick: () => ajouter('condition') }, ic('plus', 13), liste.length ? 'et qui…' : 'qui…'),
         racine ? h('button', { class: 'pastille-ajout', title: 'Un groupe entre parenthèses : ses conditions sont lues ensemble', onclick: () => ajouter('groupe') }, ic('plus', 13), '( groupe )') : null))
@@ -1391,11 +1437,11 @@ function bandeauPhrase(vue) {
     const option = (n) => ({ valeur: n.table.nom, libelle: n.table.libelle ? `${n.table.libelle} (${n.table.nom})` : n.table.nom })
     const GUIDES = { parc: 'le parc (AITEC)', machine: 'la machine (et dessous)', fiche: 'la fiche technique' }
     const deja = GUIDES[garder] ? { valeur: garder, libelle: GUIDES[garder] }
-      : garder && garder !== ancre && ![...tablesPrincipales(ancre), ...tablesDuType('secondaire', ancre)].some((n) => n.table.nom === garder) && noeud(garder) ? option(noeud(garder)) : null
+      : garder && garder !== ancre && ![...tablesPrincipales(ancre), ...referentielsVoisins(ancre)].some((n) => n.table.nom === garder) && noeud(garder) ? option(noeud(garder)) : null
     return [
       { groupe: ancre === etatPhrase.depart ? 'La table consultée' : 'Cette table', options: [option(noeud(ancre))] },
       { groupe: 'Tables principales', options: tablesPrincipales(ancre).filter((n) => n.table.nom !== etatPhrase.depart || ancre === etatPhrase.depart).map(option) },
-      { groupe: 'Tables secondaires', options: tablesDuType('secondaire', ancre).filter((n) => n.table.nom !== etatPhrase.depart || ancre === etatPhrase.depart).map(option) },
+      { groupe: 'Référentiels', options: referentielsVoisins(ancre).map(option) },
       deja ? { groupe: 'Déjà choisi', options: [deja] } : null,
     ].filter((g) => g && g.options.length)
   }
@@ -1448,6 +1494,12 @@ function bandeauPhrase(vue) {
     const col = c.table ? colonneDe(c.table, c.colonne) : null
     const nature = c.source && !c.source.startsWith('table:') ? 'guide' : famille(natureColonne(col))
     const ops = OPERATEURS_PAR_NATURE[nature] || OPERATEURS_PAR_NATURE.texte
+    // Une date : les anciennes conditions (après, avant, entre, une valeur) deviennent un choix « quand ».
+    if (nature === 'date' && c.colonne && (c.quand === undefined || c.quand === null)) {
+      const ancien = { sup: 'depuis', inf: 'avant', entre: 'entre' }[c.op] || (c.valeurs[0] ? 'le' : '')
+      Object.assign(c, { quand: ancien, op: c.op === 'different' ? 'different' : 'egal', valeurs: c.valeurs.map((x) => versSaisie(x, 'date8')) })
+    }
+    if (nature !== 'date') delete c.quand
     if (c.op === 'vide' || c.op === 'non_vide') Object.assign(c, { op: c.op === 'vide' ? 'different' : 'egal', valeurs: [] })
     if (!ops.includes(c.op)) c.op = 'egal'
     const op = choixListe(ops.map((o) => ({ valeur: o, libelle: c.source === 'parc' ? (o === 'egal' ? 'sont dans' : 'ne sont pas dans') : c.source === 'machine' ? (o === 'egal' ? 'concernent' : 'ne concernent pas') : libelleOperateur(o, nature) })), c.op,
@@ -1471,14 +1523,20 @@ function bandeauPhrase(vue) {
       classe: `champ-phrase${c.colonne ? ' choisi' : ''}`,
       bulle: (v) => bulleExemple(c.table, v),
       surChoix: (v) => {
-        Object.assign(c, { colonne: v || null, valeurs: [], valeurTexte: null })
+        Object.assign(c, { colonne: v || null, valeurs: [], valeurTexte: null, quand: null })
         dessiner()
         changement()
       },
     }) : null
     const reglerColonnes = c.table && modeAdmin() ? h('button', { class: 'discret icone-seule petit', title: 'Choisir les colonnes proposées pour cette table (administrateur)', onclick: () => choisirColonnes(c.table) }, ic('reglages', 14)) : null
     const autreTable = c.table && c.table !== ancre && c.source?.startsWith('table:')
-    return h('div', { class: 'condition' }, h('span', { class: 'mot-phrase' }, 'qui'), op, table, champ, reglerColonnes, editeurValeur(c, col),
+    const quand = nature === 'date' && c.colonne ? choixListe(Object.entries(QUAND).map(([valeur, libelle]) => ({ valeur, libelle })), c.quand || '', (v) => {
+      c.quand = v
+      c.valeurs = v === 'derniers' || v === 'plus_de' ? [v === 'derniers' ? '3' : '1', v === 'derniers' ? 'mois' : 'annees'] : v === 'periode' ? ['ce_mois'] : []
+      dessiner()
+      changement()
+    }, { classe: 'operateur quand' }) : null
+    return h('div', { class: 'condition' }, h('span', { class: 'mot-phrase' }, 'qui'), op, table, champ, reglerColonnes, quand, nature === 'date' ? editeurDate(c) : editeurValeur(c, col),
       autreTable ? choixPassage(c, ancre) : null,
       // Une condition dans la condition : « qui ont des pièces (qui ont telle famille) ».
       autreTable && !c.sous?.length ? h('button', { class: 'pastille-ajout', title: `Préciser : des ${libelleTable(c.table)} qui…`, onclick: () => { c.sous = [{ ...nouvelleCondition(), ancre: c.table, source: `table:${c.table}`, table: c.table }]; dessiner() } }, ic('plus', 13), 'qui…') : null)
@@ -1505,6 +1563,28 @@ function bandeauPhrase(vue) {
       changement()
     } }, ic('cadenas', 14)) : null
     return h('span', { class: 'choix-passage' }, choix, fixer)
+  }
+
+  // Les valeurs d'une date selon « quand » : un jour, deux jours, une durée (nombre + unité) ou une période.
+  function editeurDate(c) {
+    if (!c.colonne || !c.quand) return null
+    const relire = (el, i, attendre = 0) => {
+      el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => {
+        c.valeurs[i] = el.value
+        el.classList.toggle('choisie', Boolean(el.value))
+        clearTimeout(el._minuterie)
+        el._minuterie = setTimeout(changement, attendre)
+      })
+      if (el.value) el.classList.add('choisie')
+      return el
+    }
+    const jour = (i) => relire(h('input', { type: 'date', class: 'pastille-choix libre', value: versSaisie(c.valeurs[i] || '', 'date8') }), i, 400)
+    const liste = (i, choix) => relire(h('select', { class: 'pastille-choix' }, Object.entries(choix).map(([v, t]) => h('option', { value: v, selected: c.valeurs[i] === v }, t))), i)
+    if (c.quand === 'entre') return h('span', { class: 'valeurs-entre' }, jour(0), h('span', { class: 'mot-phrase' }, 'et le'), jour(1))
+    if (c.quand === 'derniers' || c.quand === 'plus_de') {
+      return h('span', { class: 'valeurs-entre' }, relire(h('input', { type: 'number', min: 1, max: 9999, class: 'pastille-choix libre nombre-duree', value: c.valeurs[0] || '' }), 0, 400), liste(1, UNITES))
+    }
+    return h('span', { class: 'valeurs-entre' }, c.quand === 'periode' ? liste(0, PERIODES) : jour(0))
   }
 
   function editeurValeur(c, col) {
