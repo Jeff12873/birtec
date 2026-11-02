@@ -313,7 +313,11 @@ function anneaux(noeuds, graphe, positions, etiquettes) {
   })
 }
 
-// ---- Autour d'une table : elle au centre, ses voisines sur un 1er anneau, les voisines des voisines ensuite.
+// ---- Autour de la table choisie : elle au centre, puis un cercle par type de table, du plus proche du métier au
+// plus technique (principales, intermédiaires, secondaires, référentiels, techniques). Sur chaque cercle, une
+// table se range du côté des tables déjà placées qu'elle relie (moins de liens croisés) ; les tables sans aucun
+// chemin jusqu'au centre ferment leur cercle.
+const ORDRE_CERCLES = [['principale', 'Principales'], ['intermediaire', 'Intermédiaires'], ['secondaire', 'Secondaires'], ['referentiel', 'Référentiels'], ['technique', 'Techniques']]
 function autour(noeuds, graphe, positions, etiquettes, { source }) {
   const centre = source || [...noeuds].sort(tri)[0]
   const distance = new Map([[centre, 0]])
@@ -325,20 +329,25 @@ function autour(noeuds, graphe, positions, etiquettes, { source }) {
   positions.set(centre, { x: 0, y: 0 })
   etiquettes.push({ x: 0, y: -ECART * 0.9, texte: centre.table.nom })
   const angleDe = (n) => { const p = positions.get(n); return Math.atan2(p.y, p.x) }
+  const loin = (n) => distance.get(n) ?? Infinity
   let r = 0
-  const max = Math.max(0, ...distance.values())
-  for (let d = 1; d <= max + 1; d++) {
-    const liste = d <= max ? noeuds.filter((n) => distance.get(n) === d) : noeuds.filter((n) => !distance.has(n))
+  for (const [type, titre] of ORDRE_CERCLES) {
+    const liste = noeuds.filter((n) => n !== centre && (n.type?.id || 'secondaire') === type)
     if (!liste.length) continue
-    // Chaque table se place du côté de celles qui l'ont amenée (moins de liens croisés).
-    const cle = (n) => {
-      const avant = [...n.voisins].filter((v) => positions.has(v) && distance.get(v) === d - 1)
-      return avant.length ? Math.atan2(avant.reduce((s, v) => s + Math.sin(angleDe(v)), 0), avant.reduce((s, v) => s + Math.cos(angleDe(v)), 0)) : 9
+    // L'angle voulu : la moyenne des voisines déjà placées ; sinon celui d'une voisine de voisine ; sinon à la fin.
+    const voulu = (n) => {
+      let placees = [...n.voisins].filter((v) => positions.has(v) && v !== centre)
+      if (!placees.length) placees = [...n.voisins].flatMap((v) => [...v.voisins]).filter((w) => positions.has(w) && w !== centre && w !== n)
+      return placees.length ? Math.atan2(placees.reduce((s, v) => s + Math.sin(angleDe(v)), 0), placees.reduce((s, v) => s + Math.cos(angleDe(v)), 0)) : null
     }
-    const cles = new Map(liste.map((n) => [n, cle(n)]))
-    liste.sort((a, b) => cles.get(a) - cles.get(b) || tri(a, b))
-    r = surCercle(liste, positions, r + ECART * 2, 0, 0, d === 1 ? -Math.PI / 2 : cles.get(liste[0]) === 9 ? 0 : cles.get(liste[0]))
-    if (d > max) etiquettes.push({ x: 0, y: -r - 16, texte: 'sans lien avec ' + centre.table.nom })
+    const angles = new Map(liste.map((n) => [n, voulu(n)]))
+    // Premier cercle (rien de placé encore) : les plus proches du centre d'abord, les voisines côte à côte.
+    const rang = (n) => (angles.get(n) === null ? 10 + loin(n) : angles.get(n))
+    liste.sort((a, b) => (Number.isFinite(loin(a)) - Number.isFinite(loin(b))) * -1 || rang(a) - rang(b) || loin(a) - loin(b) || tri(a, b))
+    const premier = liste.find((n) => angles.get(n) !== null)
+    // Assez de tour pour que les noms ne se touchent pas (près de deux écarts par table).
+    r = surCercle(liste, positions, Math.max(r + ECART * 2.2, (liste.length * ECART * 1.8) / (2 * Math.PI)), 0, 0, premier ? angles.get(premier) : -Math.PI / 2)
+    etiquettes.push({ x: 0, y: -r - 18, texte: `${titre} (${liste.length})` })
   }
 }
 

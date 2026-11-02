@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.13.7",
+      "date": "2026-11-02",
+      "points": [
+        "« Autour de la table choisie » : un cercle par type de table (principales, intermédiaires, secondaires, référentiels, techniques), chacun nommé ; chaque table se range du côté de celles qu'elle relie"
+      ]
+    },
+    {
       "version": "0.13.6",
       "date": "2026-11-02",
       "points": [
