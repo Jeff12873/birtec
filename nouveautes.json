@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.13.2",
+      "date": "2026-11-02",
+      "points": [
+        "LA PHRASE : une table seule, sans condition (« Je souhaite consulter les RI »), donne aussi le compteur, l'aperçu et « Et maintenant ? » (Créer un rapport, Enregistrer le SQL, Indicateur GMAO)"
+      ]
+    },
+    {
       "version": "0.13.1",
       "date": "2026-11-02",
       "points": [

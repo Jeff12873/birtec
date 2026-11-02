@@ -684,7 +684,7 @@ class VueGraphe {
   // Le chemin construit ailleurs (LA PHRASE) : ses étapes déjà calculées.
   cheminEtapes(depart, etapes) {
     this.source = depart
-    this.chemin = { depart, arrivee: etapes.at(-1)?.vers || depart, etapes, manuel: true }
+    this.chemin = { depart, arrivee: etapes.at(-1)?.vers || depart, etapes, manuel: true, phrase: true }
     this.rappels.surChemin(this.chemin)
     this.toutVoirChemin()
     this.dessiner()
@@ -1250,7 +1250,8 @@ function bandeauPhrase(vue) {
   function changement() {
     if (!etatPhrase.depart) return
     const { depart, etapes } = construireChemin()
-    const cle = etapes.map((e) => `${e.de.table.nom}>${e.vers.table.nom}`).join('|')
+    // La table consultée compte aussi : seule, sans condition, elle fait déjà un chemin (compteur, « Et maintenant ? »).
+    const cle = [depart.table.nom, ...etapes.map((e) => `${e.de.table.nom}>${e.vers.table.nom}`)].join('|')
     if (cle !== tablesDuChemin) {
       tablesDuChemin = cle
       vue.cheminEtapes(depart, etapes) // rappelle majCompteur
@@ -1935,7 +1936,8 @@ function choixType(n, vue) {
 }
 
 function panneauChemin(chemin, vue, panneau) {
-  if (chemin.manuel && !chemin.etapes.length) {
+  // Une table seule choisie par LA PHRASE est un chemin complet (« Et maintenant ? ») ; à la main, il reste à prolonger.
+  if (chemin.manuel && !chemin.phrase && !chemin.etapes.length) {
     return [h('h2', {}, 'Chemin construit'), h('p', { class: 'texte-2' }, `Départ : ${chemin.depart.table.nom}. Ctrl + Maj + clic sur la table suivante pour prolonger le chemin.`),
       h('div', { class: 'actions' }, h('button', { class: 'petit discret', onclick: () => { vue.effacerChemin(); vider(panneau, panneauTable(chemin.depart, vue)) } }, ic('x', 14), 'Effacer'))]
   }
@@ -1946,8 +1948,8 @@ function panneauChemin(chemin, vue, panneau) {
   const { sql, jointures, distinctes, erreur } = sqlDuChemin(chemin)
   const dejaVue = (n, i) => tables.findIndex((t) => t.table.nom === n.table.nom) < i
   return [
-    h('h2', { style: { marginBottom: '4px' } }, chemin.manuel ? 'Chemin construit' : 'Chemin le plus court'),
-    chemin.manuel ? h('p', { class: 'discret', style: { fontSize: '12px', margin: '0 0 4px' } }, 'Ctrl + Maj + clic sur une table pour prolonger.') : null,
+    h('h2', { style: { marginBottom: '4px' } }, chemin.phrase ? 'Chemin de la phrase' : chemin.manuel ? 'Chemin construit' : 'Chemin le plus court'),
+    chemin.manuel && !chemin.phrase ? h('p', { class: 'discret', style: { fontSize: '12px', margin: '0 0 4px' } }, 'Ctrl + Maj + clic sur une table pour prolonger.') : null,
     h('p', { class: 'discret', style: { fontSize: '13px', marginTop: 0 } }, `${jointures.length} jointure(s), ${distinctes.length} tables${distinctes.length < tables.length ? ` (${tables.length - distinctes.length} passage(s) en double, ignoré(s))` : ''}`),
     h('ol', { class: 'chemin-tables' }, tables.map((n, i) => h('li', { style: dejaVue(n, i) ? { opacity: 0.5 } : {} },
       h('span', { class: 'mono' }, n.table.nom),
@@ -1966,7 +1968,7 @@ function panneauChemin(chemin, vue, panneau) {
     h('div', { class: 'actions' },
       h('button', { class: 'petit', onclick: () => navigator.clipboard.writeText(sql).then(() => notifier('Jointures copiées')) }, ic('copier', 14), 'Copier'),
       h('button', { class: 'petit', title: 'Un zip pour Excel : les tables du chemin en CSV (dossier sources), un classeur avec une requête Power Query par table, l’image du chemin et ses jointures', onclick: () => extraireTables(distinctes, modeAdmin() ? { image: imageDuChemin(vue, chemin, sql), sql } : { image: imageDuChemin(vue, chemin, '') }) }, ic('telecharger', 14), `Extraire pour Excel (${distinctes.length} tables)`),
-      chemin.manuel ? h('button', { class: 'petit discret', title: 'Retirer la dernière table du chemin', onclick: () => vue.retirerDernier() }, ic('retour', 14), 'Retirer la dernière') : null,
+      chemin.manuel && !chemin.phrase ? h('button', { class: 'petit discret', title: 'Retirer la dernière table du chemin', onclick: () => vue.retirerDernier() }, ic('retour', 14), 'Retirer la dernière') : null,
       h('button', { class: 'petit discret', onclick: () => { vue.effacerChemin(); vider(panneau, panneauTable(chemin.depart, vue)) } }, ic('x', 14), 'Effacer'),
     ),
     etMaintenant(chemin, distinctes),
