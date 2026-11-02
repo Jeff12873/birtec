@@ -320,35 +320,93 @@ function anneaux(noeuds, graphe, positions, etiquettes) {
 const ORDRE_CERCLES = [['principale', 'Principales'], ['intermediaire', 'Intermédiaires'], ['secondaire', 'Secondaires'], ['referentiel', 'Référentiels'], ['technique', 'Techniques']]
 function autour(noeuds, graphe, positions, etiquettes, { source }) {
   const centre = source || [...noeuds].sort(tri)[0]
-  const distance = new Map([[centre, 0]])
-  const file = [centre]
-  while (file.length) {
-    const n = file.shift()
-    for (const v of n.voisins) if (!distance.has(v)) { distance.set(v, distance.get(n) + 1); file.push(v) }
-  }
   positions.set(centre, { x: 0, y: 0 })
   etiquettes.push({ x: 0, y: -ECART * 0.9, texte: centre.table.nom })
   const angleDe = (n) => { const p = positions.get(n); return Math.atan2(p.y, p.x) }
-  const loin = (n) => distance.get(n) ?? Infinity
+  const moyenne = (angles) => Math.atan2(angles.reduce((s, a) => s + Math.sin(a), 0), angles.reduce((s, a) => s + Math.cos(a), 0))
   let r = 0
+  let premierCercle = true
   for (const [type, titre] of ORDRE_CERCLES) {
     const liste = noeuds.filter((n) => n !== centre && (n.type?.id || 'secondaire') === type)
     if (!liste.length) continue
-    // L'angle voulu : la moyenne des voisines déjà placées ; sinon celui d'une voisine de voisine ; sinon à la fin.
-    const voulu = (n) => {
-      let placees = [...n.voisins].filter((v) => positions.has(v) && v !== centre)
-      if (!placees.length) placees = [...n.voisins].flatMap((v) => [...v.voisins]).filter((w) => positions.has(w) && w !== centre && w !== n)
-      return placees.length ? Math.atan2(placees.reduce((s, v) => s + Math.sin(angleDe(v)), 0), placees.reduce((s, v) => s + Math.cos(angleDe(v)), 0)) : null
-    }
-    const angles = new Map(liste.map((n) => [n, voulu(n)]))
-    // Premier cercle (rien de placé encore) : les plus proches du centre d'abord, les voisines côte à côte.
-    const rang = (n) => (angles.get(n) === null ? 10 + loin(n) : angles.get(n))
-    liste.sort((a, b) => (Number.isFinite(loin(a)) - Number.isFinite(loin(b))) * -1 || rang(a) - rang(b) || loin(a) - loin(b) || tri(a, b))
-    const premier = liste.find((n) => angles.get(n) !== null)
     // Assez de tour pour que les noms ne se touchent pas (près de deux écarts par table).
-    r = surCercle(liste, positions, Math.max(r + ECART * 2.2, (liste.length * ECART * 1.8) / (2 * Math.PI)), 0, 0, premier ? angles.get(premier) : -Math.PI / 2)
+    r = Math.max(r + ECART * 2.2, (liste.length * ECART * 1.8) / (2 * Math.PI))
+    if (premierCercle) ordonnerPremierCercle(liste, noeuds, r, positions)
+    else {
+      // L'angle voulu : au milieu des tables déjà placées qu'elle relie (sinon de celles que relient ses voisines).
+      const voulus = new Map(liste.map((n) => {
+        let placees = [...n.voisins].filter((v) => positions.has(v) && v !== centre)
+        if (!placees.length) placees = [...n.voisins].flatMap((v) => [...v.voisins]).filter((w) => positions.has(w) && w !== centre && w !== n)
+        return [n, placees.length ? moyenne(placees.map(angleDe)) : null]
+      }))
+      placerAuxAngles(liste, voulus, r, positions)
+    }
+    premierCercle = false
     etiquettes.push({ x: 0, y: -r - 18, texte: `${titre} (${liste.length})` })
   }
+}
+
+// Le premier cercle (rien n'est encore placé autour) : régulier, dans l'ordre qui rapproche les tables liées
+// (directement, ou par une table qui les relie toutes les deux) ; amélioré par échanges tant que ça raccourcit.
+function ordonnerPremierCercle(liste, noeuds, r, positions) {
+  const dans = new Set(liste)
+  const poids = (a, b) => (a.voisins.has(b) ? 3 : 0) + noeuds.filter((x) => !dans.has(x) && x.voisins.has(a) && x.voisins.has(b)).length
+  const P = liste.map((a) => liste.map((b) => (a === b ? 0 : poids(a, b))))
+  const n = liste.length
+  const ecart = (i, j) => { const d = Math.abs(i - j) % n; return Math.min(d, n - d) }
+  const ordre = liste.map((_, i) => i)
+  const cout = () => { let c = 0; for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) c += P[ordre[i]][ordre[j]] * ecart(i, j); return c }
+  let meilleur = cout()
+  for (let tour = 0, mieux = true; mieux && tour < 50; tour++) {
+    mieux = false
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+      ;[ordre[i], ordre[j]] = [ordre[j], ordre[i]]
+      const c = cout()
+      if (c < meilleur) { meilleur = c; mieux = true } else [ordre[i], ordre[j]] = [ordre[j], ordre[i]]
+    }
+  }
+  ordre.forEach((k, i) => {
+    const angle = -Math.PI / 2 + (2 * Math.PI * i) / n
+    positions.set(liste[k], { x: r * Math.cos(angle), y: r * Math.sin(angle) })
+  })
+}
+
+// Chaque table à son angle voulu sur le cercle, puis écartées juste assez pour ne pas se toucher ; celles sans
+// angle voulu vont dans les plus grands vides.
+function placerAuxAngles(liste, voulus, r, positions) {
+  const TOUR = 2 * Math.PI
+  const ecartMini = Math.min(TOUR / liste.length, (ECART * 1.6) / r)
+  const norme = (a) => ((a % TOUR) + TOUR) % TOUR
+  const places = liste.filter((n) => voulus.get(n) !== null).map((n) => ({ n, a: norme(voulus.get(n)) }))
+  for (let tour = 0; tour < 300; tour++) {
+    places.sort((x, y) => x.a - y.a)
+    let bouge = false
+    for (let i = 0; i < places.length && places.length > 1; i++) {
+      const p = places[i]
+      const q = places[(i + 1) % places.length]
+      const ecart = norme(q.a - p.a) || (i === places.length - 1 ? TOUR : 0)
+      if (ecart >= ecartMini - 1e-9) continue
+      const pousse = (ecartMini - ecart) / 2 + 1e-4
+      p.a = norme(p.a - pousse)
+      q.a = norme(q.a + pousse)
+      bouge = true
+    }
+    if (!bouge) break
+  }
+  // Les tables sans angle : une à une dans le plus grand vide.
+  for (const n of liste.filter((x) => voulus.get(x) === null).sort(tri)) {
+    places.sort((x, y) => x.a - y.a)
+    if (!places.length) { places.push({ n, a: norme(-Math.PI / 2) }); continue }
+    let meilleur = 0
+    let taille = -1
+    places.forEach((p, i) => {
+      const q = places[(i + 1) % places.length]
+      const t = places.length === 1 ? TOUR : norme(q.a - p.a)
+      if (t > taille) { taille = t; meilleur = i }
+    })
+    places.push({ n, a: norme(places[meilleur].a + taille / 2) })
+  }
+  for (const { n, a } of places) positions.set(n, { x: r * Math.cos(a), y: r * Math.sin(a) })
 }
 
 // ---- Hiérarchie : une table qui en désigne une autre par sa clé (ID_X → X) est sa fille et se range dessous.

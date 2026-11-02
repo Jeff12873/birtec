@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.13.8",
+      "date": "2026-11-02",
+      "points": [
+        "« Autour de la table choisie » : des chemins courts — les principales liées sont voisines sur leur cercle, et chaque autre table est posée à l'angle des tables qu'elle relie (une liaison entre ses deux tables) au lieu d'être répartie régulièrement"
+      ]
+    },
+    {
       "version": "0.13.7",
       "date": "2026-11-02",
       "points": [
