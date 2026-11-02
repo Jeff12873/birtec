@@ -3,22 +3,35 @@
 // le .ktec) n'est jamais touchée.
 //   disposer(id, graphe, { source }) → { positions: Map(noeud → { x, y }), etiquettes: [{ x, y, texte }],
 //                                        trace: [{ x, y }] (un dessin en filigrane), liensDiscrets,
-//                                        image: { x, y, largeur, hauteur } (l'image du motif, en fond), pluie }
+//                                        image: { x, y, largeur, hauteur } (l'image du motif, en fond), pluie,
+//                                        animer: (secondes) → Map(noeud → { x, y }) pour un motif dynamique }
+// Les motifs sont rangés par catégorie dans le menu : utiles, fantaisies, dynamiques (qui bougent sans cesse).
 
 const ECART = 46 // distance visée entre deux bulles voisines
 
+export const CATEGORIES = { utiles: 'Utiles', fantaisies: 'Fantaisies', dynamiques: 'Dynamiques' }
 export const MOTIFS = [
-  { id: 'libre', nom: 'Ma disposition' },
-  { id: 'types', nom: 'Par types (axe des principales)' },
-  { id: 'galaxie', nom: 'Galaxie (tout, pour l’impression)' },
-  { id: 'anneaux', nom: 'Anneaux par importance' },
-  { id: 'autour', nom: 'Autour de la table choisie' },
-  { id: 'hierarchie', nom: 'Hiérarchie (mères en haut)' },
-  { id: 'galaxies', nom: 'Amas (groupes liés)' },
-  { id: 'familles', nom: 'Familles de noms' },
-  { id: 'cercle', nom: 'Cercle' },
-  { id: 'spirale', nom: 'Spirale' },
-  { id: 'concombre', nom: 'Concombre masqué', cache: true }, // à découvrir : l'étoile verte du ciel
+  { id: 'libre', nom: 'Ma disposition' }, // seule en tête du menu, hors catégorie
+  { id: 'types', nom: 'Par types (axe des principales)', categorie: 'utiles' },
+  { id: 'galaxie', nom: 'Galaxie (tout, pour l’impression)', categorie: 'utiles' },
+  { id: 'autour', nom: 'Autour de la table choisie', categorie: 'utiles' },
+  { id: 'arbre', nom: 'Arbre depuis la table choisie', categorie: 'utiles' },
+  { id: 'hierarchie', nom: 'Hiérarchie (mères en haut)', categorie: 'utiles' },
+  { id: 'anneaux', nom: 'Anneaux par importance', categorie: 'utiles' },
+  { id: 'galaxies', nom: 'Amas (groupes liés)', categorie: 'utiles' },
+  { id: 'familles', nom: 'Familles de noms', categorie: 'utiles' },
+  { id: 'alphabet', nom: 'Grille alphabétique', categorie: 'utiles' },
+  { id: 'cercle', nom: 'Cercle', categorie: 'fantaisies' },
+  { id: 'spirale', nom: 'Spirale', categorie: 'fantaisies' },
+  { id: 'etoile', nom: 'Étoile', categorie: 'fantaisies' },
+  { id: 'coeur', nom: 'Cœur', categorie: 'fantaisies' },
+  { id: 'fleur', nom: 'Fleur', categorie: 'fantaisies' },
+  { id: 'vague', nom: 'Vague', categorie: 'fantaisies' },
+  { id: 'concombre', nom: 'Concombre masqué', categorie: 'fantaisies', cache: true }, // à découvrir : l'étoile verte du ciel
+  { id: 'galaxie_tournante', nom: 'Galaxie tournante', categorie: 'dynamiques' },
+  { id: 'orbites', nom: 'Orbites par type', categorie: 'dynamiques' },
+  { id: 'pulsation', nom: 'Pulsation', categorie: 'dynamiques' },
+  { id: 'flottement', nom: 'Flottement', categorie: 'dynamiques' },
 ]
 
 const tri = (a, b) => b.degre - a.degre || a.table.nom.localeCompare(b.table.nom)
@@ -28,7 +41,7 @@ export function disposer(id, graphe, options = {}) {
   const etiquettes = []
   const noeuds = [...graphe.noeuds]
   if (!noeuds.length) return { positions, etiquettes }
-  const faire = { types, galaxie: plan, anneaux, autour, hierarchie, galaxies, familles, cercle, spirale, concombre }[id]
+  const faire = { types, galaxie: plan, anneaux, autour, arbre, hierarchie, galaxies, familles, alphabet, cercle, spirale, etoile, coeur, fleur, vague, concombre, galaxie_tournante: galaxieTournante, orbites, pulsation, flottement }[id]
   const extra = faire?.(noeuds, graphe, positions, etiquettes, options) || {}
   return { positions, etiquettes, ...extra }
 }
@@ -300,16 +313,19 @@ function rangerAmas(amas, positions, etiquettes, titre) {
   }
 }
 
-// ---- Anneaux : carrefours au centre, puis chaque niveau de couleur sur un anneau plus large.
+// ---- Anneaux par importance : les tables les plus reliées au centre, puis un anneau par tranche du nombre de liens.
+const TRANCHES = [[8, 'Carrefours (8 liens et plus)'], [4, 'Très reliées (4 à 7)'], [2, 'Reliées (2 ou 3)'], [1, 'Un seul lien'], [0, 'Sans lien']]
 function anneaux(noeuds, graphe, positions, etiquettes) {
   let r = 0
-  graphe.niveaux.forEach((niveau, i) => {
-    const liste = noeuds.filter((n) => n.niveau === niveau).sort(tri)
+  let min = Infinity
+  TRANCHES.forEach(([seuil, nom]) => {
+    const liste = noeuds.filter((n) => n.degre >= seuil && n.degre < min).sort(tri)
+    min = seuil
     if (!liste.length) return
-    if (i === 0 && liste.length === 1) return positions.set(liste[0], { x: 0, y: 0 })
+    if (!r && liste.length === 1) return positions.set(liste[0], { x: 0, y: 0 }), (r = ECART * 0.5)
     // Départ décalé d'un demi-pas : le haut de l'anneau reste libre pour son nom.
-    r = surCercle(liste, positions, r + ECART * 1.7, 0, 0, -Math.PI / 2 + Math.PI / liste.length)
-    etiquettes.push({ x: 0, y: -r - 16, texte: niveau.nom })
+    r = surCercle(liste, positions, r + ECART * 1.9, 0, 0, -Math.PI / 2 + Math.PI / liste.length)
+    etiquettes.push({ x: 0, y: -r - 16, texte: nom })
   })
 }
 
@@ -579,4 +595,181 @@ function concombre(noeuds, graphe, positions) {
   }
   dedans.forEach((n) => positions.set(n, { x: 0, y: 0 }))
   return extra
+}
+
+// ---------------------------------------------------------------- utiles (suite)
+
+// ---- Arbre depuis la table choisie : elle à gauche, puis une colonne par distance (1 lien, 2 liens…). Dans
+// chaque colonne, une table se range à la hauteur moyenne de celles qui l'ont amenée (peu de liens croisés).
+// Les tables sans chemin jusqu'à elle ferment la marche, à droite.
+function arbre(noeuds, graphe, positions, etiquettes, { source }) {
+  const racine = source || [...noeuds].sort(tri)[0]
+  const distance = new Map([[racine, 0]])
+  const file = [racine]
+  while (file.length) {
+    const n = file.shift()
+    for (const v of [...n.voisins].sort(tri)) if (!distance.has(v)) { distance.set(v, distance.get(n) + 1); file.push(v) }
+  }
+  const max = Math.max(0, ...distance.values())
+  const PAS_X = 230
+  const PAS_Y = ECART * 1.25
+  positions.set(racine, { x: 0, y: 0 })
+  for (let d = 1; d <= max + 1; d++) {
+    const liste = d <= max ? noeuds.filter((n) => distance.get(n) === d) : noeuds.filter((n) => !distance.has(n))
+    if (!liste.length) continue
+    const voulu = (n) => {
+      const avant = [...n.voisins].filter((v) => positions.has(v) && distance.get(v) === d - 1).map((v) => positions.get(v).y)
+      return avant.length ? avant.reduce((s, y) => s + y, 0) / avant.length : Infinity
+    }
+    const ys = new Map(liste.map((n) => [n, voulu(n)]))
+    liste.sort((a, b) => ys.get(a) - ys.get(b) || tri(a, b))
+    const haut = -((liste.length - 1) * PAS_Y) / 2
+    liste.forEach((n, i) => positions.set(n, { x: d * PAS_X, y: haut + i * PAS_Y }))
+    etiquettes.push({ x: d * PAS_X, y: haut - 40, texte: d <= max ? `${d} lien${d > 1 ? 's' : ''}` : 'sans chemin' })
+  }
+  etiquettes.push({ x: 0, y: -40, texte: racine.table.nom })
+}
+
+// ---- Grille alphabétique : pour retrouver une table d'un coup d'œil, de A à Z, en lignes.
+function alphabet(noeuds, graphe, positions, etiquettes) {
+  const liste = [...noeuds].sort((a, b) => a.table.nom.localeCompare(b.table.nom, 'fr'))
+  const colonnes = Math.max(1, Math.round(Math.sqrt(liste.length * 2.2)))
+  let lettre = ''
+  liste.forEach((n, i) => {
+    const p = { x: (i % colonnes) * 170, y: Math.floor(i / colonnes) * 70 }
+    positions.set(n, p)
+    const initiale = n.table.nom[0].toUpperCase()
+    if (initiale !== lettre) { lettre = initiale; etiquettes.push({ x: p.x, y: p.y - 26, texte: lettre }) }
+  })
+}
+
+// ---------------------------------------------------------------- fantaisies
+
+// Des tables le long d'une courbe fermée (ou ouverte), espacées régulièrement, les plus reliées d'abord.
+// courbe(t), t de 0 à 1 → { x, y } en unités quelconques : elle est mise à l'échelle pour que deux bulles
+// voisines soient à un peu plus d'un écart l'une de l'autre.
+function surCourbe(liste, positions, courbe, { fermee = true, espace = 1.3 } = {}) {
+  const points = []
+  for (let i = 0; i <= 1200; i++) points.push(courbe(i / 1200))
+  const cumul = [0]
+  for (let i = 1; i < points.length; i++) cumul.push(cumul[i - 1] + Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y))
+  const total = cumul.at(-1) || 1
+  const echelle = (liste.length * ECART * espace) / total
+  const pas = total / (fermee ? liste.length : Math.max(1, liste.length - 1))
+  let k = 0
+  liste.forEach((n, i) => {
+    const voulu = i * pas
+    while (k < cumul.length - 2 && cumul[k + 1] < voulu) k++
+    const f = (voulu - cumul[k]) / ((cumul[k + 1] - cumul[k]) || 1)
+    positions.set(n, { x: (points[k].x + (points[k + 1].x - points[k].x) * f) * echelle, y: (points[k].y + (points[k + 1].y - points[k].y) * f) * echelle })
+  })
+}
+const enOrdre = (noeuds) => groupesLies(noeuds).sort((a, b) => b.length - a.length).flatMap((g) => g.sort(tri))
+
+// ---- Étoile à cinq branches.
+function etoile(noeuds, graphe, positions) {
+  surCourbe(enOrdre(noeuds), positions, (t) => {
+    const branche = t * 10
+    const i = Math.floor(branche) % 10
+    const f = branche - Math.floor(branche)
+    const sommet = (k) => { const a = -Math.PI / 2 + (k * Math.PI) / 5; const r = k % 2 ? 0.42 : 1; return { x: r * Math.cos(a), y: r * Math.sin(a) } }
+    const a = sommet(i)
+    const b = sommet(i + 1)
+    return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }
+  })
+}
+
+// ---- Cœur.
+function coeur(noeuds, graphe, positions) {
+  surCourbe(enOrdre(noeuds), positions, (t) => {
+    const a = t * 2 * Math.PI
+    return { x: 16 * Math.sin(a) ** 3, y: -(13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a)) }
+  })
+}
+
+// ---- Fleur : six pétales, et les plus reliées en cœur de fleur.
+function fleur(noeuds, graphe, positions) {
+  const liste = enOrdre(noeuds)
+  const coeurFleur = [...noeuds].sort(tri).slice(0, Math.min(7, Math.ceil(noeuds.length / 8)))
+  const petales = liste.filter((n) => !coeurFleur.includes(n))
+  surCourbe(petales, positions, (t) => { const a = t * 2 * Math.PI; const r = 0.25 + Math.abs(Math.cos(3 * a)); return { x: r * Math.cos(a), y: r * Math.sin(a) } })
+  surCercle(coeurFleur, positions, ECART * 1.1)
+}
+
+// ---- Vague : trois rangées ondulantes.
+function vague(noeuds, graphe, positions) {
+  const liste = enOrdre(noeuds)
+  const rangees = 3
+  const parRangee = Math.ceil(liste.length / rangees)
+  for (let r = 0; r < rangees; r++) {
+    surCourbe(liste.slice(r * parRangee, (r + 1) * parRangee), positions, (t) => ({ x: t * 12, y: Math.sin(t * 4 * Math.PI + r * 0.9) * 1.4 + r * 2.6 }), { fermee: false, espace: 1.6 })
+  }
+}
+
+// ---------------------------------------------------------------- dynamiques (animées sans cesse)
+
+// ---- Galaxie tournante : trois bras en spirale, les plus reliées au cœur ; tout tourne lentement, le cœur un
+// peu plus vite, et chaque étoile ondule légèrement sur son bras.
+function galaxieTournante(noeuds, graphe, positions) {
+  const liste = [...noeuds].sort(tri)
+  const bras = 3
+  const base = liste.map((n, i) => {
+    const rang = Math.floor(i / bras)
+    const rayon = ECART * 0.9 + Math.sqrt(rang) * ECART * 1.5
+    return { n, rayon, angle: (i % bras) * ((2 * Math.PI) / bras) + rayon * 0.011, phase: i * 1.7 }
+  })
+  const animer = (t) => new Map(base.map(({ n, rayon, angle, phase }) => {
+    const a = angle + t * (0.06 + 0.12 * (ECART * 2) / (rayon + ECART * 2))
+    const r = rayon * (1 + 0.025 * Math.sin(t * 1.3 + phase))
+    return [n, { x: r * Math.cos(a), y: r * Math.sin(a) }]
+  }))
+  for (const [n, p] of animer(0)) positions.set(n, p)
+  return { animer }
+}
+
+// ---- Orbites par type : un anneau par type autour de la table la plus reliée, chacun tourne à sa vitesse et
+// un sur deux dans l'autre sens.
+function orbites(noeuds, graphe, positions, etiquettes, { source }) {
+  const centre = source || [...noeuds].sort(tri)[0]
+  const anneaux = []
+  let r = 0
+  for (const [type] of ORDRE_CERCLES) {
+    const liste = noeuds.filter((n) => n !== centre && (n.type?.id || 'secondaire') === type).sort(tri)
+    if (!liste.length) continue
+    r = Math.max(r + ECART * 2.2, (liste.length * ECART * 1.6) / (2 * Math.PI))
+    anneaux.push({ liste, r, sens: anneaux.length % 2 ? -1 : 1, vitesse: 0.22 / (anneaux.length + 1) })
+  }
+  const animer = (t) => {
+    const p = new Map([[centre, { x: 0, y: 0 }]])
+    for (const { liste, r, sens, vitesse } of anneaux) {
+      liste.forEach((n, i) => {
+        const a = -Math.PI / 2 + (2 * Math.PI * i) / liste.length + sens * vitesse * t
+        p.set(n, { x: r * Math.cos(a), y: r * Math.sin(a) })
+      })
+    }
+    return p
+  }
+  for (const [n, q] of animer(0)) positions.set(n, q)
+  return { animer }
+}
+
+// ---- Pulsation : les anneaux par importance respirent, l'un après l'autre, comme une onde.
+function pulsation(noeuds, graphe, positions, etiquettes) {
+  anneaux(noeuds, graphe, positions, etiquettes)
+  etiquettes.length = 0
+  const base = new Map(positions)
+  const animer = (t) => new Map([...base].map(([n, q]) => {
+    const r = Math.hypot(q.x, q.y)
+    const f = 1 + 0.07 * Math.sin(t * 2 - r / 90)
+    return [n, { x: q.x * f, y: q.y * f }]
+  }))
+  return { animer }
+}
+
+// ---- Flottement : chaque bulle dérive doucement autour de sa place de « Ma disposition ».
+function flottement(noeuds, graphe, positions, etiquettes, { utilisateur }) {
+  const base = noeuds.map((n, i) => ({ n, x: utilisateur?.get(n)?.x ?? n.x, y: utilisateur?.get(n)?.y ?? n.y, a: 0.4 + (i % 7) * 0.07, b: 0.3 + (i % 5) * 0.09, phase: i * 2.3 }))
+  const animer = (t) => new Map(base.map(({ n, x, y, a, b, phase }) => [n, { x: x + 9 * Math.sin(t * a + phase), y: y + 9 * Math.cos(t * b + phase * 0.7) }]))
+  for (const [n, q] of animer(0)) positions.set(n, q)
+  return { animer }
 }

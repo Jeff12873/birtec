@@ -1,6 +1,7 @@
 // Un menu déroulant aux couleurs du thème, quel que soit le navigateur (les listes natives prennent sinon
 // les couleurs du système). Au-delà de 12 choix, un champ en haut de la liste filtre en tapant.
-//   menuDeroulant({ choix: [{ valeur, libelle, nombre }], valeur, surChoix: (valeur) => …, haut, classe, bulle })
+//   menuDeroulant({ choix: [{ valeur, libelle, nombre, groupe }], valeur, surChoix: (valeur) => …, haut, classe, bulle })
+// groupe : un titre de catégorie, écrit au-dessus du premier choix de chaque groupe.
 // haut : la liste s'ouvre au-dessus du bouton (menus posés en bas de l'écran).
 // classe : classe en plus sur le menu ; bulle(valeur) : texte (ou promesse) montré dans une bulle à côté du choix
 // survolé, par exemple quelques valeurs d'exemple d'une colonne.
@@ -33,12 +34,16 @@ export function menuDeroulant({ choix, valeur = '', surChoix, haut = false, clas
   }
   let surligne = -1
 
-  const visibles = () => [...options.children]
+  const visibles = () => [...options.querySelectorAll('.menu-theme-choix')]
   function dessiner() {
     const texte = (filtre?.value || '').trim().toLowerCase()
-    options.replaceChildren(...choix.filter((c) => !texte || c.libelle.toLowerCase().includes(texte)).map((c) =>
-      h('div', { class: `menu-theme-choix${c.valeur === actuel?.valeur ? ' on' : ''}`, onclick: () => choisir(c), onmouseenter: (e) => montrerBulle(e.currentTarget, c) },
-        h('span', {}, c.libelle), c.nombre !== undefined ? h('small', {}, String(c.nombre)) : null)))
+    let groupe = null
+    options.replaceChildren(...choix.filter((c) => !texte || c.libelle.toLowerCase().includes(texte)).flatMap((c) => {
+      const titre = c.groupe && c.groupe !== groupe ? h('div', { class: 'menu-theme-groupe' }, c.groupe) : null
+      groupe = c.groupe || groupe
+      return [titre, h('div', { class: `menu-theme-choix${c.valeur === actuel?.valeur ? ' on' : ''}`, onclick: () => choisir(c), onmouseenter: (e) => montrerBulle(e.currentTarget, c) },
+        h('span', {}, c.libelle), c.nombre !== undefined ? h('small', {}, String(c.nombre)) : null)].filter(Boolean)
+    }))
     surligne = -1
   }
   function marquer(i) {

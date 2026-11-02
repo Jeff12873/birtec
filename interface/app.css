@@ -364,3 +364,5 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 .separateur-ou .pastille-lien { margin: 0; }
 .pastille-ajout.ou { border-color: color-mix(in srgb, #3d9bff 50%, transparent); }
 .reglages-schema [hidden] { display: none !important; }
+.menu-theme-groupe { margin-top: 6px; padding: 10px 10px 4px; border-top: 1px solid var(--bord); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.menu-theme-groupe:first-child { margin-top: 0; border-top: none; padding-top: 4px; }

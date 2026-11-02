@@ -21,7 +21,7 @@ import { api } from '/socle/api.js'
 import { etat, modeAdmin } from '/socle/etat.js'
 import { extraireTables } from '../base/vue.js'
 import { pdfDepuisJpeg } from '/socle/pdf.js'
-import { MOTIFS, disposer, CASE_GALAXIE } from '../../interface/motifs.js'
+import { MOTIFS, CATEGORIES, disposer, CASE_GALAXIE } from '../../interface/motifs.js'
 import { menuDeroulant } from '../../interface/menu-deroulant.js'
 import { TYPES, typeParId, devinerTypes, coutLien } from '../../interface/types.js'
 
@@ -105,7 +105,7 @@ export default {
     function dessinerMotif() {
       vider(zoneMotif,
         // Un motif caché n'apparaît dans le menu que pendant qu'il est affiché.
-        menuDeroulant({ choix: MOTIFS.filter((m) => !m.cache || m.id === vue.motif).map((m) => ({ valeur: m.id, libelle: m.nom })), valeur: vue.motif || 'libre', surChoix: choisirMotif }))
+        menuDeroulant({ choix: MOTIFS.filter((m) => !m.cache || m.id === vue.motif).map((m) => ({ valeur: m.id, libelle: m.nom, groupe: CATEGORIES[m.categorie] })), valeur: vue.motif || 'libre', surChoix: choisirMotif }))
     }
     // La galaxie a besoin de toutes les tables, écartées comprises : on recharge avec elles, puis on la dispose.
     function choisirMotif(id) {
@@ -397,6 +397,14 @@ class VueGraphe {
       } else if (this.chaleur > 0.004 && !this.motif) {
         this.simuler()
         this.dessiner()
+      } else if (this.animation) {
+        // Motif dynamique : chaque bulle à sa place du moment (sauf celle qu'on tient à la souris).
+        for (const [n, p] of this.animation((performance.now() - (this.debutAnimation || performance.now())) / 1000)) {
+          if (n === this.tenu) continue
+          n.x = p.x
+          n.y = p.y
+        }
+        this.dessiner()
       } else if (this.allumage || this.fondu) {
         this.dessiner()
       }
@@ -443,6 +451,7 @@ class VueGraphe {
     let cibles
     if (id === 'libre') {
       if (!this.utilisateur) return
+      this.animation = null
       cibles = this.utilisateur
       this.etiquettes = []
       this.trace = null
@@ -451,8 +460,11 @@ class VueGraphe {
       this.pluie = false
     } else {
       if (!this.utilisateur) this.utilisateur = new Map(this.graphe.noeuds.map((n) => [n, { x: n.x, y: n.y, fige: n.fige }]))
-      const r = disposer(id, this.graphe, { source: this.source })
+      const r = disposer(id, this.graphe, { source: this.source, utilisateur: this.utilisateur })
       cibles = ecarter(r.positions, reglages.ecartement || 1)
+      // Un motif dynamique : ses places changent à chaque image (écartement compris), une fois la transition finie.
+      const e = reglages.ecartement || 1
+      this.animation = r.animer ? (t) => ecarter(r.animer(t), e) : null
       r.etiquettes = ecarterEtiquettes(r.etiquettes, r.positions, reglages.ecartement || 1)
       this.etiquettes = r.etiquettes
       this.trace = r.trace || null
@@ -485,6 +497,7 @@ class VueGraphe {
     for (const cle of ['x', 'y', 'k']) this.vue[cle] = vueDepart[cle] + (vueArrivee[cle] - vueDepart[cle]) * doux
     if (t < 1) return
     if (this.image) this.fondu = performance.now()
+    if (this.animation) this.debutAnimation = performance.now()
     if (this.transition.retour) {
       for (const [n, p] of this.utilisateur) n.fige = p.fige
       this.utilisateur = null

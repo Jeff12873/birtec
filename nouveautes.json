@@ -1,6 +1,17 @@
 {
   "versions": [
     {
+      "version": "0.13.9",
+      "date": "2026-11-02",
+      "points": [
+        "Menu des dispositions en catégories : « Ma disposition » en tête, puis Utiles, Fantaisies et Dynamiques",
+        "Nouvelles dispositions utiles : arbre depuis la table choisie, grille alphabétique",
+        "Nouvelles fantaisies : étoile, cœur, fleur, vague",
+        "Dispositions dynamiques, animées en continu : galaxie tournante, orbites par type, pulsation, flottement",
+        "« Anneaux par importance » réparé (il ne s'affichait plus) : un anneau par nombre de liens"
+      ]
+    },
+    {
       "version": "0.13.8",
       "date": "2026-11-02",
       "points": [
