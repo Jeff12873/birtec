@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.13.10",
+      "date": "2026-11-02",
+      "points": [
+        "La disposition pour l'impression s'appelle « Tables entières » et a sa propre catégorie, « Impression », en fin de menu"
+      ]
+    },
+    {
       "version": "0.13.9",
       "date": "2026-11-02",
       "points": [

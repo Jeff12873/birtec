@@ -5,15 +5,15 @@
 //                                        trace: [{ x, y }] (un dessin en filigrane), liensDiscrets,
 //                                        image: { x, y, largeur, hauteur } (l'image du motif, en fond), pluie,
 //                                        animer: (secondes) → Map(noeud → { x, y }) pour un motif dynamique }
-// Les motifs sont rangés par catégorie dans le menu : utiles, fantaisies, dynamiques (qui bougent sans cesse).
+// Les motifs sont rangés par catégorie dans le menu : utiles, fantaisies, dynamiques (qui bougent sans cesse),
+// impression.
 
 const ECART = 46 // distance visée entre deux bulles voisines
 
-export const CATEGORIES = { utiles: 'Utiles', fantaisies: 'Fantaisies', dynamiques: 'Dynamiques' }
+export const CATEGORIES = { utiles: 'Utiles', fantaisies: 'Fantaisies', dynamiques: 'Dynamiques', impression: 'Impression' }
 export const MOTIFS = [
   { id: 'libre', nom: 'Ma disposition' }, // seule en tête du menu, hors catégorie
   { id: 'types', nom: 'Par types (axe des principales)', categorie: 'utiles' },
-  { id: 'galaxie', nom: 'Galaxie (tout, pour l’impression)', categorie: 'utiles' },
   { id: 'autour', nom: 'Autour de la table choisie', categorie: 'utiles' },
   { id: 'arbre', nom: 'Arbre depuis la table choisie', categorie: 'utiles' },
   { id: 'hierarchie', nom: 'Hiérarchie (mères en haut)', categorie: 'utiles' },
@@ -32,6 +32,8 @@ export const MOTIFS = [
   { id: 'orbites', nom: 'Orbites par type', categorie: 'dynamiques' },
   { id: 'pulsation', nom: 'Pulsation', categorie: 'dynamiques' },
   { id: 'flottement', nom: 'Flottement', categorie: 'dynamiques' },
+  // Identifiant historique « galaxie » : toutes les tables, une case chacune, pour une feuille A3.
+  { id: 'galaxie', nom: 'Tables entières', categorie: 'impression' },
 ]
 
 const tri = (a, b) => b.degre - a.degre || a.table.nom.localeCompare(b.table.nom)
