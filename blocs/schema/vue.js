@@ -1169,14 +1169,19 @@ function bandeauPhrase(vue) {
   // ancre : la table d'où part la condition (la table consultée, ou celle de la condition parente).
   const ancreDe = (c) => c.ancre || etatPhrase.depart
   function tablesPrincipales(ancre = etatPhrase.depart) {
+    return tablesDuType('principale', ancre)
+  }
+  // Les tables d'un type (principales, secondaires) reliées à la table d'ancrage par un chemin connu.
+  function tablesDuType(type, ancre = etatPhrase.depart) {
     const depart = noeud(ancre)
     if (!depart) return []
-    if (!principalesCache.has(depart)) {
-      principalesCache.set(depart, vue.graphe.noeuds
-        .filter((n) => n !== depart && n.type?.id === 'principale' && cheminLePlusCourt(vue.graphe, depart, n))
+    const cle = `${type}|${depart.table.nom}`
+    if (!principalesCache.has(cle)) {
+      principalesCache.set(cle, vue.graphe.noeuds
+        .filter((n) => n !== depart && n.type?.id === type && cheminLePlusCourt(vue.graphe, depart, n))
         .sort((x, y) => (x.table.libelle || x.table.nom).localeCompare(y.table.libelle || y.table.nom, 'fr')))
     }
-    return principalesCache.get(depart)
+    return principalesCache.get(cle)
   }
 
   // Toutes les conditions, groupes compris (pour le chemin, les étiquettes, le texte).
@@ -1386,10 +1391,11 @@ function bandeauPhrase(vue) {
     const option = (n) => ({ valeur: n.table.nom, libelle: n.table.libelle ? `${n.table.libelle} (${n.table.nom})` : n.table.nom })
     const GUIDES = { parc: 'le parc (AITEC)', machine: 'la machine (et dessous)', fiche: 'la fiche technique' }
     const deja = GUIDES[garder] ? { valeur: garder, libelle: GUIDES[garder] }
-      : garder && garder !== ancre && !tablesPrincipales(ancre).some((n) => n.table.nom === garder) && noeud(garder) ? option(noeud(garder)) : null
+      : garder && garder !== ancre && ![...tablesPrincipales(ancre), ...tablesDuType('secondaire', ancre)].some((n) => n.table.nom === garder) && noeud(garder) ? option(noeud(garder)) : null
     return [
       { groupe: ancre === etatPhrase.depart ? 'La table consultée' : 'Cette table', options: [option(noeud(ancre))] },
       { groupe: 'Tables principales', options: tablesPrincipales(ancre).filter((n) => n.table.nom !== etatPhrase.depart || ancre === etatPhrase.depart).map(option) },
+      { groupe: 'Tables secondaires', options: tablesDuType('secondaire', ancre).filter((n) => n.table.nom !== etatPhrase.depart || ancre === etatPhrase.depart).map(option) },
       deja ? { groupe: 'Déjà choisi', options: [deja] } : null,
     ].filter((g) => g && g.options.length)
   }

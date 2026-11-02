@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.13.3",
+      "date": "2026-11-02",
+      "points": [
+        "LA PHRASE : le choix de la table propose aussi les tables secondaires reliées (ex. mouvements de stock), sous les tables principales"
+      ]
+    },
+    {
       "version": "0.13.2",
       "date": "2026-11-02",
       "points": [
