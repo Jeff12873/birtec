@@ -1393,42 +1393,49 @@ function bandeauPhrase(vue) {
     vider(zoneConditions, listeConditions(etatPhrase.conditions, true))
   }
 
-  // L'accolade d'un paquet de conditions liées par ET : étirée sur toute sa hauteur, le trait garde son épaisseur.
-  function accolade() {
-    const a = h('span', { class: 'accolade' })
-    a.innerHTML = '<svg viewBox="0 0 12 100" preserveAspectRatio="none"><path d="M11 1 Q5 1 5 8 L5 44 Q5 50 1 50 Q5 50 5 56 L5 92 Q5 99 11 99" vector-effect="non-scaling-stroke"/></svg>'
-    return a
-  }
-
   // Une liste de conditions (la phrase entière, ou l'intérieur d'un groupe), avec ses boutons d'ajout.
   // ancre : la table d'où partent ces conditions (la table consultée, ou celle d'une condition parente).
   function listeConditions(liste, racine, ancre = etatPhrase.depart) {
+    // ET passe avant OU : chaque OU commence un nouveau « cas ». Une ligne est gardée si elle remplit un des cas.
+    const debutCas = (c, i) => i === 0 || c.lien === 'ou'
     const lignes = liste.map((c, i) => {
-      // ET / OU dans une colonne de largeur fixe : les « qui » restent alignés.
-      const lien = h('span', { class: 'emplacement-lien' }, i === 0 ? null : h('button', { class: `pastille-lien ${c.lien}`, title: 'Changer ET / OU', onclick: () => { c.lien = c.lien === 'ou' ? 'et' : 'ou'; dessiner(); changement() } }, c.lien === 'ou' ? 'OU' : 'ET'))
-      const retirer = h('button', { class: 'discret icone-seule petit', title: c.groupe ? 'Retirer le groupe' : 'Retirer la condition', onclick: () => { liste.splice(liste.indexOf(c), 1); dessiner(); changement() } }, ic('x', 13))
+      // ET dans une colonne de largeur fixe (les « qui » restent alignés) ; un clic en fait un OU, donc un nouveau cas.
+      const lien = h('span', { class: 'emplacement-lien' }, debutCas(c, i) ? null : h('button', { class: 'pastille-lien', title: 'Séparer ici en deux cas (OU)', onclick: () => { c.lien = 'ou'; dessiner(); changement() } }, 'ET'))
+      const retirer = h('button', { class: 'discret icone-seule petit', title: c.groupe ? 'Retirer le groupe' : 'Retirer la condition', onclick: () => {
+        const j = liste.indexOf(c)
+        // Le premier d'un cas retiré : la condition suivante du même cas devient son début.
+        if (c.lien === 'ou' && liste[j + 1]?.lien === 'et') liste[j + 1].lien = 'ou'
+        liste.splice(j, 1)
+        dessiner()
+        changement()
+      } }, ic('x', 13))
       if (c.groupe) return h('div', { class: 'ligne-condition' }, lien, h('div', { class: 'groupe-condition' }, h('span', { class: 'parenthese' }, '('), listeConditions(c.groupe, false, ancre), h('span', { class: 'parenthese' }, ')')), retirer)
       const sous = c.sous?.length ? h('div', { class: 'sous-conditions', style: couleurTable(c.table) ? { '--teinte': couleurTable(c.table) } : {} }, listeConditions(c.sous, false, c.table)) : null
       return h('div', { class: 'bloc-condition' }, h('div', { class: 'ligne-condition' }, lien, editeurCondition(c), retirer), sous)
     })
-    // ET passe avant OU : dès qu'il y a un OU, chaque suite de conditions liées par ET est lue ensemble.
-    // Une accolade (et un fond teinté) la montre ; elle suit chaque changement de ET / OU.
-    let contenu = lignes
-    if (liste.some((c, i) => i > 0 && c.lien === 'ou')) {
-      const paquets = []
-      liste.forEach((c, i) => { if (i === 0 || c.lien === 'ou') paquets.push([]); paquets.at(-1).push(lignes[i]) })
-      contenu = paquets.map((p) => (p.length > 1
-        ? h('div', { class: 'paquet-et', title: 'Lues ensemble : ces conditions doivent être vraies toutes à la fois' }, accolade(), p)
-        : h('div', { class: 'hors-paquet' }, p)))
-    }
     // Une nouvelle condition cherche d'abord dans la table d'où elle part.
-    const neuve = () => ({ ...nouvelleCondition(), ancre, source: `table:${ancre}`, table: ancre })
-    const ajouter = (quoi) => { liste.push(quoi === 'groupe' ? { id: ++numeroCondition, lien: 'et', groupe: [neuve()] } : neuve()); dessiner() }
-    return h('div', { class: `liste-conditions${racine ? '' : ' interieur'}${contenu !== lignes ? ' avec-ou' : ''}` }, contenu,
+    const neuve = (lien = 'et') => ({ ...nouvelleCondition(lien), ancre, source: `table:${ancre}`, table: ancre })
+    const inserer = (position, quoi) => { liste.splice(position, 0, quoi); dessiner() }
+    const etQui = (position) => h('button', { class: 'pastille-ajout', onclick: () => inserer(position, neuve()) }, ic('plus', 13), liste.length ? 'et qui…' : 'qui…')
+
+    const cas = []
+    liste.forEach((c, i) => { if (debutCas(c, i)) cas.push([]); cas.at(-1).push(i) })
+    const plusieurs = cas.length > 1
+    const contenu = !plusieurs ? lignes : cas.flatMap((indices, n) => [
+      // Le bandeau OU entre deux cas : un clic les réunit (ET).
+      n ? h('div', { class: 'separateur-ou' }, h('button', { class: 'pastille-lien ou', title: 'Réunir ces deux cas (ET)', onclick: () => { liste[indices[0]].lien = 'et'; dessiner(); changement() } }, 'OU')) : null,
+      h('div', { class: 'cas-phrase' },
+        h('div', { class: 'titre-cas' }, `Cas ${n + 1}`),
+        indices.map((i) => lignes[i]),
+        h('div', { class: 'ajouts-condition' }, etQui(indices.at(-1) + 1))),
+    ])
+    return h('div', { class: `liste-conditions${racine ? '' : ' interieur'}${plusieurs ? ' avec-cas' : ''}` }, contenu,
       h('div', { class: 'ajouts-condition' },
-        h('button', { class: 'pastille-ajout', onclick: () => ajouter('condition') }, ic('plus', 13), liste.length ? 'et qui…' : 'qui…'),
-        racine ? h('button', { class: 'pastille-ajout', title: 'Un groupe entre parenthèses : ses conditions sont lues ensemble', onclick: () => ajouter('groupe') }, ic('plus', 13), '( groupe )') : null))
+        plusieurs ? null : etQui(liste.length),
+        liste.length ? h('button', { class: 'pastille-ajout ou', title: 'Un autre cas : les lignes qui le remplissent sont gardées aussi', onclick: () => inserer(liste.length, neuve('ou')) }, ic('plus', 13), 'OU un autre cas') : null,
+        racine ? h('button', { class: 'pastille-ajout', title: 'Un groupe entre parenthèses : ses conditions sont lues ensemble', onclick: () => inserer(liste.length, { id: ++numeroCondition, lien: 'et', groupe: [neuve()] }) }, ic('plus', 13), '( groupe )') : null))
   }
+
 
   // Les tables où chercher : celle qu'on consulte, les choix guidés, puis les tables liées (et un peu plus loin).
   // La table consultée et les tables principales. garder : ce qui est déjà choisi dans la condition (rapport

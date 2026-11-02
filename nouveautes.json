@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.13.5",
+      "date": "2026-11-02",
+      "points": [
+        "LA PHRASE : les OU découpent la phrase en « cas » (une carte par cas, un bandeau OU entre deux) ; une ligne est gardée si elle remplit un des cas. « + OU un autre cas » en ajoute un ; clic sur ET : sépare, clic sur OU : réunit. Remplace les accolades"
+      ]
+    },
+    {
       "version": "0.13.4",
       "date": "2026-11-02",
       "points": [
