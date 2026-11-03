@@ -146,6 +146,7 @@ export default {
     // LA PHRASE, au-dessus de la constellation.
     let bandeau = null
     bandeau = bandeauPhrase(vue)
+    chargerTypesJointures()
     vider(panneau, aideSchema(graphe))
     vider(
       zone,
@@ -2248,8 +2249,31 @@ function imageDuChemin(vue, chemin, sql) {
 // Le SQL d'un chemin, dans un ordre que BIRT accepte : on part de la première table, et une jointure n'ajoute sa
 // table que quand l'autre table de son lien est déjà jointe (sinon elle attend son tour). Une table déjà jointe
 // n'est pas jointe une deuxième fois (aller-retour d'un chemin construit à la main).
+// Les jointures « à type » (une table d'association dont l'identifiant vient de plusieurs tables, avec une colonne
+// qui dit laquelle) : chargées une fois depuis le serveur, qui les reconnaît sur les données.
+let typesJointures = null
+function chargerTypesJointures() {
+  if (!typesJointures) api('/api/phrase/associations').then((t) => { typesJointures = t }).catch(() => {})
+}
+// Le complément d'une jointure « à type » : « AND table.TYPE = 'RI' », ou rien.
+function typeDeJointure(j, colonnesDe) {
+  const t = typesJointures
+  if (!t) return ''
+  for (const [cote, col, autre] of [[j.de, j.colonne, j.vers], [j.vers, j.versColonne, j.de]]) {
+    const a = t.associations.find((x) => x.cle === `${cote}.${col}`.toLowerCase())
+    const fiche = t.fiche && col.toLowerCase() === t.fiche.idObjet.toLowerCase() && colonnesDe(cote)?.some((c) => c.nom.toLowerCase() === t.fiche.typeObjet.toLowerCase()) ? t.fiche.typeObjet : null
+    const colType = fiche || a?.colType
+    if (!colType) continue
+    const type = t.types[autre.toLowerCase()] || a?.valeurs.find((x) => x.toLowerCase() === autre.toLowerCase()) || autre.toUpperCase()
+    return ` AND ${cote}.${colType} = '${String(type).replace(/'/g, "''")}'`
+  }
+  return ''
+}
+
 export function sqlDuChemin(chemin) {
   const depart = chemin.depart.table.nom
+  const colonnes = new Map([chemin.depart, ...chemin.etapes.flatMap((e) => [e.de, e.vers])].map((n) => [n.table.nom.toLowerCase(), n.table.colonnes]))
+  const colonnesDe = (nom) => colonnes.get(String(nom).toLowerCase())
   const jointes = new Set([depart])
   const restants = [...new Set(chemin.etapes.map((e) => e.lien))]
   const ordre = []
@@ -2263,7 +2287,7 @@ export function sqlDuChemin(chemin) {
     // Les liens dont les deux tables sont déjà jointes ne servent plus.
     for (let k = restants.length - 1; k >= 0; k--) if (jointes.has(restants[k].a.table.nom) && jointes.has(restants[k].b.table.nom)) restants.splice(k, 1)
   }
-  const sql = `SELECT *\nFROM ${depart}\n${ordre.map(({ table, j }) => `LEFT JOIN ${table} ON ${j.de}.${j.colonne} = ${j.vers}.${j.versColonne}`).join('\n')}`
+  const sql = `SELECT *\nFROM ${depart}\n${ordre.map(({ table, j }) => `LEFT JOIN ${table} ON ${j.de}.${j.colonne} = ${j.vers}.${j.versColonne}${typeDeJointure(j, colonnesDe)}`).join('\n')}`
   return {
     sql,
     ordre,

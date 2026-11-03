@@ -16,6 +16,18 @@ const VALEURS_MAX = 30
 
 export function routes(r) {
   // Les valeurs proposées pour une colonne (les plus fréquentes, avec leur désignation si elle existe).
+  // Les jointures « à type » (voir conditionDeType), pour que le SQL calculé dans la page les porte aussi.
+  r.get('/api/phrase/associations', async () => {
+    if (etatConnexion().ouverte) await preparerAssociations(await obtenirSchema())
+    const m = lireModele()
+    const v = m?.ficheTechnique?.valeurs
+    return {
+      associations: [...(associations || new Map())].map(([cle, a]) => ({ cle, colType: a.colType, valeurs: a.valeurs })),
+      fiche: v?.idObjet && v?.typeObjet ? { idObjet: v.idObjet, typeObjet: v.typeObjet } : null,
+      types: Object.fromEntries(Object.entries(m?.objets || {}).map(([code, o]) => [o.table.toLowerCase(), code])),
+    }
+  })
+
   r.get('/api/phrase/valeurs', async (ctx) => {
     if (!etatConnexion().ouverte) return []
     const schema = await obtenirSchema()
@@ -239,20 +251,63 @@ function colonnesDesConditions(liste, schema) {
 }
 
 // Une jointure sur un identifiant d'objet « à type » (comme celui des fiches techniques : l'identifiant ne dit
-// rien sans le type d'objet à côté) : le type de l'autre table est ajouté à la jointure. Sans type connu pour
-// cette table, la jointure ne ramène rien (sinon elle prendrait les objets d'un autre type au même numéro).
+// rien sans le type d'objet à côté) : le type de l'autre table est ajouté à la jointure (sinon elle prendrait
+// les objets d'un autre type au même numéro).
 function conditionDeType(de, colDe, vers, colVers) {
   const m = lireModele()
   const v = m?.ficheTechnique?.valeurs
-  if (!v?.idObjet || !v?.typeObjet) return ''
   for (const [cote, col, autre] of [[de, colDe, vers], [vers, colVers, de]]) {
-    if (col.nom.toLowerCase() !== v.idObjet.toLowerCase()) continue
-    const colType = colonneDe(cote, v.typeObjet)
+    // La colonne du type : celle des fiches techniques (modèle de données), ou celle reconnue sur les données.
+    const a = associations?.get(`${cote.nom}.${col.nom}`.toLowerCase())
+    const colFiche = v?.idObjet && v?.typeObjet && col.nom.toLowerCase() === v.idObjet.toLowerCase() ? colonneDe(cote, v.typeObjet) : null
+    const colType = colFiche?.nom || a?.colType
     if (!colType) continue
-    const type = typeDeTable(m, autre.nom)
-    return type ? ` AND ${cote.nom}.${colType.nom} = ${litteral(type)}` : ' AND 1 = 0'
+    // Le type de l'autre table : celui du modèle, sinon la valeur des données qui porte son nom, sinon son nom
+    // en majuscules : une table sans ligne de ce type ne ramène simplement rien.
+    const code = typeDeTable(m, autre.nom)
+    const type = code || a?.valeurs.find((x) => x.toLowerCase() === autre.nom.toLowerCase()) || autre.nom.toUpperCase()
+    return ` AND ${cote.nom}.${colType} = ${litteral(type)}`
   }
   return ''
+}
+
+// Les tables d'association « à type » : un identifiant ID_X et, à côté, une colonne texte X qui dit de quelle
+// table vient l'identifiant (le nom de cette table, en majuscules). Le même numéro désigne sinon des objets différents selon la
+// table : la jointure doit donc aussi porter sur X. Elles sont reconnues sur les données (toutes les valeurs de X
+// sont des noms de tables, ou des types d'objets du modèle), une fois par lancement de K.NOVA.
+let associations = null
+async function preparerAssociations(schema) {
+  if (associations || !etatConnexion().ouverte) return
+  const m = lireModele()
+  const connus = new Set([...schema.tables.map((t) => t.nom.toLowerCase()), ...Object.keys(m?.objets || {}).map((x) => x.toLowerCase())])
+  const candidates = []
+  for (const t of schema.tables) {
+    for (const c of t.colonnes) {
+      const nom = c.nom.match(/^id_(.+)$/i)?.[1]
+      const colType = nom && t.colonnes.find((x) => x.nom.toLowerCase() === nom.toLowerCase() && !NUMERIQUE.test(x.type || ''))
+      if (colType) candidates.push({ table: t.nom, id: c.nom, colType: colType.nom })
+    }
+  }
+  // Les valeurs de chaque colonne de type, sur un échantillon (les 5 000 premières lignes), en une seule requête :
+  // une requête par table coûterait des dizaines de secondes.
+  const echantillon = (x, i) => `(SELECT ${i} AS k, v FROM (SELECT DISTINCT v FROM (SELECT ${x.colType} AS v FROM ${x.table} LIMIT 5000) e WHERE v IS NOT NULL AND v <> '') d LIMIT 40)`
+  // (Enveloppée dans un SELECT : la requête doit commencer par SELECT pour être acceptée en lecture.)
+  const lire = async (liste, decalage = 0) => (await executerRequete(`SELECT k, v FROM (\n${liste.map((x, i) => echantillon(x, i + decalage)).join('\nUNION ALL\n')}\n) u`, 40 * liste.length)).lignes
+  let lignes = []
+  try {
+    if (candidates.length) lignes = await lire(candidates)
+  } catch {
+    // Une table illisible fait échouer l'ensemble : une par une, en ignorant celles qui échouent.
+    for (let i = 0; i < candidates.length; i++) lignes.push(...(await lire([candidates[i]], i).catch(() => [])))
+  }
+  const valeursDe = new Map()
+  for (const [k, v] of lignes) valeursDe.set(Number(k), [...(valeursDe.get(Number(k)) || []), String(v)])
+  const trouvees = new Map()
+  candidates.forEach((x, i) => {
+    const valeurs = valeursDe.get(i) || []
+    if (valeurs.length && valeurs.every((v) => connus.has(v.toLowerCase()))) trouvees.set(`${x.table}.${x.id}`.toLowerCase(), { colType: x.colType, valeurs })
+  })
+  associations = trouvees
 }
 
 const sqlComplet = (from, where, tri) => `SELECT *\n${from}${where}${tri.length ? `\nORDER BY ${tri.map((t) => `${t.expression} ${t.sens}`).join(', ')}` : ''}`
@@ -264,6 +319,7 @@ const sqlComplet = (from, where, tri) => `SELECT *\n${from}${where}${tri.length 
 // Les anciennes constellations (filtres : une valeur par colonne, tous en ET) restent comprises.
 // → { from, where, tri: [{ expression, sens }] }
 export async function morceauxSql(spec, schema) {
+  await preparerAssociations(schema)
   const depart = tableDe(schema, spec?.depart)
   if (!depart) throw new ErreurHttp(400, 'Table de départ inconnue.')
   const jointes = new Set([depart.nom])

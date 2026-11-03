@@ -1,6 +1,15 @@
 {
   "versions": [
     {
+      "version": "0.13.12",
+      "date": "2026-11-03",
+      "points": [
+        "Tables d'association « à type » (un identifiant qui vient de plusieurs tables, avec une colonne qui dit laquelle) reconnues seules sur les données : la jointure porte aussi sur le type, sans quoi des objets de tables différentes au même numéro se mélangeaient",
+        "Une table sans type dans le modèle de données n'est plus exclue de ces jointures (elle prend son nom comme type)",
+        "Le SQL affiché, copié et extrait porte aussi ce complément"
+      ]
+    },
+    {
       "version": "0.13.11",
       "date": "2026-11-03",
       "points": [
