@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.13.13",
+      "date": "2026-11-03",
+      "points": [
+        "Extraction pour Excel : analyse.xlsx déclare ses requêtes Power Query comme Excel les écrit (version de Power Query récente) ; Excel 365 ne refuse plus la liste des requêtes pour incompatibilité de version"
+      ]
+    },
+    {
       "version": "0.13.12",
       "date": "2026-11-03",
       "points": [

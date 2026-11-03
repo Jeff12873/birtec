@@ -36,7 +36,7 @@ export function classeurPowerQuery(tables, { titre = 'Extraction BiRTEC' } = {})
 <connections xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${requetes.map((nom, i) => `<connection id="${i + 1}" keepAlive="1" name="Requête - ${x(nom)}" description="Connexion à la requête « ${x(nom)} » dans le classeur." type="5" refreshedVersion="8" background="1"><dbPr connection="Provider=Microsoft.Mashup.OleDb.1;Data Source=$Workbook$;Location=${x(nom)};Extended Properties=&quot;&quot;" command="SELECT * FROM [${x(nom)}]"/></connection>`).join('')}</connections>`) },
     { nom: 'customXml/item1.xml', octets: Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(`<?xml version="1.0" encoding="utf-16"?><DataMashup xmlns="http://schemas.microsoft.com/DataMashup">${dataMashup(requetes).toString('base64')}</DataMashup>`, 'utf16le')]) },
     { nom: 'customXml/itemProps1.xml', octets: utf8(`<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<ds:datastoreItem ds:itemID="{${crypto.randomUUID().toUpperCase()}}" xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml"><ds:schemaRefs/></ds:datastoreItem>`) },
+<ds:datastoreItem ds:itemID="{${crypto.randomUUID().toUpperCase()}}" xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml"><ds:schemaRefs><ds:schemaRef ds:uri="http://schemas.microsoft.com/DataMashup"/></ds:schemaRefs></ds:datastoreItem>`) },
     { nom: 'customXml/_rels/item1.xml.rels', octets: utf8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXmlProps" Target="itemProps1.xml"/></Relationships>`) },
   ]
@@ -60,7 +60,9 @@ function feuille(titre, tables) {
 }
 
 // Le DataMashup : version, paquet des formules (zip OPC), permissions, métadonnées, liaisons (vides : Excel
-// les recalcule à l'enregistrement).
+// les recalcule à l'enregistrement). Écrit comme Excel l'écrit : le paquet porte une version de Power Query
+// récente (avec « 1.0.0 », Excel 365 refuse les requêtes pour incompatibilité de version) ; pas de BOM dans le
+// paquet ni dans les permissions, un BOM dans les métadonnées.
 function dataMashup(requetes) {
   const ident = (nom) => `#"${String(nom).replace(/"/g, '""')}"`
   const section = [
@@ -78,11 +80,11 @@ in
     Entetes;`),
   ].join('\n')
   const paquet = creerZip([
-    { nom: '[Content_Types].xml', octets: Buffer.concat([BOM, utf8('<?xml version="1.0" encoding="utf-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="text/xml" /><Default Extension="m" ContentType="application/x-ms-m" /></Types>')]) },
-    { nom: 'Config/Package.xml', octets: Buffer.concat([BOM, utf8('<?xml version="1.0" encoding="utf-8"?><Package xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><Version>1.0.0</Version><MinVersion>1.0.0</MinVersion><Culture>fr-FR</Culture></Package>')]) },
-    { nom: 'Formulas/Section1.m', octets: Buffer.concat([BOM, utf8(section)]) },
+    { nom: 'Config/Package.xml', octets: utf8('<?xml version="1.0" encoding="utf-8"?><Package xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><Version>2.157.151.0</Version><MinVersion>2.21.0.0</MinVersion><Culture>fr-FR</Culture></Package>') },
+    { nom: '[Content_Types].xml', octets: utf8('<?xml version="1.0" encoding="utf-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="text/xml" /><Default Extension="m" ContentType="application/x-ms-m" /></Types>') },
+    { nom: 'Formulas/Section1.m', octets: utf8(section) },
   ])
-  const permissions = Buffer.concat([BOM, utf8('<?xml version="1.0" encoding="utf-8"?><PermissionList xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"><CanEvaluateFuturePackages>false</CanEvaluateFuturePackages><FirewallEnabled>true</FirewallEnabled><WorkbookGroupType xsi:nil="true" /></PermissionList>')])
+  const permissions = utf8('<?xml version="1.0" encoding="utf-8"?><PermissionList xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><CanEvaluateFuturePackages>false</CanEvaluateFuturePackages><FirewallEnabled>true</FirewallEnabled></PermissionList>')
   const date = new Date().toISOString().replace('Z', '0000Z')
   const entree = (type, valeur) => `<Entry Type="${type}" Value="${valeur}" />`
   const item = (nom, chargee) => `<Item><ItemLocation><ItemType>Formula</ItemType><ItemPath>Section1/${x(nom)}</ItemPath></ItemLocation><StableEntries>${[
