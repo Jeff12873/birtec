@@ -1490,10 +1490,11 @@ function bandeauPhrase(vue) {
     const option = (n) => ({ valeur: n.table.nom, libelle: n.table.libelle ? `${n.table.libelle} (${n.table.nom})` : n.table.nom })
     const GUIDES = { parc: 'le parc (AITEC)', machine: 'la machine (et dessous)', fiche: 'la fiche technique' }
     const deja = GUIDES[garder] ? { valeur: garder, libelle: GUIDES[garder] }
-      : garder && garder !== ancre && ![...tablesPrincipales(ancre), ...referentielsVoisins(ancre)].some((n) => n.table.nom === garder) && noeud(garder) ? option(noeud(garder)) : null
+      : garder && garder !== ancre && ![...tablesPrincipales(ancre), ...tablesDuType('secondaire', ancre), ...referentielsVoisins(ancre)].some((n) => n.table.nom === garder) && noeud(garder) ? option(noeud(garder)) : null
     return [
       { groupe: ancre === etatPhrase.depart ? 'La table consultée' : 'Cette table', options: [option(noeud(ancre))] },
       { groupe: 'Tables principales', options: tablesPrincipales(ancre).filter((n) => n.table.nom !== etatPhrase.depart || ancre === etatPhrase.depart).map(option) },
+      { groupe: 'Tables secondaires', options: tablesDuType('secondaire', ancre).filter((n) => n.table.nom !== etatPhrase.depart || ancre === etatPhrase.depart).map(option) },
       { groupe: 'Référentiels', options: referentielsVoisins(ancre).map(option) },
       deja ? { groupe: 'Déjà choisi', options: [deja] } : null,
     ].filter((g) => g && g.options.length)

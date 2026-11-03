@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.13.11",
+      "date": "2026-11-03",
+      "points": [
+        "LA PHRASE : « dans quelle table ? » propose de nouveau les tables secondaires reliées (ex. mouvements de stock), en plus des référentiels reliés directement"
+      ]
+    },
+    {
       "version": "0.13.10",
       "date": "2026-11-02",
       "points": [
