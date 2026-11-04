@@ -3,7 +3,7 @@
 <p>Chaque rapport est une vignette : son titre, deux lignes de description (écrites une fois par l'IA, corrigeables par l'administrateur avec le crayon), son contenu et sa date. Un clic ouvre le rapport à droite : paramètres, aperçu, export.</p>
 <p>La <b>petite constellation</b> d'une vignette montre les tables du rapport (enregistrées s'il vient de la constellation, sinon lues dans son SQL). En mode administrateur, un clic dessus propose de le <b>rouvrir dans la constellation</b> : son chemin et ses filtres s'allument, et « Et maintenant ? › Mettre à jour » rouvre son formulaire avec le chemin du jour.</p>
 <h2>Créer un rapport (administrateur)</h2>
-<p>On part de la <b>constellation</b> : construisez le chemin (avec LA PHRASE ou à la main), puis <b>Et maintenant ? › Créer un rapport</b>. Le formulaire s'ouvre déjà rempli d'après la phrase ; choisissez la présentation (tableau, graphique, tableau croisé) et enregistrez. « Modifier » rouvre le formulaire d'un rapport existant.</p>
+<p>On part de la <b>constellation</b> : faites la phrase (et, si besoin, un regroupement), puis <b>Et maintenant ? › Créer un rapport</b>, donnez un titre : le rapport est un tableau des colonnes de l'aperçu (ou des groupes et de leurs calculs), dans le même tri. Pour le changer : rouvrez-le dans la constellation, retouchez la phrase, puis « Mettre à jour ». Le bouton <b>Télécharger le .rptdesign</b> donne le fichier, à ouvrir dans BIRT ou à déposer dans la GMAO.</p>
 <p>BiRTEC vérifie le fichier dans le moteur BIRT puis le fait tourner avec les valeurs par défaut des paramètres. En cas d'erreur (colonne inconnue, faute dans la requête…), l'IA corrige la description, deux fois au plus.</p>
 <h2>Description d'un rapport</h2>
 <pre class="code"><code>{

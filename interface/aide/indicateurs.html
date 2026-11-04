@@ -1,9 +1,9 @@
 <h1>Indicateurs GMAO</h1>
 <p>Cet onglet écrit les indicateurs de l'écran « indicateurs personnalisés » de la GMAO : une <b>requête indicateur</b> (le chiffre, colonne <code>VAL</code>) et sa <b>requête liste</b> (les fiches comptées, colonnes <code>ID</code>, <code>CODE</code>, <code>DESI1</code>, <code>ACTIF</code> et, en option, <code>DATE_INDICATEUR</code>). Le résultat reste du SQL : copiez chaque requête dans la GMAO.</p>
 <h2>Les vignettes</h2>
-<p>Chaque indicateur est une vignette (titre, description courte écrite par l'IA, fenêtre de la GMAO, date), avec la petite constellation de ses tables. Un clic ouvre le détail à droite : <b>copier</b> ses requêtes, le <b>tester</b>, le retoucher à la main ou le rouvrir dans le formulaire (« Modifier », administrateur). Un clic sur la petite constellation (administrateur) le rouvre dans la constellation.</p>
+<p>Chaque indicateur est une vignette (titre, description courte écrite par l'IA, fenêtre de la GMAO, date), avec la petite constellation de ses tables. Un clic ouvre le détail à droite : ses deux requêtes en lecture (à <b>copier</b> dans la GMAO) et l'essai sur la base (<b>Tester</b>). Il n'y a plus de formulaire de construction : pour changer un indicateur, cliquez sur sa petite constellation (administrateur), retouchez la phrase, puis « Et maintenant ? › Mettre à jour ».</p>
 <h2>Créer un indicateur (administrateur)</h2>
-<p>Depuis la <b>constellation</b> : <b>Et maintenant ? › Indicateur GMAO</b> ouvre le formulaire sur la table de départ du chemin. Choisissez ce qu'on compte, les conditions et le nom ; le chiffre du jour se met à jour en direct. BiRTEC écrit les deux requêtes au format de la GMAO, les essaie et les range ici. Copiez-les dans la GMAO et choisissez-y la fenêtre à ouvrir (indiquée).</p>
+<p>Depuis la <b>constellation</b> : faites la phrase (table consultée et conditions), puis <b>Et maintenant ? › Indicateur GMAO</b>. Donnez un nom, choisissez s'il faut filtrer sur l'arborescence de la personne connectée, <b>Essayer</b> montre les deux requêtes et leur résultat, <b>Enregistrer</b> les range ici. L'indicateur compte les lignes de la table consultée (un regroupement éventuel n'y sert pas).</p>
 <h2>Ce que BiRTEC vérifie</h2>
 <ul>
 <li>Les deux requêtes ont exactement les mêmes jointures et conditions : le chiffre correspond toujours à la liste.</li>
@@ -12,7 +12,5 @@
 <li>Les colonnes attendues par la GMAO sont présentes ; rien n'écrit dans la base.</li>
 </ul>
 <p>Pour l'essai sur MySQL, les variables de la GMAO sont remplacées par une valeur d'essai : <code>{{ARBO_FILTRE_…}}</code> par <code>1=1</code> (aucun filtre), <code>{{DATE_DEB_MOIS}}</code> par le premier jour du mois. Dans la GMAO, elles gardent leur vrai sens.</p>
-<h2>Retoucher à la main</h2>
-<p>Vous pouvez modifier directement les deux requêtes puis <b>Tester</b>. Pour qu'elles restent identiques, préférez modifier la <b>définition</b> puis « Refaire les requêtes ».</p>
 <h2>Variables</h2>
 <p>Le bouton <b>Variables</b> décrit les variables de la GMAO (nom, valeur d'essai, description pour l'IA). Les tables comptables sont reconnues seules : toute table qui a ID_X, X, DESI1 et ACTIF. Tout est rangé dans le fichier .ktec ; les indicateurs existants servent d'exemples à l'IA.</p>

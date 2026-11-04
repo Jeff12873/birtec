@@ -8,8 +8,12 @@
 
 import { ErreurHttp } from 'ktec/http.js'
 import { executerRequete, etatConnexion } from 'ktec/mysql.js'
-import { enregistrerRequete, lireInfo, ecrireInfo } from 'ktec/ktec.js'
+import { enregistrerRequete, lireInfo, ecrireInfo, enregistrerIndicateur } from 'ktec/ktec.js'
 import { obtenirSchema } from '../base/schema.js'
+import { genererRapport } from '../rapports/serveur.js'
+import { reglagesIndicateurs, tester } from '../indicateurs/serveur.js'
+import { trouverFenetre, formaterNom } from '../indicateurs/indicateur.js'
+import { lireRptdesign, phraseDuRapport } from './import.js'
 import { lireModele, enregistrerModele, reconnaitreModele, lireArbre, lireParcs, sousLesNoeuds, cheminDe } from './modele.js'
 
 const VALEURS_MAX = 30
@@ -134,49 +138,82 @@ export function routes(r) {
     return { modele: lireModele() }
   })
 
-  // { depart, jointures, conditions, tri, apercu? } → { nombre, apercu: { colonnes, lignes }, sql? (administrateur) }
+  // { depart, jointures, conditions, tri, groupe?, apercu? } → { nombre, groupes?, apercu: { colonnes, lignes }, sql? }
+  // Avec un regroupement, le nombre est celui des lignes de la table de départ, « groupes » celui des groupes.
   r.post('/api/phrase/compter', async (ctx) => {
     const spec = await ctx.json()
     if (!etatConnexion().ouverte) throw new ErreurHttp(409, 'Connexion à la GMAO indisponible.')
     const schema = await obtenirSchema()
-    const { from, where, tri } = await morceauxSql(spec, schema)
+    const q = await requeteDeLaPhrase(spec, schema)
     // Les jointures multiplient les lignes (une RI et ses trois machines) : on compte les lignes distinctes de la
     // table de départ, par sa clé.
-    const depart = tableDe(schema, spec.depart)
-    const cle = depart.colonnes.find((c) => c.cle)
-    const compte = await executerRequete(`SELECT COUNT(${cle ? `DISTINCT ${depart.nom}.${cle.nom}` : '*'}) AS n ${from}${where}`, 1)
+    const compte = await executerRequete(`SELECT COUNT(${q.cle ? `DISTINCT ${q.depart.nom}.${q.cle.nom}` : '*'}) AS n ${q.from}${q.where}`, 1)
     const reponse = { nombre: Number(compte.lignes[0]?.[0] ?? 0) }
+    if (q.groupe) reponse.groupes = Number((await executerRequete(`SELECT COUNT(*) AS n FROM (${q.sql}) AS groupes_phrase`, 1)).lignes[0]?.[0] ?? 0)
     if (spec.apercu) {
-      // Les colonnes montrées, table par table. La table de départ : sa clé (verrouillée), puis les colonnes cochées
-      // par l'utilisateur, sinon les premières colonnes proposées. Les autres tables : la colonne de chaque
-      // condition (verrouillée : elle montre la jointure ou le filtre), puis les colonnes cochées.
-      // Les colonnes du tri sont lues en plus (DISTINCT l'exige), puis retirées de l'aperçu.
-      const jointes = new Set([depart.nom, ...(spec.jointures || []).map((j) => tableDe(schema, j.table)?.nom)])
-      const choisies = spec.apercu?.affichees && typeof spec.apercu.affichees === 'object' ? spec.apercu.affichees : {}
-      const cochees = (t) => (Array.isArray(choisies[t.nom]) ? t.colonnes.filter((c) => choisies[t.nom].includes(c.nom)) : null)
-      const sources = []
-      const ajouter = (c) => { if (!sources.some((x) => x.table === c.table && x.colonne === c.colonne)) sources.push(c) }
-      const cleDepart = depart.colonnes.find((c) => c.cle)
-      if (cleDepart) ajouter({ table: depart.nom, colonne: cleDepart.nom, verrouillee: true })
-      const proposees = (lireInfo('colonnes_phrase') || {})[depart.nom]
-      const premieres = proposees?.length ? depart.colonnes.filter((c) => proposees.includes(c.nom)) : depart.colonnes
-      for (const c of cochees(depart) || premieres.slice(0, 8)) ajouter({ table: depart.nom, colonne: c.nom })
-      const conditions = colonnesDesConditions(spec.conditions, schema)
-      for (const c of conditions) ajouter({ ...c, condition: true, verrouillee: true })
-      for (const nom of [...new Set([...conditions.map((c) => c.table), ...Object.keys(choisies)])]) {
-        const t = tableDe(schema, nom)
-        if (!t || t.nom === depart.nom || !jointes.has(t.nom)) continue
-        for (const c of cochees(t) || []) ajouter({ table: t.nom, colonne: c.nom })
-      }
-      // Regroupées par table, dans l'ordre d'arrivée des tables.
-      const ordre = [...new Set(sources.map((c) => c.table))]
-      sources.sort((a, b) => ordre.indexOf(a.table) - ordre.indexOf(b.table))
-      const colonnes = sources.map((c, i) => `${c.table}.${c.colonne} AS c_${i}`)
-      const r5 = await executerRequete(`SELECT DISTINCT ${[...colonnes, ...tri.map((t, i) => `${t.expression} AS tri_${i}`)].join(', ')} ${from}${where}${tri.length ? `\nORDER BY ${tri.map((t, i) => `tri_${i} ${t.sens}`).join(', ')}` : ''}`, 5)
-      reponse.apercu = { colonnes: sources, lignes: r5.lignes.map((l) => l.slice(0, colonnes.length)) }
+      const r5 = await executerRequete(q.sql, q.groupe ? 12 : 5)
+      reponse.apercu = { colonnes: q.colonnes, lignes: r5.lignes.map((l) => l.slice(0, q.colonnes.length)), groupe: q.groupe }
     }
-    if (ctx.modeAdmin) reponse.sql = sqlComplet(from, where, tri)
+    if (ctx.modeAdmin) reponse.sql = q.sql
     return reponse
+  })
+
+  // Un fichier .rptdesign (octets) → la phrase à reprendre : celle qu'il porte (rapport fait par LA PHRASE), sinon
+  // celle tirée de sa première requête, avec ce qui n'a pas pu être traduit. Lecture seule : ouvert à tous.
+  r.post('/api/phrase/rptdesign', async (ctx) => {
+    const lu = lireRptdesign((await ctx.octets()).toString('utf8'))
+    if (lu.phrase) return { phrase: lu.phrase, embarquee: true }
+    if (!lu.requetes.length) throw new ErreurHttp(400, 'Ce fichier ne contient aucune requête SQL (jeu de données).')
+    try {
+      return phraseDuRapport(lu.requetes, await obtenirSchema())
+    } catch (erreur) {
+      throw new ErreurHttp(400, erreur.message)
+    }
+  })
+
+  // { titre, spec, constellation, nom? } : un rapport BIRT fait directement de la phrase (un tableau : ses colonnes,
+  // ou ses groupes et leurs calculs). nom : celui d'un rapport rouvert, refait sous le même nom (administrateur).
+  r.post('/api/phrase/rapport', async (ctx) => {
+    ctx.exigerModeAdmin?.()
+    const { titre = '', spec, constellation = null, nom = null } = await ctx.json()
+    if (!String(titre).trim()) throw new ErreurHttp(400, 'Donnez un titre au rapport.')
+    const q = await requeteDeLaPhrase(spec, await obtenirSchema())
+    const description = {
+      titre: String(titre).trim(),
+      sousTitre: String(constellation?.phrase || '').slice(0, 300),
+      orientation: q.colonnes.length > 6 ? 'paysage' : 'portrait',
+      // « constructeur » garde la phrase pour la rouvrir (et dit que le SQL vient de BiRTEC, pas de l'IA).
+      constructeur: { constellation, source: 'phrase' },
+      blocs: [{ type: 'tableau', titre: '', requete: q.sql, liaisons: [], colonnes: q.colonnes.map((c) => ({ champ: c.alias, libelle: c.libelle, ...(c.format ? { format: c.format } : {}) })) }],
+    }
+    return genererRapport(description, nom || undefined)
+  })
+
+  // { nom, spec, constellation, id?, arborescence?, enregistrer? } : un indicateur GMAO fait de la phrase : le nombre
+  // de lignes de la table consultée (requête indicateur) et leur liste (requête liste), au format de la GMAO.
+  // Le regroupement éventuel n'y sert pas. enregistrer : sinon seulement essayé.
+  r.post('/api/phrase/indicateur', async (ctx) => {
+    ctx.exigerModeAdmin?.()
+    const { nom = '', spec, constellation = null, id = null, arborescence = true, enregistrer = false } = await ctx.json()
+    const schema = await obtenirSchema()
+    const { from, where } = await morceauxSql({ ...spec, tri: [] }, schema)
+    const t = tableDe(schema, spec.depart)
+    const reglages = await reglagesIndicateurs()
+    const fenetre = trouverFenetre(reglages, t.nom)
+    if (!fenetre) throw new ErreurHttp(400, `« ${t.libelle || t.nom} » ne peut pas être compté par un indicateur : la table doit avoir un identifiant, un code, une désignation et un état (ACTIF).`)
+    const conditions = where.replace(/^\nWHERE /, '')
+    const filtres = [arborescence && fenetre.variableArbo ? fenetre.variableArbo : null, conditions.trim() || null].filter(Boolean)
+    const ou = filtres.length ? `\nWHERE ${filtres.join('\n  AND ')}` : ''
+    const nomFinal = formaterNom(nom || t.libelle || t.nom)
+    const colonnes = [`${t.nom}.${fenetre.id} AS ID`, `${t.nom}.${fenetre.code} AS CODE`, `${t.nom}.${fenetre.desi} AS DESI1`, `${t.nom}.${fenetre.actif} AS ACTIF`]
+    const requeteIndicateur = `-- ${nomFinal}\nSELECT COUNT(DISTINCT ${t.nom}.${fenetre.id}) AS VAL\n${from}${ou}`
+    const requeteListe = `-- ${nomFinal}\nSELECT DISTINCT\n  ${colonnes.join(',\n  ')}\n${from}${ou}\nORDER BY CODE`
+    const essai = etatConnexion().ouverte ? await tester(requeteIndicateur, requeteListe) : { erreurs: [], avertissements: ['Connexion à la GMAO indisponible : requêtes non essayées.'] }
+    let cree = null
+    if (enregistrer && !essai.erreurs.length) {
+      cree = enregistrerIndicateur({ id: id || undefined, nom: nomFinal, fenetre: fenetre.libelle, demande: constellation?.phrase || 'Créé depuis LA PHRASE', definition: { constellation, arborescence, source: 'phrase' }, requeteIndicateur, requeteListe, source: 'phrase' })
+    }
+    return { id: cree, nom: nomFinal, fenetre: fenetre.libelle, variableArbo: fenetre.variableArbo || null, requeteIndicateur, requeteListe, ...essai }
   })
 
   // { titre, spec } : la requête de la phrase, rangée dans les requêtes du site (administrateur).
@@ -184,12 +221,97 @@ export function routes(r) {
     ctx.exigerModeAdmin?.()
     const { titre = '', description = '', spec } = await ctx.json()
     if (!String(titre).trim()) throw new ErreurHttp(400, 'Donnez un nom à la requête.')
-    const schema = await obtenirSchema()
-    const { from, where, tri } = await morceauxSql(spec, schema)
-    const sql = sqlComplet(from, where, tri)
+    const { sql } = await requeteDeLaPhrase(spec, await obtenirSchema())
     enregistrerRequete({ titre: titre.trim(), sql, description, source: `constellation:${titre.trim().toLowerCase()}` })
     return { sql }
   })
+}
+
+// ---------------------------------------------------------------- la requête de la phrase
+
+// Les colonnes montrées (aperçu, rapport), table par table. La table de départ : sa clé (sauf si elle est retirée :
+// apercu.sansCle), puis les colonnes cochées, sinon les premières colonnes proposées. Les autres tables : la colonne
+// de chaque condition (verrouillée : elle montre la jointure ou le filtre), puis les colonnes cochées.
+function colonnesMontrees(spec, schema, depart) {
+  const jointes = new Set([depart.nom, ...(spec.jointures || []).map((j) => tableDe(schema, j.table)?.nom)])
+  const choisies = spec.apercu?.affichees && typeof spec.apercu.affichees === 'object' ? spec.apercu.affichees : {}
+  const cochees = (t) => (Array.isArray(choisies[t.nom]) ? t.colonnes.filter((c) => choisies[t.nom].includes(c.nom)) : null)
+  const sources = []
+  const ajouter = (c) => { if (!sources.some((x) => x.table === c.table && x.colonne === c.colonne)) sources.push(c) }
+  const cleDepart = depart.colonnes.find((c) => c.cle)
+  if (cleDepart && !spec.apercu?.sansCle) ajouter({ table: depart.nom, colonne: cleDepart.nom, cle: true })
+  const proposees = (lireInfo('colonnes_phrase') || {})[depart.nom]
+  const premieres = (proposees?.length ? depart.colonnes.filter((c) => proposees.includes(c.nom)) : depart.colonnes).filter((c) => c !== cleDepart)
+  for (const c of cochees(depart) || premieres.slice(0, 8)) if (c !== cleDepart) ajouter({ table: depart.nom, colonne: c.nom })
+  const conditions = colonnesDesConditions(spec.conditions, schema)
+  for (const c of conditions) ajouter({ ...c, condition: true, verrouillee: true })
+  for (const nom of [...new Set([...conditions.map((c) => c.table), ...Object.keys(choisies)])]) {
+    const t = tableDe(schema, nom)
+    if (!t || t.nom === depart.nom || !jointes.has(t.nom)) continue
+    for (const c of cochees(t) || []) ajouter({ table: t.nom, colonne: c.nom })
+  }
+  // Regroupées par table, dans l'ordre d'arrivée des tables.
+  const ordre = [...new Set(sources.map((c) => c.table))]
+  return sources.sort((a, b) => ordre.indexOf(a.table) - ordre.indexOf(b.table))
+}
+
+const libelleDe = (schema, table, colonne) => colonneDe(tableDe(schema, table), colonne)?.libelle || colonne
+const FONCTIONS = { nombre: 'Nombre', somme: 'Somme', moyenne: 'Moyenne', min: 'Minimum', max: 'Maximum' }
+const PERIODES_GROUPE = { jour: '%Y-%m-%d', semaine: '%x-S%v', mois: '%Y-%m', annee: '%Y' }
+
+// La requête complète de la phrase → { sql, colonnes: [{ alias, table?, colonne?, libelle, ... }], groupe, depart, cle,
+// from, where }. Sans regroupement : les colonnes montrées (SELECT DISTINCT), triées comme dans l'aperçu.
+// Avec spec.groupe = { par: [{ table, colonne, periode? }], mesures: [{ fonction, table?, colonne? }] } : une ligne
+// par groupe, avec ses calculs (nombre de lignes de la table consultée, somme, moyenne, min, max d'une colonne).
+async function requeteDeLaPhrase(spec, schema) {
+  const { from, where, tri, jointes } = await morceauxSql(spec, schema)
+  const depart = tableDe(schema, spec.depart)
+  const cle = depart.colonnes.find((c) => c.cle)
+  const groupe = spec.groupe && Array.isArray(spec.groupe.par) && spec.groupe.par.length ? spec.groupe : null
+  if (!groupe) {
+    const sources = colonnesMontrees(spec, schema, depart)
+    const colonnes = sources.map((c, i) => ({ ...c, alias: `c_${i}`, libelle: libelleDe(schema, c.table, c.colonne) }))
+    const select = [...colonnes.map((c) => `${c.table}.${c.colonne} AS ${c.alias}`), ...tri.map((t, i) => `${t.expression} AS tri_${i}`)]
+    const sql = `SELECT DISTINCT\n  ${select.join(',\n  ')}\n${from}${where}${tri.length ? `\nORDER BY ${tri.map((t, i) => `tri_${i} ${t.sens}`).join(', ')}` : ''}`
+    return { sql, colonnes, groupe: false, depart, cle, from, where }
+  }
+  // Une colonne du regroupement ou d'un calcul : elle doit exister et sa table être dans le chemin.
+  const cible = (x) => {
+    const t = tableDe(schema, x.table || spec.depart)
+    const c = colonneDe(t, x.colonne)
+    if (!t || !c) throw new ErreurHttp(400, 'Colonne inconnue dans le regroupement.')
+    if (!jointes.has(t.nom)) throw new ErreurHttp(400, `La table ${t.nom} n’est pas dans le chemin.`)
+    return { t, c, e: `${t.nom}.${c.nom}` }
+  }
+  const colonnes = []
+  const par = groupe.par.slice(0, 4).map((x, i) => {
+    const { t, c, e } = cible(x)
+    const format = formatDate(c)
+    let expression = e
+    if (format && PERIODES_GROUPE[x.periode]) {
+      const jour = format === 'date8' ? `STR_TO_DATE(NULLIF(${e}, ''), '%Y%m%d')` : format === 'unix' ? `FROM_UNIXTIME(NULLIF(${e}, 0))` : e
+      expression = `DATE_FORMAT(${jour}, '${PERIODES_GROUPE[x.periode]}')`
+    }
+    colonnes.push({ alias: `g_${i}`, table: t.nom, colonne: c.nom, libelle: `${c.libelle || c.nom}${x.periode && format ? ` (${{ jour: 'jour', semaine: 'semaine', mois: 'mois', annee: 'année' }[x.periode]})` : ''}`, groupe: true })
+    return `${expression} AS g_${i}`
+  })
+  const mesures = (Array.isArray(groupe.mesures) && groupe.mesures.length ? groupe.mesures : [{ fonction: 'nombre' }]).slice(0, 6).map((m, i) => {
+    if (!FONCTIONS[m.fonction]) throw new ErreurHttp(400, `Calcul inconnu : ${m.fonction}`)
+    if (m.fonction === 'nombre') {
+      colonnes.push({ alias: `m_${i}`, libelle: `Nombre de ${depart.libelle || depart.nom}`, mesure: true, format: 'entier' })
+      return `COUNT(${cle ? `DISTINCT ${depart.nom}.${cle.nom}` : '*'}) AS m_${i}`
+    }
+    const { t, c, e } = cible(m)
+    const sql = { somme: 'SUM', moyenne: 'AVG', min: 'MIN', max: 'MAX' }[m.fonction]
+    // Une date en AAAAMMJJ : vide n'est pas un minimum.
+    const valeur = formatDate(c) === 'date8' ? `NULLIF(${e}, '')` : e
+    colonnes.push({ alias: `m_${i}`, table: t.nom, colonne: c.nom, libelle: `${FONCTIONS[m.fonction]} de ${c.libelle || c.nom}`, mesure: true, ...(m.fonction === 'moyenne' ? { format: 'decimal' } : {}) })
+    return `${sql}(${valeur}) AS m_${i}`
+  })
+  // Regroupé par période (mois, année…) : dans l'ordre du calendrier ; sinon les plus gros groupes d'abord.
+  const parPeriode = groupe.par[0] && PERIODES_GROUPE[groupe.par[0].periode] && formatDate(cible(groupe.par[0]).c)
+  const sql = `SELECT\n  ${[...par, ...mesures].join(',\n  ')}\n${from}${where}\nGROUP BY ${par.map((_, i) => `g_${i}`).join(', ')}\nORDER BY ${parPeriode ? 'g_0 DESC' : 'm_0 DESC'}`
+  return { sql, colonnes, groupe: true, depart, cle, from, where }
 }
 
 // ---------------------------------------------------------------- structure
@@ -310,7 +432,6 @@ async function preparerAssociations(schema) {
   associations = trouvees
 }
 
-const sqlComplet = (from, where, tri) => `SELECT *\n${from}${where}${tri.length ? `\nORDER BY ${tri.map((t) => `${t.expression} ${t.sens}`).join(', ')}` : ''}`
 
 // La description du chemin, des conditions et du tri, vérifiée sur la structure : chaque table et chaque colonne
 // doit exister et être dans le chemin ; les valeurs sont écrites entre apostrophes (doublées).
@@ -395,7 +516,7 @@ export async function morceauxSql(spec, schema) {
   const anciens = (Array.isArray(spec.filtres) ? spec.filtres : []).map((f) => ({ ...f, op: f.op || 'egal', lien: 'et' }))
   const where = await combiner([...anciens, ...(Array.isArray(spec.conditions) ? spec.conditions : [])])
   const tri = (Array.isArray(spec.tri) ? spec.tri : []).map((t) => ({ expression: ciblee(t).e, sens: t.sens === 'desc' ? 'DESC' : 'ASC' }))
-  return { from: lignes.join('\n'), where: where ? `\nWHERE ${where}` : '', tri }
+  return { from: lignes.join('\n'), where: where ? `\nWHERE ${where}` : '', tri, jointes }
 }
 
 // ---------------------------------------------------------------- dates

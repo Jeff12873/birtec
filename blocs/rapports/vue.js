@@ -39,7 +39,7 @@ export default {
       ecrireResume: (e) => api(`/api/rapports/${encodeURIComponent(e.id)}/resume`, { methode: 'POST', corps: {} }).then((r) => r.resume),
       corrigerResume: (e, texte) => api(`/api/rapports/${encodeURIComponent(e.id)}/resume`, { methode: 'POST', corps: { texte } }).then((r) => r.resume),
       rouvrir: (e) => rouvrirDansLaConstellation(e.constellation, { type: 'rapport', nom: e.id, titre: e.titre }),
-      vide: modeAdmin() ? 'Aucun rapport pour l’instant : construisez un chemin dans la constellation, puis « Et maintenant ? › Créer un rapport ».' : 'Aucun rapport pour l’instant.',
+      vide: modeAdmin() ? 'Aucun rapport pour l’instant : faites une phrase dans la constellation, puis « Et maintenant ? › Créer un rapport ».' : 'Aucun rapport pour l’instant.',
     })
   },
 }
@@ -106,10 +106,9 @@ async function afficherRapport(zone, nom) {
       h('div', { class: 'carte-entete' },
         h('h2', {}, ic('document', 18), rapport.titre || nom),
         h('div', { class: 'actions' },
-          h('a', { class: 'bouton petit discret', href: adresse(`/api/rapports/${encodeURIComponent(nom)}/fichier`), title: 'Le fichier à ouvrir dans BIRT ou à déposer dans la GMAO' }, ic('telecharger', 14), '.rptdesign'),
-          !modeAdmin() ? null : rapport.description?.constructeur
-            ? h('button', { class: 'petit discret', onclick: () => modifier(rapport.description, nom) }, ic('crayon', 14), 'Modifier')
-            : rapport.description ? h('button', { class: 'petit discret', onclick: () => creerDepuisDescription(rapport.description, nom) }, ic('crayon', 14), 'Modifier') : null,
+          // Le fichier du rapport, à ouvrir dans BIRT ou à déposer dans la GMAO. Pour le changer : « Rouvrir dans
+          // la constellation » depuis la liste, retoucher la phrase, puis « Mettre à jour ».
+          h('a', { class: 'bouton petit', href: adresse(`/api/rapports/${encodeURIComponent(nom)}/fichier`), download: `${nom}.rptdesign`, title: 'Le fichier à ouvrir dans BIRT ou à déposer dans la GMAO' }, ic('telecharger', 14), 'Télécharger le .rptdesign'),
           modeAdmin() ? h('button', { class: 'petit discret danger', onclick: () => supprimer(nom) }, ic('poubelle', 14), 'Supprimer') : null,
         ),
       ),
@@ -168,47 +167,6 @@ async function reglagesAspect(nom, description, apercu) {
       h('button', { onclick: appliquer }, ic('rafraichir', 16), 'Appliquer'),
     ),
   )
-}
-
-// Création (ou modification) à partir d'une description JSON, collée ou reprise d'un rapport existant.
-async function creerDepuisDescription(description = null, nom = null) {
-  // Nouveau rapport : la description en mots (comme on la dirait à un collègue). Modifier un rapport existant :
-  // sa description technique (JSON), pour les retouches fines.
-  const zoneTexte = h('textarea', { class: description ? 'sql' : '', rows: description ? 18 : 8, spellcheck: !description, placeholder: 'Ex. : les demandes d’intervention de maintenance des 4 derniers mois, avec leur machine et leur état, triées par date' }, description ? JSON.stringify(description, null, 2) : '')
-  const valeur = await fenetre({
-    titre: nom ? 'Modifier le rapport' : 'Décrire le rapport à créer',
-    large: true,
-    contenu: h('div', {},
-      h('p', { class: 'texte-2' }, nom
-        ? 'Description technique du rapport (format donné dans l’aide « Rapports ») : titre, requête, paramètres, colonnes, groupes, totaux.'
-        : 'Décrivez le rapport en quelques phrases, avec vos mots : ce qu’on liste ou ce qu’on compte, les colonnes, les filtres, la période. Le formulaire « Nouveau rapport » se remplit tout seul, vous vérifiez, l’aperçu suit.'),
-      zoneTexte),
-    boutons: [
-      { texte: 'Annuler', classe: 'discret', valeur: null },
-      { texte: nom ? 'Refaire le rapport' : 'Remplir le formulaire', classe: 'principal', action: () => zoneTexte.value },
-    ],
-  })
-  if (!valeur?.trim()) return
-  // Une description technique (JSON) est toujours acceptée ; sinon c'est du texte, confié au formulaire.
-  let lue = null
-  try {
-    lue = JSON.parse(valeur)
-  } catch {}
-  if (lue && typeof lue === 'object') return creerRapport(lue, nom)
-  sessionStorage.setItem('birtec-phrase', valeur.trim())
-  location.hash = '#/constructeur/rapport'
-}
-
-// Rouvre l'éditeur sur un rapport créé avec le formulaire. Les rapports d'avant les blocs (un seul tableau)
-// deviennent un rapport d'un seul bloc.
-function modifier(d, nom) {
-  const c = d.constructeur
-  const aspect = { titre: d.titre, sousTitre: d.sousTitre, theme: d.theme, logo: d.logo, image: d.image || '', description: d.description, positionDescription: d.positionDescription, orientation: d.orientation }
-  const rapport = c.version === 2
-    ? { aspect: { ...aspect, ...c.aspect }, parametres: c.parametres || [], blocs: c.blocs || [] }
-    : { aspect, parametres: [], blocs: [{ type: 'tableau', titre: '', source: 'champs', etat: { calculees: [], ...c }, regles: {} }] }
-  sessionStorage.setItem('birtec-rapport', JSON.stringify({ rapport, nom }))
-  location.hash = '#/constructeur/rapport'
 }
 
 // Utilisé aussi par l'assistant. Affiche une fenêtre d'attente pendant la fabrication et la vérification.

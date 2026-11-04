@@ -366,3 +366,11 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 .reglages-schema [hidden] { display: none !important; }
 .menu-theme-groupe { margin-top: 6px; padding: 10px 10px 4px; border-top: 1px solid var(--bord); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
 .menu-theme-groupe:first-child { margin-top: 0; border-top: none; padding-top: 4px; }
+
+/* LA PHRASE : le regroupement facultatif, sur une ou deux lignes, chaque choix à sa taille */
+.groupe-phrase { display: grid; gap: 6px; margin: 8px 0 0 50px; }
+.groupe-phrase:empty { display: none; }
+.ligne-groupe { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.element-groupe { display: inline-flex; gap: 6px; align-items: center; }
+.groupe-phrase .pastille-choix, .groupe-phrase select { width: auto; flex: none; max-width: 260px; }
+.groupe-phrase .menu-theme.champ-phrase { flex: none; }

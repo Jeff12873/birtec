@@ -160,6 +160,7 @@ export default {
           h('button', { class: 'discret', title: 'Voir tout le graphe', onclick: () => vue.toutVoir() }, ic('rafraichir', 16), 'Tout voir'),
           h('button', { title: 'Enregistre toute la constellation, telle qu’elle est disposée, dans un fichier PDF (A3 paysage)', onclick: () => telechargerPdf(graphe, vue, schema).catch((e) => notifier(`PDF impossible : ${e.message}`, 'erreur')) }, ic('document', 16), 'Constellation en PDF'),
           h('button', { class: 'discret', title: 'La même page, envoyée à l’imprimante', onclick: () => imprimer(graphe, vue, schema) }, ic('document', 16), 'Imprimer'),
+          h('button', { class: 'discret', title: 'Reprendre la phrase et le chemin d’un rapport BIRT existant (.rptdesign)', onclick: () => chargerRptdesign((c) => bandeau.restaurer(c)) }, ic('dossier', 16), 'Charger un .rptdesign'),
         ),
       ),
       bandeau.element,
@@ -1198,6 +1199,7 @@ function bandeauPhrase(vue) {
   const zoneDepart = h('div', { class: 'ligne-depart-phrase' })
   const zoneConditions = h('div', { class: 'conditions-phrase' })
   const zoneResultat = h('div', { class: 'resultat-phrase' })
+  const zoneGroupe = h('div', { class: 'groupe-phrase' })
   // { depart, conditions: [condition | { id, lien, groupe: [condition…] }], tri: [{ table, colonne, sens }] }
   let etatPhrase = { depart: null, conditions: [], tri: [] }
   let guidesDispo = { parcs: [], machines: null, fiche: null }
@@ -1423,12 +1425,17 @@ function bandeauPhrase(vue) {
   }
 
   async function choisirDepart(nom, garder = null) {
-    etatPhrase = garder || { depart: nom || null, conditions: [], tri: [], affichees: {} }
+    etatPhrase = garder || { depart: nom || null, conditions: [], tri: [], affichees: {}, groupe: null, sansCle: false }
     etatPhrase.affichees ||= {}
     tablesDuChemin = ''
     guidesDispo = { parcs: [], machines: null, fiche: null }
     if (etatPhrase.depart) guidesDispo = await api(`/api/phrase/guides?depart=${encodeURIComponent(etatPhrase.depart)}`).catch(() => guidesDispo)
-    phraseCourante = { texte, conditions: conditionsSpec, tri: triSpec, sauvegarde: () => JSON.parse(JSON.stringify({ conditions: etatPhrase.conditions, tri: triSpec(), affichees: etatPhrase.affichees })), origine }
+    phraseCourante = {
+      texte, conditions: conditionsSpec, tri: triSpec, origine,
+      // La demande complète pour le serveur : chemin, conditions, tri, regroupement, colonnes montrées.
+      spec: (chemin) => ({ ...specDuChemin(chemin, conditionsSpec(), triSpec()), groupe: groupeSpec(), apercu: { affichees: etatPhrase.affichees, sansCle: Boolean(etatPhrase.sansCle) } }),
+      sauvegarde: () => JSON.parse(JSON.stringify({ conditions: etatPhrase.conditions, tri: triSpec(), affichees: etatPhrase.affichees, groupe: etatPhrase.groupe, sansCle: Boolean(etatPhrase.sansCle) })),
+    }
     dessinerDepart()
     dessiner()
     if (etatPhrase.depart) changement()
@@ -1436,8 +1443,59 @@ function bandeauPhrase(vue) {
   }
 
   function dessiner() {
-    if (!etatPhrase.depart) return vider(zoneConditions)
+    if (!etatPhrase.depart) { vider(zoneGroupe); return vider(zoneConditions) }
     vider(zoneConditions, listeConditions(etatPhrase.conditions, true))
+    dessinerGroupe()
+  }
+
+  // ---- le regroupement, facultatif : « regroupés par [champ] (par mois…), avec [nombre, somme de…] »
+  const groupeSpec = () => {
+    const g = etatPhrase.groupe
+    const par = (g?.par || []).filter((x) => x.table && x.colonne)
+    if (!par.length) return null
+    return { par: par.map(({ table, colonne, periode }) => ({ table, colonne, periode: periode || null })), mesures: (g.mesures || []).filter((m) => m.fonction === 'nombre' || (m.table && m.colonne)).map(({ fonction, table, colonne }) => ({ fonction, table, colonne })) }
+  }
+  const FONCTIONS_GROUPE = { nombre: 'le nombre', somme: 'la somme de', moyenne: 'la moyenne de', min: 'le minimum de', max: 'le maximum de' }
+  const PERIODES_GROUPE = { '': 'valeur exacte', jour: 'par jour', semaine: 'par semaine', mois: 'par mois', annee: 'par année' }
+  // Les tables du chemin, dans l'ordre : on regroupe et on calcule sur elles.
+  const tablesDuGroupe = () => [...new Set([etatPhrase.depart, ...(vue.chemin?.etapes || []).map((e) => e.vers.table.nom)])].filter(Boolean)
+  function choixChamp(objet, apres) {
+    const tables = tablesDuGroupe()
+    if (!tables.includes(objet.table)) objet.table = etatPhrase.depart
+    const table = choixListe(tables.map((t) => ({ valeur: t, libelle: libelleTable(t) })), objet.table, (v) => { Object.assign(objet, { table: v, colonne: null, periode: null }); apres() }, { classe: 'champ' })
+    const champ = menuDeroulant({
+      choix: [{ valeur: '', libelle: '— quel champ ? —' }, ...colonnesDe(objet.table, objet.colonne).map((x) => ({ valeur: x.valeur, libelle: x.libelle }))],
+      valeur: objet.colonne || '',
+      classe: `champ-phrase${objet.colonne ? ' choisi' : ''}`,
+      bulle: (v) => bulleExemple(objet.table, v),
+      surChoix: (v) => { Object.assign(objet, { colonne: v || null, periode: null }); apres() },
+    })
+    return [table, champ]
+  }
+  function dessinerGroupe() {
+    const g = etatPhrase.groupe
+    const refaire = () => { dessinerGroupe(); changement() }
+    if (!g) {
+      return vider(zoneGroupe, h('div', { class: 'ajouts-condition' }, h('button', { class: 'pastille-ajout', title: 'Facultatif : une ligne par valeur d’un champ (par machine, par mois…), avec des calculs', onclick: () => { etatPhrase.groupe = { par: [{ table: etatPhrase.depart, colonne: null }], mesures: [{ fonction: 'nombre' }] }; dessinerGroupe() } }, ic('plus', 13), 'regrouper (facultatif)')))
+    }
+    const lignePar = (x, i) => {
+      const col = x.table && x.colonne ? colonneDe(x.table, x.colonne) : null
+      const date = famille(natureColonne(col)) === 'date'
+      return h('span', { class: 'element-groupe' }, i ? h('span', { class: 'mot-phrase' }, 'puis') : null, ...choixChamp(x, refaire),
+        date ? choixListe(Object.entries(PERIODES_GROUPE).map(([valeur, libelle]) => ({ valeur, libelle })), x.periode || '', (v) => { x.periode = v || null; refaire() }, { classe: 'operateur quand' }) : null,
+        g.par.length > 1 ? h('button', { class: 'discret icone-seule petit', title: 'Retirer', onclick: () => { g.par.splice(i, 1); refaire() } }, ic('x', 13)) : null)
+    }
+    const ligneMesure = (m, i) => h('span', { class: 'element-groupe' }, i ? h('span', { class: 'mot-phrase' }, 'et') : null,
+      choixListe(Object.entries(FONCTIONS_GROUPE).map(([valeur, libelle]) => ({ valeur, libelle })), m.fonction, (v) => { m.fonction = v; if (v !== 'nombre' && !m.table) m.table = etatPhrase.depart; refaire() }, { classe: 'operateur' }),
+      m.fonction === 'nombre' ? h('span', { class: 'mot-phrase' }, libelleTable(etatPhrase.depart)) : choixChamp(m, refaire),
+      g.mesures.length > 1 ? h('button', { class: 'discret icone-seule petit', title: 'Retirer', onclick: () => { g.mesures.splice(i, 1); refaire() } }, ic('x', 13)) : null)
+    vider(zoneGroupe, h('div', { class: 'ligne-groupe' },
+      h('span', { class: 'mot-phrase' }, 'regroupés par'), g.par.map(lignePar),
+      g.par.length < 4 ? h('button', { class: 'pastille-ajout', onclick: () => { g.par.push({ table: etatPhrase.depart, colonne: null }); dessinerGroupe() } }, ic('plus', 13), 'puis par…') : null),
+      h('div', { class: 'ligne-groupe' },
+        h('span', { class: 'mot-phrase' }, 'avec'), g.mesures.map(ligneMesure),
+        g.mesures.length < 6 ? h('button', { class: 'pastille-ajout', onclick: () => { g.mesures.push({ fonction: 'somme', table: etatPhrase.depart, colonne: null }); dessinerGroupe() } }, ic('plus', 13), 'un calcul') : null,
+        h('button', { class: 'pastille-ajout', title: 'Revenir à la liste des lignes', onclick: () => { etatPhrase.groupe = null; refaire() } }, ic('x', 13), 'ne plus regrouper')))
   }
 
   // Une liste de conditions (la phrase entière, ou l'intérieur d'un groupe), avec ses boutons d'ajout.
@@ -1763,14 +1821,17 @@ function bandeauPhrase(vue) {
     const montrees = toutes.filter((x) => x.table === table)
     const verrouillees = new Set(montrees.filter((x) => x.verrouillee).map((x) => x.colonne))
     const cochees = new Set(montrees.map((x) => x.colonne))
+    // La clé de la table consultée : montrée par défaut, mais on peut la retirer (elle irait sinon dans l'indicateur).
+    const cle = table === etatPhrase.depart ? (noeud(table)?.table.colonnes || []).find((x) => x.cle)?.nom : null
     // Les colonnes proposées de la table, plus celles déjà montrées (même si l'administrateur les a retirées depuis).
-    const liste = [...new Map([...colonnesDe(table), ...montrees.map((x) => ({ valeur: x.colonne, libelle: libelleColonne(colonneDe(table, x.colonne)) || x.colonne }))].map((x) => [x.valeur, x])).values()]
+    const liste = [...new Map([...(cle ? [{ valeur: cle, libelle: libelleColonne(colonneDe(table, cle)) || cle }] : []), ...colonnesDe(table), ...montrees.map((x) => ({ valeur: x.colonne, libelle: libelleColonne(colonneDe(table, x.colonne)) || x.colonne }))].map((x) => [x.valeur, x])).values()]
     const ordre = (noeud(table)?.table.colonnes || []).map((x) => x.nom)
     liste.sort((a, b) => ordre.indexOf(a.valeur) - ordre.indexOf(b.valeur))
     const bulle = h('div', { class: 'menu-theme-bulle', hidden: true })
     let minuterieMaj = null
     const appliquer = () => {
-      etatPhrase.affichees[table] = liste.map((x) => x.valeur).filter((v) => cochees.has(v) && !verrouillees.has(v))
+      etatPhrase.affichees[table] = liste.map((x) => x.valeur).filter((v) => cochees.has(v) && !verrouillees.has(v) && v !== cle)
+      if (cle) etatPhrase.sansCle = !cochees.has(cle)
       clearTimeout(minuterieMaj)
       minuterieMaj = setTimeout(majCompteur, 500)
     }
@@ -1834,12 +1895,14 @@ function bandeauPhrase(vue) {
       const numero = ++demande
       vider(zoneResultat, h('span', { class: 'discret curseur' }, 'Comptage dans la base'))
       try {
-        const r = await api('/api/phrase/compter', { methode: 'POST', corps: { ...specDuChemin(vue.chemin, conditionsSpec(), triSpec()), apercu: { affichees: etatPhrase.affichees } } })
+        const r = await api('/api/phrase/compter', { methode: 'POST', corps: phraseCourante.spec(vue.chemin) })
         if (numero !== demande) return
+        const groupe = r.apercu?.groupe
         vider(zoneResultat,
-          h('div', { class: 'compteur-phrase' }, h('b', {}, nombreFr(r.nombre)), ` ${libelleTable(vue.chemin.depart.table.nom)} correspondent`),
+          h('div', { class: 'compteur-phrase' }, h('b', {}, nombreFr(r.nombre)), ` ${libelleTable(vue.chemin.depart.table.nom)} correspondent`, groupe ? h('span', { class: 'discret' }, ` · ${nombreFr(r.groupes)} groupe${r.groupes > 1 ? 's' : ''}`) : null),
           r.apercu?.lignes.length ? h('div', { class: 'tableau-conteneur apercu-phrase' }, h('table', { class: 'tableau compact' },
-            h('thead', {}, h('tr', {}, r.apercu.colonnes.map((c, i) => enteteTri(c, i, r.apercu.colonnes)))),
+            // Regroupé : une colonne par champ du regroupement et par calcul (pas de tri au clic).
+            h('thead', {}, h('tr', {}, r.apercu.colonnes.map((c, i) => (groupe ? h('th', { class: c.mesure ? 'colonne-condition' : '' }, c.libelle) : enteteTri(c, i, r.apercu.colonnes))))),
             h('tbody', {}, r.apercu.lignes.map((l) => h('tr', {}, l.map((v, i) => celluleApercu(r.apercu.colonnes[i], v))))))) : null,
           r.sql ? h('details', { class: 'sql-phrase' }, h('summary', {}, 'Voir le SQL pour BIRT'), h('pre', { class: 'code' }, h('code', {}, r.sql))) : null)
       } catch (e) {
@@ -1856,7 +1919,7 @@ function bandeauPhrase(vue) {
     const conditions = Array.isArray(c.conditions) ? reprendre(c.conditions) : (c.filtres || []).map((f) => (f.guide
       ? { ...nouvelleCondition(), source: f.guide, valeur: f.valeur, valeurTexte: String(f.texte || '').split(' : ').slice(1).join(' : ') || f.valeur, modele: f.modele, modeleTexte: f.modele, champ: f.champ, champTexte: f.champ, valeurs: f.valeurs || [] }
       : { ...nouvelleCondition(), source: `table:${f.table}`, table: f.table, colonne: f.colonne, valeurs: [String(f.valeurs?.[0] ?? '')] }))
-    choisirDepart(depart, { depart, conditions, tri: (c.tri || []).map((t) => ({ ...t })), affichees: { ...(c.affichees || {}) } }).then(() => {
+    choisirDepart(depart, { depart, conditions, tri: (c.tri || []).map((t) => ({ ...t })), affichees: { ...(c.affichees || {}) }, groupe: c.groupe ? JSON.parse(JSON.stringify(c.groupe)) : null, sansCle: Boolean(c.sansCle) }).then(() => {
       // Une ancienne constellation sans conditions : ses tables sont rallumées telles quelles.
       if (!conditions.length && c.tables?.length) { tablesDuChemin = ''; vue.cheminPour(c.tables) }
     })
@@ -1865,7 +1928,7 @@ function bandeauPhrase(vue) {
   const reprendre = (liste) => liste.map((x) => (x.groupe ? { ...x, id: ++numeroCondition, groupe: reprendre(x.groupe) } : { ...nouvelleCondition(x.lien), ...x, id: ++numeroCondition, valeurs: x.valeurs || [], sous: reprendre(x.sous || []) }))
 
   dessinerDepart()
-  const element = h('div', { class: 'carte bandeau-phrase' }, zoneDepart, zoneConditions, zoneResultat)
+  const element = h('div', { class: 'carte bandeau-phrase' }, zoneDepart, zoneConditions, zoneGroupe, zoneResultat)
   return { element, majCompteur, restaurer }
 }
 
@@ -1880,60 +1943,101 @@ function specDuChemin(chemin, conditions = [], tri = []) {
   }
 }
 
-// « Et maintenant ? » : une fois le chemin (et la phrase) validés, passer au rapport, au SQL ou à l'indicateur.
-// Réservé à l'administrateur : créer demande d'écrire du SQL.
+// « Et maintenant ? » : une fois le chemin (et la phrase) validés, en faire un rapport BIRT, une requête du site ou
+// un indicateur GMAO, directement (plus de formulaire de construction). Réservé à l'administrateur.
 function etMaintenant(chemin, distinctes) {
   if (!modeAdmin()) return null
   // Lu au moment du clic : les conditions ont pu changer depuis que ce panneau a été dessiné.
   const actuel = () => {
     const phrase = phraseCourante?.texte() || ''
     const constellation = { phrase, depart: chemin.depart.table.nom, tables: distinctes, ...(phraseCourante?.sauvegarde() || {}) }
-    return { phrase, constellation, conditions: phraseCourante?.conditions() || [], tri: phraseCourante?.tri() || [] }
+    return { phrase, constellation, spec: phraseCourante?.spec(chemin) || specDuChemin(chemin) }
   }
   const libelle = chemin.depart.table.libelle || chemin.depart.table.nom
   const origine = phraseCourante?.origine || null
   return h('div', { class: 'et-maintenant' },
     h('h3', {}, ic('etincelle', 15), 'Et maintenant ?'),
     h('div', { class: 'actions' },
-      h('button', { class: 'petit principal', title: 'Le formulaire du rapport, déjà rempli d’après la phrase et le chemin', onclick: () => {
-        const { phrase, constellation } = actuel()
-        sessionStorage.setItem('birtec-constellation', JSON.stringify(constellation))
-        sessionStorage.setItem('birtec-phrase', phrase || `Liste des ${libelle}`)
-        location.hash = '#/constructeur/rapport'
-      } }, ic('document', 14), 'Créer un rapport'),
-      h('button', { class: 'petit', title: 'Ranger cette requête dans les requêtes du site (fichier .ktec)', onclick: () => { const { phrase, conditions, tri } = actuel(); enregistrerSql(chemin, conditions, tri, phrase || libelle) } }, ic('base', 14), 'Enregistrer le SQL'),
-      origine ? h('button', { class: 'petit principal', title: 'Rouvrir le formulaire de ce qui a été rouvert, avec le chemin et les conditions d’aujourd’hui', onclick: () => mettreAJour(origine, actuel().constellation) }, ic('crayon', 14), `Mettre à jour « ${String(origine.titre || '').slice(0, 40)} »`) : null,
-      h('button', { class: 'petit', title: 'Un indicateur de la GMAO sur cette table', onclick: () => {
-        const { phrase, constellation } = actuel()
-        sessionStorage.setItem('birtec-indicateur', JSON.stringify({ etat: { sujet: chemin.depart.table.nom }, nom: phrase ? phrase.slice(0, 80) : '', constellation }))
-        location.hash = '#/indicateur'
-      } }, ic('graphique', 14), 'Indicateur GMAO')))
+      origine ? h('button', { class: 'petit principal', title: 'Refaire ce qui a été rouvert avec la phrase d’aujourd’hui (même nom)', onclick: () => (origine.type === 'rapport' ? creerRapport(actuel(), libelle, origine) : creerIndicateur(actuel(), origine)) }, ic('crayon', 14), `Mettre à jour « ${String(origine.titre || '').slice(0, 40)} »`) : null,
+      h('button', { class: `petit${origine ? '' : ' principal'}`, title: 'Un rapport BIRT fait de la phrase : ses colonnes, ou ses groupes et leurs calculs', onclick: () => creerRapport(actuel(), libelle) }, ic('document', 14), 'Créer un rapport'),
+      h('button', { class: 'petit', title: 'Ranger cette requête dans les requêtes du site (fichier .ktec)', onclick: () => { const { phrase, spec } = actuel(); enregistrerSql(spec, phrase || libelle) } }, ic('base', 14), 'Enregistrer le SQL'),
+      h('button', { class: 'petit', title: 'Un indicateur de la GMAO : le nombre de lignes de la phrase, et leur liste', onclick: () => creerIndicateur(actuel()) }, ic('graphique', 14), 'Indicateur GMAO')))
 }
 
-// « Mettre à jour » un rapport ou un indicateur rouvert : son formulaire, avec le chemin et les filtres actuels.
-async function mettreAJour(origine, constellation) {
-  const nouvelle = { ...constellation, phrase: constellation.phrase || origine.titre || '' }
-  if (origine.type === 'rapport') {
-    const r = await api(`/api/rapports/${encodeURIComponent(origine.nom)}`)
-    if (!r.description?.constructeur) return notifier('Ce rapport n’a pas été fait avec le formulaire : créez-en un nouveau (« Créer un rapport »).', 'erreur')
-    sessionStorage.setItem('birtec-rapport', JSON.stringify({ rapport: { ...r.description.constructeur, constellation: nouvelle }, nom: origine.nom }))
-    location.hash = '#/constructeur/rapport'
-  } else {
-    const i = (await api('/api/indicateurs/indicateurs')).find((x) => String(x.id) === String(origine.id))
-    if (!i) return notifier('Indicateur introuvable.', 'erreur')
-    sessionStorage.setItem('birtec-indicateur', JSON.stringify({ etat: i.definition?.constructeur || { sujet: constellation.depart }, nom: i.nom, dateIndicateur: i.definition?.dateIndicateur, arborescence: i.definition?.arborescence, id: i.id, constellation: nouvelle }))
-    location.hash = '#/indicateur'
+// Le rapport de la phrase : on donne son titre, BiRTEC le fabrique et le vérifie dans le moteur BIRT.
+// origine : un rapport rouvert, refait sous le même nom.
+async function creerRapport({ phrase, constellation, spec }, libelle, origine = null) {
+  const titre = h('input', { type: 'text', value: (origine?.titre || phrase || `Liste des ${libelle}`).slice(0, 120) })
+  const resultat = h('div')
+  const fait = await fenetre({
+    titre: origine ? `Mettre à jour le rapport « ${origine.titre} »` : 'Créer un rapport',
+    contenu: h('div', {},
+      h('p', { class: 'texte-2', style: { marginTop: 0 } }, spec.groupe ? 'Un tableau : une ligne par groupe, avec ses calculs.' : 'Un tableau : les colonnes de l’aperçu, dans le même ordre et le même tri.'),
+      h('label', { class: 'champ' }, h('span', {}, 'Titre'), titre), resultat),
+    boutons: [
+      { texte: 'Annuler', classe: 'discret', valeur: null },
+      { texte: origine ? 'Mettre à jour' : 'Créer', classe: 'principal', action: async () => {
+        vider(resultat, h('p', { class: 'discret curseur' }, 'Fabrication et vérification dans le moteur BIRT'))
+        const r = await api('/api/phrase/rapport', { methode: 'POST', corps: { titre: titre.value, spec, constellation, nom: origine?.nom || null } })
+        if (!r.ok) {
+          vider(resultat, h('div', { class: 'bandeau' }, ic('alerte'), h('div', {}, 'Le rapport n’a pas pu être fabriqué :', h('ul', {}, r.erreurs.map((e) => h('li', { class: 'mono' }, e))))))
+          throw new Error('Rapport non fabriqué')
+        }
+        return r
+      } },
+    ],
+  }).catch(() => null)
+  if (fait) {
+    notifier(`Rapport « ${titre.value} » ${origine ? 'mis à jour' : 'créé'} : il est dans Rapports`)
+    location.hash = '#/rapports'
   }
 }
 
-async function enregistrerSql(chemin, conditions, tri, titre) {
+// L'indicateur GMAO de la phrase : la requête indicateur (le nombre) et la requête liste, essayées sur la base,
+// puis enregistrées. origine : un indicateur rouvert, mis à jour sous le même numéro.
+async function creerIndicateur({ phrase, constellation, spec }, origine = null) {
+  const nom = h('input', { type: 'text', value: (origine?.titre || phrase || '').slice(0, 80), placeholder: 'ex. Demandes ouvertes de niveau 1' })
+  const arbo = h('input', { type: 'checkbox', checked: true })
+  const resultat = h('div')
+  let essai = null
+  const essayerIndicateur = async () => {
+    vider(resultat, h('p', { class: 'discret curseur' }, 'Essai des requêtes sur la base'))
+    essai = await api('/api/phrase/indicateur', { methode: 'POST', corps: { nom: nom.value, spec, constellation, arborescence: arbo.checked } }).catch((e) => ({ erreurs: [e.message] }))
+    vider(resultat,
+      essai.erreurs?.length ? h('div', { class: 'bandeau' }, ic('alerte'), h('ul', {}, essai.erreurs.map((e) => h('li', {}, e)))) : h('p', { class: 'texte-2' }, `« ${essai.nom} » — ${essai.fenetre}${spec.groupe ? ' · le regroupement ne sert pas à un indicateur (il compte les lignes).' : ''}`),
+      (essai.avertissements || []).map((a) => h('p', { class: 'discret' }, a)),
+      essai.requeteIndicateur ? [h('h3', {}, 'Requête indicateur'), h('pre', { class: 'code' }, h('code', {}, essai.requeteIndicateur)), h('h3', {}, 'Requête liste'), h('pre', { class: 'code' }, h('code', {}, essai.requeteListe))] : null)
+  }
+  const fait = await fenetre({
+    titre: origine ? `Mettre à jour l’indicateur « ${origine.titre} »` : 'Indicateur GMAO',
+    large: true,
+    contenu: h('div', {},
+      h('p', { class: 'texte-2', style: { marginTop: 0 } }, 'L’indicateur compte les lignes de la phrase ; sa liste les montre. Les deux requêtes sont à copier dans la GMAO.'),
+      h('label', { class: 'champ' }, h('span', {}, 'Nom'), nom),
+      h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', margin: '6px 0' } }, arbo, 'Filtrer sur l’arborescence de la personne connectée à la GMAO'),
+      h('div', { class: 'actions' }, h('button', { onclick: essayerIndicateur }, ic('rafraichir', 15), 'Essayer')), resultat),
+    boutons: [
+      { texte: 'Annuler', classe: 'discret', valeur: null },
+      { texte: 'Enregistrer', classe: 'principal', action: async () => {
+        if (!essai || essai.erreurs?.length) { await essayerIndicateur(); if (essai.erreurs?.length) throw new Error('Requêtes en erreur') }
+        return api('/api/phrase/indicateur', { methode: 'POST', corps: { nom: nom.value, spec, constellation, arborescence: arbo.checked, enregistrer: true, id: origine?.id || null } })
+      } },
+    ],
+  }).catch(() => null)
+  if (fait?.id) {
+    notifier(`Indicateur « ${fait.nom} » enregistré : il est dans Indicateurs GMAO`)
+    location.hash = '#/indicateurs'
+  }
+}
+
+async function enregistrerSql(spec, titre) {
   const champ = h('input', { type: 'text', value: titre.slice(0, 80) })
   const fait = await fenetre({
     titre: 'Enregistrer le SQL',
     contenu: h('div', {}, h('p', { class: 'texte-2', style: { marginTop: 0 } }, 'La requête (jointures dans l’ordre et filtres choisis) est rangée dans les requêtes du site, réutilisables dans BIRT.'), h('label', { class: 'champ' }, h('span', {}, 'Nom'), champ)),
     boutons: [
       { texte: 'Annuler', classe: 'discret', valeur: null },
-      { texte: 'Enregistrer', classe: 'principal', action: () => api('/api/phrase/enregistrer', { methode: 'POST', corps: { titre: champ.value, description: phraseCourante?.texte() || '', spec: specDuChemin(chemin, conditions, tri) } }) },
+      { texte: 'Enregistrer', classe: 'principal', action: () => api('/api/phrase/enregistrer', { methode: 'POST', corps: { titre: champ.value, description: phraseCourante?.texte() || '', spec } }) },
     ],
   })
   if (fait) notifier('Requête enregistrée dans les requêtes du site')
@@ -2244,6 +2348,37 @@ function imageDuChemin(vue, chemin, sql) {
     lignesSql.forEach((ligne, i) => c.fillText(coupe(ligne, largeurSql - 36), largeurPlan + 20, HAUT + i * 17))
   }
   return toile.toDataURL('image/png')
+}
+
+// « Charger un .rptdesign » : la phrase qu'il porte, ou celle tirée de sa requête, reprise dans LA PHRASE. Ce que
+// BiRTEC n'a pas su traduire est montré, avec la requête, pour le refaire à la main.
+function chargerRptdesign(restaurer) {
+  const choix = h('input', { type: 'file', accept: '.rptdesign', style: { display: 'none' } })
+  choix.addEventListener('change', async () => {
+    const fichier = choix.files[0]
+    choix.remove()
+    if (!fichier) return
+    let r
+    try {
+      r = await api('/api/phrase/rptdesign', { methode: 'POST', fichier })
+    } catch (erreur) {
+      return notifier(erreur.message, 'erreur')
+    }
+    restaurer(r.phrase)
+    if (r.embarquee) return notifier(`Phrase de « ${fichier.name} » reprise telle qu’elle avait été faite`)
+    const p = r.phrase
+    await fenetre({
+      titre: `Repris de « ${fichier.name} »`,
+      large: true,
+      contenu: h('div', {},
+        h('p', { class: 'texte-2', style: { marginTop: 0 } }, `Table consultée : ${p.depart}. Chemin : ${p.tables.join(' → ')}. ${p.conditions.length} condition${p.conditions.length > 1 ? 's' : ''} reprise${p.conditions.length > 1 ? 's' : ''}${p.tri.length ? `, ${p.tri.length} tri${p.tri.length > 1 ? 's' : ''}` : ''}.${r.autresRequetes ? ` Le rapport a ${r.autresRequetes} autre${r.autresRequetes > 1 ? 's' : ''} requête${r.autresRequetes > 1 ? 's' : ''} (en-tête, paramètres…) : seule la principale est reprise.` : ''}`),
+        p.nonReconnu.length ? [h('h3', {}, 'À refaire à la main'), h('ul', {}, p.nonReconnu.map((x) => h('li', { class: 'mono', style: { fontSize: '12px' } }, x)))] : h('p', { class: 'texte-2' }, 'Tout a été repris.'),
+        h('details', {}, h('summary', { class: 'discret' }, 'La requête du rapport'), h('pre', { class: 'code' }, h('code', {}, r.requete)))),
+      boutons: [{ texte: 'Fermer', classe: 'principal', valeur: true }],
+    })
+  })
+  document.body.append(choix)
+  choix.click()
 }
 
 // Le SQL d'un chemin, dans un ordre que BIRT accepte : on part de la première table, et une jointure n'ajoute sa

@@ -30,40 +30,29 @@ export default {
       ecrireResume: (e) => api(`/api/indicateurs/indicateurs/${e.id}/resume`, { methode: 'POST', corps: {} }).then((r) => r.resume),
       corrigerResume: (e, texte) => api(`/api/indicateurs/indicateurs/${e.id}/resume`, { methode: 'POST', corps: { texte } }).then((r) => r.resume),
       rouvrir: (e) => rouvrirDansLaConstellation(e.constellation, { type: 'indicateur', id: e.id, titre: e.titre }),
-      vide: modeAdmin() ? 'Aucun indicateur pour l’instant : construisez un chemin dans la constellation, puis « Et maintenant ? › Indicateur GMAO ».' : 'Aucun indicateur pour l’instant.',
+      vide: modeAdmin() ? 'Aucun indicateur pour l’instant : faites une phrase dans la constellation, puis « Et maintenant ? › Indicateur GMAO ».' : 'Aucun indicateur pour l’instant.',
     })
     // Les variables de la GMAO (administrateur), sous le titre.
     if (modeAdmin()) zone.querySelector('.entete-page')?.append(h('div', { class: 'actions' }, h('button', { class: 'discret petit', onclick: modifierReglages }, ic('reglages', 14), 'Variables')))
   },
 }
 
-function demanderALAssistant(question) {
-  sessionStorage.setItem('birtec-question', question)
-  location.hash = '#/assistant'
-}
-
+// Un indicateur : ses deux requêtes à copier dans la GMAO, en lecture (plus de construction ni de retouche : on
+// le refait depuis LA PHRASE, avec « Rouvrir dans la constellation »), et l'essai sur la base.
 function detail(indicateur) {
-  const requeteIndicateur = h('textarea', { class: 'sql', rows: 10, spellcheck: false }, indicateur.requeteIndicateur || '')
-  const requeteListe = h('textarea', { class: 'sql', rows: 14, spellcheck: false }, indicateur.requeteListe || '')
+  const requeteIndicateur = h('pre', { class: 'code' }, h('code', {}, indicateur.requeteIndicateur || ''))
+  const requeteListe = h('pre', { class: 'code' }, h('code', {}, indicateur.requeteListe || ''))
   const resultat = h('div')
-  const copier = (zoneTexte, libelle) => h('button', { class: 'petit discret', onclick: () => navigator.clipboard.writeText(zoneTexte.value).then(() => notifier(`${libelle} copiée`)) }, ic('copier', 14), 'Copier')
+  const copier = (texte, libelle) => h('button', { class: 'petit discret', onclick: () => navigator.clipboard.writeText(texte).then(() => notifier(`${libelle} copiée`)) }, ic('copier', 14), 'Copier')
 
   async function tester() {
     if (!etat.connexion.ouverte) await demanderMotDePasse().catch(() => {})
     vider(resultat, h('p', { class: 'discret curseur' }, 'Essai des deux requêtes'))
     try {
-      // L'utilisateur essaie l'indicateur tel qu'il est enregistré ; l'administrateur, ses retouches.
-      const corps = modeAdmin() ? { requeteIndicateur: requeteIndicateur.value, requeteListe: requeteListe.value } : { id: indicateur.id }
-      vider(resultat, dessinerResultat(await api('/api/indicateurs/tester', { methode: 'POST', corps })))
+      vider(resultat, dessinerResultat(await api('/api/indicateurs/tester', { methode: 'POST', corps: { id: indicateur.id } })))
     } catch (erreur) {
       vider(resultat, h('div', { class: 'bandeau' }, ic('alerte'), erreur.message))
     }
-  }
-
-  async function enregistrer() {
-    await api('/api/indicateurs/indicateurs', { methode: 'POST', corps: { ...indicateur, requeteIndicateur: requeteIndicateur.value, requeteListe: requeteListe.value } })
-    notifier('Indicateur enregistré dans le fichier .ktec')
-    window.ktec.recharger()
   }
 
   async function supprimer() {
@@ -80,9 +69,6 @@ function detail(indicateur) {
         h('h2', {}, ic('graphique', 18), indicateur.nom),
         h('div', { class: 'actions' },
           h('button', { class: 'petit', onclick: tester }, ic('lecture', 14), 'Tester'),
-          !modeAdmin() ? null : indicateur.definition?.constructeur
-            ? h('button', { class: 'petit discret', onclick: () => { sessionStorage.setItem('birtec-indicateur', JSON.stringify({ etat: indicateur.definition.constructeur, nom: indicateur.nom, dateIndicateur: indicateur.definition.dateIndicateur, arborescence: indicateur.definition.arborescence, id: indicateur.id, constellation: indicateur.definition.constellation })); location.hash = '#/indicateur' } }, ic('crayon', 14), 'Modifier (formulaire)')
-            : !etat.ia?.installee ? null : h('button', { class: 'petit discret', onclick: () => demanderALAssistant(`Modifie l’indicateur GMAO « ${indicateur.nom} » : `) }, ic('etincelle', 14), 'Modifier avec l’assistant'),
           modeAdmin() ? h('button', { class: 'petit discret danger', onclick: supprimer }, ic('poubelle', 14)) : null,
         ),
       ),
@@ -93,14 +79,11 @@ function detail(indicateur) {
     ),
     // Les requêtes (SQL à coller dans la GMAO) : pour l'administrateur ; l'utilisateur voit le résultat.
     !modeAdmin() ? h('div', { class: 'carte' }, resultat) : h('div', { class: 'carte' },
-      h('div', { class: 'carte-entete' }, h('h2', {}, 'Requête indicateur'), copier(requeteIndicateur, 'Requête indicateur')),
+      h('div', { class: 'carte-entete' }, h('h2', {}, 'Requête indicateur'), copier(indicateur.requeteIndicateur || '', 'Requête indicateur')),
       requeteIndicateur,
-      h('div', { class: 'carte-entete', style: { marginTop: '16px' } }, h('h2', {}, 'Requête liste'), copier(requeteListe, 'Requête liste')),
+      h('div', { class: 'carte-entete', style: { marginTop: '16px' } }, h('h2', {}, 'Requête liste'), copier(indicateur.requeteListe || '', 'Requête liste')),
       requeteListe,
-      h('div', { class: 'actions', style: { marginTop: '10px' } },
-        h('button', { onclick: tester }, ic('lecture', 16), 'Tester'),
-        h('button', { class: 'discret', onclick: enregistrer }, ic('coche', 16), 'Enregistrer les retouches'),
-      ),
+      h('p', { class: 'discret', style: { fontSize: '13px' } }, 'Pour le changer : « Rouvrir dans la constellation » depuis la liste des indicateurs, retouchez la phrase, puis « Mettre à jour ».'),
       resultat,
     ),
   )

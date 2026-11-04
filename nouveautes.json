@@ -1,6 +1,18 @@
 {
   "versions": [
     {
+      "version": "0.14.0",
+      "date": "2026-11-04",
+      "points": [
+        "Plus de formulaires de construction : rapports et indicateurs se font depuis LA PHRASE (« Et maintenant ? › Créer un rapport / Indicateur GMAO ») ; l'historique reste, avec « rouvrir dans la constellation » et « Mettre à jour »",
+        "LA PHRASE : regroupement facultatif (« regroupés par » un champ ou une date par jour, semaine, mois, année ; avec le nombre, la somme, la moyenne, le minimum, le maximum)",
+        "LA PHRASE : la colonne clé de la table consultée peut être retirée de l'aperçu et du rapport",
+        "Indicateurs GMAO : requête indicateur et requête liste affichées en lecture, à copier ; essai sur la base",
+        "Rapports : bouton « Télécharger le .rptdesign » ; un rapport fait par LA PHRASE porte sa phrase",
+        "Constellation : « Charger un .rptdesign » reprend la phrase et le chemin d'un rapport BIRT existant (ou les reconstruit depuis sa requête, en listant ce qui reste à refaire)"
+      ]
+    },
+    {
       "version": "0.13.13",
       "date": "2026-11-03",
       "points": [

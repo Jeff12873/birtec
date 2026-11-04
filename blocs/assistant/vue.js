@@ -80,8 +80,8 @@ export async function afficherQuestion(zone, { compact = false } = {}) {
             { class: 'vide', style: { paddingTop: '60px' } },
             ic('oiseau', 44),
             h('h2', { style: { color: 'var(--texte)', marginBottom: '6px' } }, 'Une question sur la base ou une requête inhabituelle ?'),
-            h('p', {}, 'Pour un rapport ou un indicateur courant, le formulaire « Nouveau rapport » est plus simple et plus sûr. Ici : expliquer une table, écrire un calcul (MTBF…), comprendre une requête.'),
-            h('p', {}, h('a', { class: 'bouton', href: '#/constructeur' }, ic('plus', 16), 'Nouveau rapport ou indicateur')),
+            h('p', {}, 'Pour un rapport ou un indicateur courant, LA PHRASE de la constellation est plus simple et plus sûre. Ici : expliquer une table, écrire un calcul (MTBF…), comprendre une requête.'),
+            h('p', {}, h('a', { class: 'bouton', href: '#/schema' }, ic('plus', 16), 'Faire une phrase dans la constellation')),
             h('div', { class: 'suggestions', style: { justifyContent: 'center', marginTop: '18px' } }, SUGGESTIONS.map((s) => h('button', { onclick: () => envoyer(s) }, s))),
           ),
         )

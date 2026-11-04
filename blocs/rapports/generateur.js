@@ -175,6 +175,14 @@ function compterMarques(sql) {
 // ---------------------------------------------------------------- génération
 
 // « image » : { nom, type, octets } d'une image à placer au centre, en haut du rapport (embarquée dans le fichier).
+// La phrase de la constellation (si le rapport en vient), rangée dans un commentaire du fichier : « Charger un
+// .rptdesign » la retrouve telle quelle. BIRT l'ignore ; l'enregistrer depuis le concepteur BIRT peut l'effacer
+// (BiRTEC relit alors le SQL).
+function phraseEmbarquee(description) {
+  const c = description?.constructeur?.constellation
+  return c ? `\n<!-- birtec-phrase:${Buffer.from(JSON.stringify(c), 'utf8').toString('base64')} -->` : ''
+}
+
 export function genererRptdesign(description, { url, utilisateur, charte: charteSite, image = null }) {
   const d = normaliserDescription(description)
   const charte = completerCharte(charteSite)
@@ -311,7 +319,7 @@ export function genererRptdesign(description, { url, utilisateur, charte: charte
             <property name="${cle}">${x(valeur)}</property>`).join('')}
         </style>`
   return `<?xml version="1.0" encoding="UTF-8"?>
-<report xmlns="http://www.eclipse.org/birt/2005/design" version="${VERSION_FORMAT}" id="1">
+<report xmlns="http://www.eclipse.org/birt/2005/design" version="${VERSION_FORMAT}" id="1">${phraseEmbarquee(description)}
     <property name="createdBy">BiRTEC</property>${source.profilChemin ? `
     <list-property name="propertyBindings">
         <structure>
