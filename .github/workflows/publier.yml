@@ -19,13 +19,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Le socle de K.NOVA (son interface) : BiRTEC éco+ l'embarque dans sa page.
+      - uses: actions/checkout@v4
+        with:
+          repository: Jeff12873/ktec
+          path: ktec
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24
 
       - name: Vérification du code
         run: |
-          for fichier in $(git ls-files '*.js'); do node --check "$fichier"; done
+          for fichier in $(git ls-files '*.js' | grep -v vendor/); do node --check "$fichier"; done
 
       - name: birtec.zip
         run: |
@@ -35,12 +41,14 @@ jobs:
           mkdir -p dist/birtec
           cp -r app.json blocs interface docs VERSION package.json README.md nouveautes.json dist/birtec/
           (cd dist && zip -qr birtec.zip birtec)
+          # BiRTEC éco+ : la page HTML seule, téléchargeable depuis la page de présentation de K.NOVA
+          node eco/fabriquer.js dist/BiRTEC-eco.html --ktec ktec
 
       - name: Release
         env:
           NOTES: ${{ github.event.head_commit.message }}
         run: |
-          gh release create "v$VERSION" dist/birtec.zip --title "BiRTEC $VERSION" --notes "${NOTES:-Nouvelle version}"
+          gh release create "v$VERSION" dist/birtec.zip dist/BiRTEC-eco.html --title "BiRTEC $VERSION" --notes "${NOTES:-Nouvelle version}"
           # On garde les 3 dernières versions
           gh release list --limit 100 --json tagName --jq '.[3:][].tagName' | while read -r ancienne; do
             gh release delete "$ancienne" --yes --cleanup-tag

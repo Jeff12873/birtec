@@ -9,6 +9,7 @@
 import { ErreurHttp } from 'ktec/http.js'
 import { executerRequete, etatConnexion } from 'ktec/mysql.js'
 import { enregistrerRequete, lireInfo, ecrireInfo, enregistrerIndicateur } from 'ktec/ktec.js'
+import { reglagesPoste } from 'ktec/installation.js'
 import { obtenirSchema } from '../base/schema.js'
 import { genererRapport } from '../rapports/serveur.js'
 import { reglagesIndicateurs, tester } from '../indicateurs/serveur.js'
@@ -29,6 +30,29 @@ export function routes(r) {
       associations: [...(associations || new Map())].map(([cle, a]) => ({ cle, colType: a.colType, valeurs: a.valeurs })),
       fiche: v?.idObjet && v?.typeObjet ? { idObjet: v.idObjet, typeObjet: v.typeObjet } : null,
       types: Object.fromEntries(Object.entries(m?.objets || {}).map(([code, o]) => [o.table.toLowerCase(), code])),
+    }
+  })
+
+  // Le fichier de schéma pour BiRTEC éco+ (la page HTML seule) : la structure de la base, les réglages de LA PHRASE,
+  // les jointures « à type », et l'adresse de la base pour les rapports (jamais de mot de passe, jamais de données).
+  r.get('/api/phrase/eco-schema', async () => {
+    const schema = await obtenirSchema()
+    if (etatConnexion().ouverte) await preparerAssociations(schema)
+    const { mysql = {} } = reglagesPoste()
+    const infos = {}
+    for (const cle of ['colonnes_phrase', 'passages_phrase', 'birtec.modele_donnees', 'types_tables', 'charte', 'disposition_schema']) {
+      const v = lireInfo(cle)
+      if (v !== null && v !== undefined) infos[cle] = v
+    }
+    return {
+      format: 'birtec-eco-schema',
+      version: 1,
+      le: new Date().toISOString(),
+      base: mysql.base || schema.base || '',
+      schema: { base: schema.base, tables: schema.tables },
+      infos,
+      associations: associationsConnues(),
+      connexion: mysql.serveur ? { url: `jdbc:mysql://${mysql.serveur}:${mysql.port || 3306}/${mysql.base}`, utilisateur: mysql.utilisateur || '' } : null,
     }
   })
 
@@ -398,6 +422,11 @@ function conditionDeType(de, colDe, vers, colVers) {
 // table : la jointure doit donc aussi porter sur X. Elles sont reconnues sur les données (toutes les valeurs de X
 // sont des noms de tables, ou des types d'objets du modèle), une fois par lancement de K.NOVA.
 let associations = null
+// Pour le fichier de schéma de BiRTEC éco+, et dans la page éco+ (qui n'a pas de base pour les reconnaître).
+export const associationsConnues = () => [...(associations || new Map())].map(([cle, a]) => ({ cle, colType: a.colType, valeurs: a.valeurs }))
+export function definirAssociations(liste) {
+  associations = new Map((liste || []).map((a) => [a.cle, { colType: a.colType, valeurs: a.valeurs }]))
+}
 async function preparerAssociations(schema) {
   if (associations || !etatConnexion().ouverte) return
   const m = lireModele()

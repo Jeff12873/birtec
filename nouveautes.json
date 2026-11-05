@@ -1,6 +1,14 @@
 {
   "versions": [
     {
+      "version": "0.15.0",
+      "date": "2026-11-05",
+      "points": [
+        "BiRTEC éco+ : la constellation et LA PHRASE dans une seule page HTML, sans installation (SQL à copier, .rptdesign téléchargé, .rptdesign relu en phrase, aperçu d'un export Excel)",
+        "Constellation : « Pour BiRTEC éco+ » télécharge le fichier de schéma à glisser dans la page (structure et réglages, jamais de mot de passe ni de données)"
+      ]
+    },
+    {
       "version": "0.14.0",
       "date": "2026-11-04",
       "points": [

@@ -1,0 +1,18 @@
+/* BiRTEC éco+ : la barre du haut, l'accueil (dépôt du fichier de schéma) et l'aperçu. */
+:root { --accent: #10b981; }
+.appli-eco { min-height: 100vh; display: flex; flex-direction: column; }
+.barre-eco { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 12px 20px; border-bottom: 1px solid var(--bord, #1f2d25); background: color-mix(in srgb, var(--carte, #111a15) 85%, transparent); position: sticky; top: 0; z-index: 5; backdrop-filter: blur(8px); }
+.marque-eco { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 20px; letter-spacing: .02em; }
+.marque-eco b { color: var(--accent); }
+.pastille-eco { font-size: 11px; font-weight: 800; padding: 2px 9px; border-radius: 999px; color: #a3e635; border: 1px solid color-mix(in srgb, #a3e635 45%, transparent); }
+.actions-eco { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.appli-eco .contenu { flex: 1; padding: 20px; }
+.accueil-eco { max-width: 720px; margin: 40px auto; display: grid; gap: 20px; }
+.depot-eco { display: grid; justify-items: center; gap: 10px; text-align: center; padding: 40px 24px; border: 2px dashed var(--bord-fort, #2a3d33); border-radius: 20px; background: color-mix(in srgb, var(--carte, #111a15) 70%, transparent); transition: border-color .2s, background .2s; }
+.depot-eco.survol { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.depot-eco h2 { margin: 0; }
+.depot-eco p { max-width: 520px; margin: 0; }
+.petit-depot { padding: 28px 18px; }
+.atouts-eco { display: grid; gap: 6px; margin: 0; }
+.filtres-eco { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-bottom: 10px; }
+.filtres-eco input[type=search] { max-width: 380px; }

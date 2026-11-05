@@ -161,6 +161,7 @@ export default {
           h('button', { title: 'Enregistre toute la constellation, telle qu’elle est disposée, dans un fichier PDF (A3 paysage)', onclick: () => telechargerPdf(graphe, vue, schema).catch((e) => notifier(`PDF impossible : ${e.message}`, 'erreur')) }, ic('document', 16), 'Constellation en PDF'),
           h('button', { class: 'discret', title: 'La même page, envoyée à l’imprimante', onclick: () => imprimer(graphe, vue, schema) }, ic('document', 16), 'Imprimer'),
           h('button', { class: 'discret', title: 'Reprendre la phrase et le chemin d’un rapport BIRT existant (.rptdesign)', onclick: () => chargerRptdesign((c) => bandeau.restaurer(c)) }, ic('dossier', 16), 'Charger un .rptdesign'),
+          window.BIRTEC_ECO ? null : h('button', { class: 'discret', title: 'Le fichier de schéma à glisser dans BiRTEC éco+ (la page HTML seule, sans installation) : structure de la base et réglages de LA PHRASE, jamais de mot de passe ni de données', onclick: () => exporterPourEco().catch((e) => notifier(e.message, 'erreur')) }, ic('telecharger', 16), 'Pour BiRTEC éco+'),
         ),
       ),
       bandeau.element,
@@ -1960,8 +1961,9 @@ function etMaintenant(chemin, distinctes) {
     h('div', { class: 'actions' },
       origine ? h('button', { class: 'petit principal', title: 'Refaire ce qui a été rouvert avec la phrase d’aujourd’hui (même nom)', onclick: () => (origine.type === 'rapport' ? creerRapport(actuel(), libelle, origine) : creerIndicateur(actuel(), origine)) }, ic('crayon', 14), `Mettre à jour « ${String(origine.titre || '').slice(0, 40)} »`) : null,
       h('button', { class: `petit${origine ? '' : ' principal'}`, title: 'Un rapport BIRT fait de la phrase : ses colonnes, ou ses groupes et leurs calculs', onclick: () => creerRapport(actuel(), libelle) }, ic('document', 14), 'Créer un rapport'),
-      h('button', { class: 'petit', title: 'Ranger cette requête dans les requêtes du site (fichier .ktec)', onclick: () => { const { phrase, spec } = actuel(); enregistrerSql(spec, phrase || libelle) } }, ic('base', 14), 'Enregistrer le SQL'),
-      h('button', { class: 'petit', title: 'Un indicateur de la GMAO : le nombre de lignes de la phrase, et leur liste', onclick: () => creerIndicateur(actuel()) }, ic('graphique', 14), 'Indicateur GMAO')))
+      // Dans BiRTEC éco+ (page seule) : ni fichier de connaissances ni base pour essayer un indicateur.
+      window.BIRTEC_ECO ? null : h('button', { class: 'petit', title: 'Ranger cette requête dans les requêtes du site (fichier .ktec)', onclick: () => { const { phrase, spec } = actuel(); enregistrerSql(spec, phrase || libelle) } }, ic('base', 14), 'Enregistrer le SQL'),
+      window.BIRTEC_ECO ? null : h('button', { class: 'petit', title: 'Un indicateur de la GMAO : le nombre de lignes de la phrase, et leur liste', onclick: () => creerIndicateur(actuel()) }, ic('graphique', 14), 'Indicateur GMAO')))
 }
 
 // Le rapport de la phrase : on donne son titre, BiRTEC le fabrique et le vérifie dans le moteur BIRT.
@@ -1988,6 +1990,7 @@ async function creerRapport({ phrase, constellation, spec }, libelle, origine = 
     ],
   }).catch(() => null)
   if (fait) {
+    if (window.BIRTEC_ECO) return notifier(`Rapport « ${titre.value} » téléchargé (.rptdesign)`)
     notifier(`Rapport « ${titre.value} » ${origine ? 'mis à jour' : 'créé'} : il est dans Rapports`)
     location.hash = '#/rapports'
   }
@@ -2589,6 +2592,17 @@ function toileLisible() {
   const d = c.getImageData(0, 0, 4, 4).data
   for (let i = 0; i < d.length; i += 4) if (d[i] !== 10 || d[i + 1] !== 200 || d[i + 2] !== 90) return false
   return true
+}
+
+// Le fichier de schéma pour BiRTEC éco+, téléchargé.
+async function exporterPourEco() {
+  const d = await api('/api/phrase/eco-schema')
+  const lien = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(d)], { type: 'application/json' })), download: `birtec-schema-${String(d.base || 'base').replace(/[^\w-]+/g, '_')}-${d.le.slice(0, 10)}.json` })
+  document.body.append(lien)
+  lien.click()
+  lien.remove()
+  setTimeout(() => URL.revokeObjectURL(lien.href), 10_000)
+  notifier(`Schéma exporté (${d.schema.tables.length} tables) : glissez-le dans BiRTEC éco+`)
 }
 
 async function telechargerPdf(graphe, vue, schema) {
