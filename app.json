@@ -5,5 +5,6 @@
   "sousTitre": "Rapports BIRT",
   "description": "Rapports BIRT (tableaux, graphiques, tableaux croisés) et indicateurs GMAO, sur la base de la GMAO.",
   "icone": "interface/icone.svg",
-  "besoins": ["java", "birt"]
+  "besoins": ["java", "birt"],
+  "eco": true
 }

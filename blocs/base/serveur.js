@@ -9,6 +9,22 @@ import { obtenirSchema, lireTypesChoisis } from './schema.js'
 import { TYPES } from '../../interface/types.js'
 import { classeurPowerQuery } from './classeur.js'
 import { lirePreference, ecrirePreference } from 'ktec/preferences.js'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { execFileSync } from 'node:child_process'
+import { schemaEco } from '../phrase/serveur.js'
+
+// BiRTEC éco+ : la page est dans le paquet (eco/BiRTEC-eco.html) ; en développement, on la fabrique dans cache/.
+const RACINE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
+function pageEco() {
+  const paquet = path.join(RACINE, 'eco', 'BiRTEC-eco.html')
+  if (fs.existsSync(paquet)) return fs.readFileSync(paquet, 'utf8')
+  const fabriquee = path.join(RACINE, 'cache', 'BiRTEC-eco.html')
+  fs.mkdirSync(path.dirname(fabriquee), { recursive: true })
+  execFileSync(process.execPath, [path.join(RACINE, 'eco', 'fabriquer.js'), fabriquee], { cwd: RACINE, stdio: 'ignore' })
+  return fs.readFileSync(fabriquee, 'utf8')
+}
 
 // Réglages et SQL : réservés à l'administrateur (ctx.exigerModeAdmin, KTEC 0.6 et plus).
 const reserve = (r) => Object.fromEntries(['get', 'post', 'delete'].map((m) => [m, (chemin, action) => r[m](chemin, (ctx) => {
@@ -20,6 +36,14 @@ export function routes(r) {
   const admin = reserve(r)
   // GET /api/schema?rafraichir=1
   r.get('/api/schema', (ctx) => obtenirSchema({ rafraichir: Boolean(ctx.query.rafraichir) }))
+
+  // GET /api/eco : BiRTEC éco+ (pastille « Eco+ » du portail), avec le schéma du site déjà dans la page.
+  r.get('/api/eco', async (ctx) => {
+    const site = JSON.stringify(await schemaEco()).replace(/</g, '\\u003c')
+    const html = pageEco().replace('<meta charset="utf-8">', () => `<meta charset="utf-8">\n<script>window.BIRTEC_ECO_SITE = ${site}</script>`) // le premier : celui de la page, en tête ; une fonction : les « $ » du schéma restent tels quels
+    const version = fs.readFileSync(path.join(RACINE, 'VERSION'), 'utf8').trim()
+    envoyerOctets(ctx.res, Buffer.from(html, 'utf8'), { type: 'text/html; charset=utf-8', nom: `BiRTEC eco+ ${version}.html`, telecharger: true })
+  })
 
   // POST /api/requete { sql, limite }  → { colonnes, lignes, tronque, dureeMs }
   admin.post('/api/requete', async (ctx) => {

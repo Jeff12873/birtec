@@ -20,6 +20,29 @@ import { lireModele, enregistrerModele, reconnaitreModele, lireArbre, lireParcs,
 
 const VALEURS_MAX = 30
 
+// Le schéma pour BiRTEC éco+ : structure, réglages de LA PHRASE, associations à type, adresse et utilisateur de la base
+// (jamais de mot de passe). Exporté en fichier par la constellation, ou glissé dans la page éco+ téléchargée du portail.
+export async function schemaEco() {
+  const schema = await obtenirSchema()
+  if (etatConnexion().ouverte) await preparerAssociations(schema)
+  const { mysql = {} } = reglagesPoste()
+  const infos = {}
+  for (const cle of ['colonnes_phrase', 'passages_phrase', 'familles_phrase', 'birtec.modele_donnees', 'types_tables', 'charte', 'disposition_schema']) {
+    const v = lireInfo(cle)
+    if (v !== null && v !== undefined) infos[cle] = v
+  }
+  return {
+    format: 'birtec-eco-schema',
+    version: 1,
+    le: new Date().toISOString(),
+    base: mysql.base || schema.base || '',
+    schema: { base: schema.base, tables: schema.tables },
+    infos,
+    associations: associationsConnues(),
+    connexion: mysql.serveur ? { url: `jdbc:mysql://${mysql.serveur}:${mysql.port || 3306}/${mysql.base}`, utilisateur: mysql.utilisateur || '' } : null,
+  }
+}
+
 export function routes(r) {
   // Les valeurs proposées pour une colonne (les plus fréquentes, avec leur désignation si elle existe).
   // Les jointures « à type » (voir conditionDeType), pour que le SQL calculé dans la page les porte aussi.
@@ -36,26 +59,7 @@ export function routes(r) {
 
   // Le fichier de schéma pour BiRTEC éco+ (la page HTML seule) : la structure de la base, les réglages de LA PHRASE,
   // les jointures « à type », et l'adresse de la base pour les rapports (jamais de mot de passe, jamais de données).
-  r.get('/api/phrase/eco-schema', async () => {
-    const schema = await obtenirSchema()
-    if (etatConnexion().ouverte) await preparerAssociations(schema)
-    const { mysql = {} } = reglagesPoste()
-    const infos = {}
-    for (const cle of ['colonnes_phrase', 'passages_phrase', 'familles_phrase', 'birtec.modele_donnees', 'types_tables', 'charte', 'disposition_schema']) {
-      const v = lireInfo(cle)
-      if (v !== null && v !== undefined) infos[cle] = v
-    }
-    return {
-      format: 'birtec-eco-schema',
-      version: 1,
-      le: new Date().toISOString(),
-      base: mysql.base || schema.base || '',
-      schema: { base: schema.base, tables: schema.tables },
-      infos,
-      associations: associationsConnues(),
-      connexion: mysql.serveur ? { url: `jdbc:mysql://${mysql.serveur}:${mysql.port || 3306}/${mysql.base}`, utilisateur: mysql.utilisateur || '' } : null,
-    }
-  })
+  r.get('/api/phrase/eco-schema', () => schemaEco())
 
   r.get('/api/phrase/valeurs', async (ctx) => {
     if (!etatConnexion().ouverte) return []

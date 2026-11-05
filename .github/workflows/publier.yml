@@ -38,11 +38,13 @@ jobs:
           version="$(cat VERSION).${{ github.run_number }}"
           echo "$version" > VERSION
           echo "VERSION=$version" >> "$GITHUB_ENV"
-          mkdir -p dist/birtec
+          mkdir -p dist/birtec/eco
           cp -r app.json blocs interface docs VERSION package.json README.md nouveautes.json dist/birtec/
-          (cd dist && zip -qr birtec.zip birtec)
-          # BiRTEC éco+ : la page HTML seule, téléchargeable depuis la page de présentation de K.NOVA
+          # BiRTEC éco+ : la page HTML seule, téléchargeable depuis la page de présentation de K.NOVA, et dans le
+          # paquet (la pastille « Eco+ » du portail la sert avec le schéma du site)
           node eco/fabriquer.js dist/BiRTEC-eco.html --ktec ktec
+          cp dist/BiRTEC-eco.html dist/birtec/eco/BiRTEC-eco.html
+          (cd dist && zip -qr birtec.zip birtec)
 
       - name: Release
         env:

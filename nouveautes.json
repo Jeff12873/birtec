@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.15.11",
+      "date": "2026-11-05",
+      "points": [
+        "Pastille Eco+ sur la tuile BiRTEC du portail : elle télécharge BiRTEC éco+ avec le schéma du site déjà dedans (rien à glisser ; jamais de mot de passe)"
+      ]
+    },
+    {
       "version": "0.15.10",
       "date": "2026-11-05",
       "points": [

@@ -83,6 +83,10 @@ async function afficher() {
 }
 
 await chargerMagasin()
+// Téléchargée depuis le portail de K.NOVA (pastille « Eco+ ») : le schéma du site est dans la page ; il remplace
+// un schéma plus ancien gardé par le navigateur.
+const site = window.BIRTEC_ECO_SITE
+if (site && String(magasin()?.le || '') < String(site.le || '')) await definirSchema(site).catch(() => {})
 appliquerAssociations()
 // Un schéma glissé n'importe où sur la page remplace le précédent.
 document.addEventListener('dragover', (e) => e.preventDefault())
