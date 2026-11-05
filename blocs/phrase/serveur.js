@@ -498,7 +498,8 @@ export async function morceauxSql(spec, schema) {
     if (![de.nom, vers.nom].includes(table.nom) || !jointes.has(de.nom === table.nom ? vers.nom : de.nom)) throw new ErreurHttp(400, 'Jointures dans le désordre.')
     if (jointes.has(table.nom)) continue
     jointes.add(table.nom)
-    lignes.push(`LEFT JOIN ${table.nom} ON ${de.nom}.${colonneDe(de, j.colonne).nom} = ${vers.nom}.${colonneDe(vers, j.versColonne).nom}${conditionDeType(de, colonneDe(de, j.colonne), vers, colonneDe(vers, j.versColonne))}`)
+    const autre = de.nom === table.nom ? vers : de
+    lignes.push(`LEFT JOIN ${table.nom} ON ${de.nom}.${colonneDe(de, j.colonne).nom} = ${vers.nom}.${colonneDe(vers, j.versColonne).nom}${conditionDeType(de, colonneDe(de, j.colonne), vers, colonneDe(vers, j.versColonne))}${memeObjet(schema, table, autre, jointes)}`)
   }
   const ciblee = (f) => {
     const table = tableDe(schema, f.table)
@@ -562,6 +563,20 @@ export async function morceauxSql(spec, schema) {
   const where = await combiner([...anciens, ...(Array.isArray(spec.conditions) ? spec.conditions : [])])
   const tri = (Array.isArray(spec.tri) ? spec.tri : []).map((t) => ({ expression: ciblee(t).e, sens: t.sens === 'desc' ? 'DESC' : 'ASC' }))
   return { from: lignes.join('\n'), where: where ? `\nWHERE ${where}` : '', tri, jointes }
+}
+
+// Deux tables qui portent chacune un objet « à type » (identifiant + type de l’objet, colonnes décrites pour les fiches
+// techniques) parlent du même objet quand le chemin les relie : RI → modèles associés → modèle → réponses. Sans
+// cela, les réponses du modèle seraient celles de tous les objets qui l'utilisent, pas celles de cette RI.
+function memeObjet(schema, table, autre, jointes) {
+  const v = lireModele()?.ficheTechnique?.valeurs
+  if (!v?.idObjet || !v?.typeObjet) return ''
+  const porte = (t) => colonneDe(t, v.idObjet) && colonneDe(t, v.typeObjet)
+  if (!porte(table)) return ''
+  const deja = [...jointes].map((n) => tableDe(schema, n)).find((t) => t && t.nom !== table.nom && t.nom !== autre.nom && porte(t))
+  if (!deja) return ''
+  const c = (t, n) => `${t.nom}.${colonneDe(t, n).nom}`
+  return ` AND ${c(table, v.idObjet)} = ${c(deja, v.idObjet)} AND ${c(table, v.typeObjet)} = ${c(deja, v.typeObjet)}`
 }
 
 // ---------------------------------------------------------------- dates

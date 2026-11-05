@@ -1,6 +1,15 @@
 {
   "versions": [
     {
+      "version": "0.15.2",
+      "date": "2026-11-05",
+      "points": [
+        "LA PHRASE : les réponses de fiche technique sont celles de l'objet lui-même (la RI, la pièce), plus celles de tous les objets qui utilisent le même modèle",
+        "L'aperçu à beaucoup de colonnes défile dans son cadre au lieu d'élargir la page",
+        "Extraire pour Excel : les requêtes Power Query s'ouvrent sans l'erreur Formula.Firewall"
+      ]
+    },
+    {
       "version": "0.15.1",
       "date": "2026-11-05",
       "points": [

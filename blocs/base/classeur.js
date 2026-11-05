@@ -2,7 +2,8 @@
 //
 //   - feuille « Lisez-moi » : la cellule nommée « Dossier » calcule le dossier du classeur
 //     (=GAUCHE(CELLULE("nomfichier";A1);TROUVE("[";CELLULE("nomfichier";A1))-1)) ;
-//   - une requête Power Query par fichier CSV du dossier « sources », qui lit Dossier & "sources\table.csv" :
+//   - une requête Power Query par fichier CSV du dossier « sources », qui lit Dossier & "sources\table.csv"
+//     (le dossier lu dans la requête même, sinon le pare-feu de Power Query refuse) :
 //     le classeur reste juste où qu'on dézippe le dossier (pas dans OneDrive ni SharePoint : CELLULE y renvoie
 //     une adresse web).
 //
@@ -68,12 +69,11 @@ function dataMashup(requetes) {
   const section = [
     'section Section1;',
     '',
-    'shared Dossier = let',
-    '    Source = Excel.CurrentWorkbook(){[Name="Dossier"]}[Content]{0}[Column1]',
-    'in',
-    '    Source;',
+    // Le dossier est lu dans chaque requête : une requête qui lit un fichier ne peut pas en utiliser une autre qui
+    // lit le classeur (Formula.Firewall, « référence d'autres requêtes ou étapes »).
     ...requetes.map((nom) => `
 shared ${ident(nom)} = let
+    Dossier = Excel.CurrentWorkbook(){[Name="Dossier"]}[Content]{0}[Column1],
     Source = Csv.Document(File.Contents(Dossier & "sources\\${nom}.csv"), [Delimiter = ";", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
     Entetes = Table.PromoteHeaders(Source, [PromoteAllScalars = true])
 in
@@ -84,14 +84,14 @@ in
     { nom: '[Content_Types].xml', octets: utf8('<?xml version="1.0" encoding="utf-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="text/xml" /><Default Extension="m" ContentType="application/x-ms-m" /></Types>') },
     { nom: 'Formulas/Section1.m', octets: utf8(section) },
   ])
-  const permissions = utf8('<?xml version="1.0" encoding="utf-8"?><PermissionList xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><CanEvaluateFuturePackages>false</CanEvaluateFuturePackages><FirewallEnabled>true</FirewallEnabled></PermissionList>')
+  const permissions = utf8('<?xml version="1.0" encoding="utf-8"?><PermissionList xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><CanEvaluateFuturePackages>false</CanEvaluateFuturePackages><FirewallEnabled>false</FirewallEnabled></PermissionList>')
   const date = new Date().toISOString().replace('Z', '0000Z')
   const entree = (type, valeur) => `<Entry Type="${type}" Value="${valeur}" />`
   const item = (nom, chargee) => `<Item><ItemLocation><ItemType>Formula</ItemType><ItemPath>Section1/${x(nom)}</ItemPath></ItemLocation><StableEntries>${[
     entree('IsPrivate', 'l0'), entree('FillEnabled', 'l0'), entree('FillObjectType', 'sConnectionOnly'), entree('FillToDataModelEnabled', 'l0'),
     entree('ResultType', chargee ? 'sTable' : 'sText'), entree('BufferNextRefresh', 'l1'), entree('FillLastUpdated', `d${date}`), entree('NameUpdatedAfterFill', 'l0'), entree('FillStatus', 'sComplete'),
   ].join('')}</StableEntries></Item>`
-  const meta = Buffer.concat([BOM, utf8(`<?xml version="1.0" encoding="utf-8"?><LocalPackageMetadataFile xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"><Items><Item><ItemLocation><ItemType>AllFormulas</ItemType><ItemPath /></ItemLocation><StableEntries /></Item>${item('Dossier', false)}${requetes.map((n) => item(n, true)).join('')}</Items></LocalPackageMetadataFile>`)])
+  const meta = Buffer.concat([BOM, utf8(`<?xml version="1.0" encoding="utf-8"?><LocalPackageMetadataFile xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"><Items><Item><ItemLocation><ItemType>AllFormulas</ItemType><ItemPath /></ItemLocation><StableEntries /></Item>${requetes.map((n) => item(n, true)).join('')}</Items></LocalPackageMetadataFile>`)])
   const metadonnees = Buffer.concat([u32(0), u32(meta.length), meta, u32(0)])
   return Buffer.concat([u32(0), u32(paquet.length), paquet, u32(permissions.length), permissions, u32(metadonnees.length), metadonnees, u32(0)])
 }
