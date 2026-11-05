@@ -1,6 +1,14 @@
 {
   "versions": [
     {
+      "version": "0.15.3",
+      "date": "2026-11-05",
+      "points": [
+        "LA PHRASE : nouvelle famille « Tables directement connectées » dans « dans quelle table ? » (les tables reliées par une clé, tous types confondus)",
+        "L'administrateur choisit les familles proposées dans cette liste (directement connectées, principales, secondaires, intermédiaires, référentiels, techniques) avec le bouton à côté de la liste ; le choix est gardé dans le .ktec et suit dans BiRTEC éco+"
+      ]
+    },
+    {
       "version": "0.15.2",
       "date": "2026-11-05",
       "points": [

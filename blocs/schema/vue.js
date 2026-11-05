@@ -1214,6 +1214,18 @@ function bandeauPhrase(vue) {
   // Les points de passage fixés par l'administrateur entre deux tables : { 'a|b': [tables du milieu] }.
   let passages = {}
   api('/api/phrase/passages').then((x) => { passages = x || {} }).catch(() => {})
+  // Les familles de tables proposées dans « dans quelle table ? », dans cet ordre (l'administrateur les choisit).
+  const FAMILLES = [
+    { id: 'directes', nom: 'Tables directement connectées', aide: 'Reliées par une clé à la table d’où part la condition, quel que soit leur type' },
+    { id: 'principale', nom: 'Tables principales', aide: 'Les objets métier reliés par un chemin' },
+    { id: 'secondaire', nom: 'Tables secondaires', aide: 'Le détail rattaché à une principale' },
+    { id: 'intermediaire', nom: 'Tables intermédiaires', aide: 'Les tables de liaison entre deux tables' },
+    { id: 'referentiel', nom: 'Référentiels', aide: 'Les listes de codes reliées directement' },
+    { id: 'technique', nom: 'Tables techniques', aide: 'Journaux, exports, paramètres' },
+  ]
+  const FAMILLES_DEFAUT = ['directes', 'principale', 'secondaire', 'referentiel']
+  let familles = FAMILLES_DEFAUT
+  api('/api/phrase/familles').then((x) => { if (Array.isArray(x)) familles = x }).catch(() => {})
 
   const noeud = (nom) => vue.graphe.parNom.get(String(nom || '').toLowerCase())
   const libelleTable = (nom) => noeud(nom)?.table.libelle || nom
@@ -1241,6 +1253,42 @@ function bandeauPhrase(vue) {
         .sort((x, y) => (x.table.libelle || x.table.nom).localeCompare(y.table.libelle || y.table.nom, 'fr')))
     }
     return principalesCache.get(cle)
+  }
+
+  // Les tables reliées par une clé à la table d'ancrage, tous types confondus.
+  function tablesDirectes(ancre = etatPhrase.depart) {
+    const depart = noeud(ancre)
+    if (!depart) return []
+    return [...depart.voisins].filter((n) => n !== depart)
+      .sort((x, y) => (x.table.libelle || x.table.nom).localeCompare(y.table.libelle || y.table.nom, 'fr'))
+  }
+  // Les tables d'une famille ; une table n'apparaît que dans la première famille choisie qui la contient.
+  const tablesDeFamille = (id, ancre) => (id === 'directes' ? tablesDirectes(ancre) : id === 'referentiel' ? referentielsVoisins(ancre) : tablesDuType(id, ancre))
+  function groupesDeTables(ancre) {
+    const vues = new Set([String(ancre).toLowerCase()])
+    return FAMILLES.filter((f) => familles.includes(f.id)).map((f) => {
+      const liste = tablesDeFamille(f.id, ancre).filter((n) => !vues.has(n.table.nom.toLowerCase()) && (n.table.nom !== etatPhrase.depart || ancre === etatPhrase.depart))
+      liste.forEach((n) => vues.add(n.table.nom.toLowerCase()))
+      return { groupe: f.nom, noeuds: liste }
+    })
+  }
+
+  // Administrateur : choisir les familles de tables que « dans quelle table ? » propose.
+  async function choisirFamilles() {
+    const cases = FAMILLES.map((f) => ({ f, c: h('input', { type: 'checkbox', checked: familles.includes(f.id) }) }))
+    const contenu = h('div', { class: 'choix-colonnes' },
+      h('p', { class: 'texte-2', style: { marginTop: 0 } }, 'Les familles de tables proposées dans « dans quelle table ? », pour tous les utilisateurs. Une table n’apparaît que dans la première famille cochée qui la contient.'),
+      h('div', { class: 'liste-colonnes', style: { gridTemplateColumns: '1fr' } }, cases.map(({ f, c }) => h('label', { class: 'case-colonne', title: f.aide }, c, h('span', {}, f.nom), h('span', { class: 'discret' }, f.aide)))))
+    const choix = await fenetre({ titre: 'Tables proposées', contenu, boutons: [
+      { texte: 'Annuler', classe: 'discret', valeur: null },
+      { texte: 'Par défaut', classe: 'discret', valeur: 'defaut' },
+      { texte: 'Enregistrer', classe: 'principal', action: () => cases.filter(({ c }) => c.checked).map(({ f }) => f.id) },
+    ] })
+    if (!choix) return
+    const r = await api('/api/phrase/familles', { methode: 'POST', corps: { familles: choix === 'defaut' ? null : choix } })
+    familles = Array.isArray(r) ? r : FAMILLES_DEFAUT
+    notifier(choix === 'defaut' ? 'Tables proposées : le choix par défaut' : `${familles.length} famille(s) de tables proposée(s)`)
+    dessiner()
   }
 
   // Les référentiels (listes de codes : avancement, types…) reliés directement à la table d'ancrage.
@@ -1549,13 +1597,12 @@ function bandeauPhrase(vue) {
   function sourcesCondition(garder = null, ancre = etatPhrase.depart) {
     const option = (n) => ({ valeur: n.table.nom, libelle: n.table.libelle ? `${n.table.libelle} (${n.table.nom})` : n.table.nom })
     const GUIDES = { parc: 'le parc (AITEC)', machine: 'la machine (et dessous)', fiche: 'la fiche technique' }
+    const groupes = groupesDeTables(ancre)
     const deja = GUIDES[garder] ? { valeur: garder, libelle: GUIDES[garder] }
-      : garder && garder !== ancre && ![...tablesPrincipales(ancre), ...tablesDuType('secondaire', ancre), ...referentielsVoisins(ancre)].some((n) => n.table.nom === garder) && noeud(garder) ? option(noeud(garder)) : null
+      : garder && garder !== ancre && !groupes.some((g) => g.noeuds.some((n) => n.table.nom === garder)) && noeud(garder) ? option(noeud(garder)) : null
     return [
       { groupe: ancre === etatPhrase.depart ? 'La table consultée' : 'Cette table', options: [option(noeud(ancre))] },
-      { groupe: 'Tables principales', options: tablesPrincipales(ancre).filter((n) => n.table.nom !== etatPhrase.depart || ancre === etatPhrase.depart).map(option) },
-      { groupe: 'Tables secondaires', options: tablesDuType('secondaire', ancre).filter((n) => n.table.nom !== etatPhrase.depart || ancre === etatPhrase.depart).map(option) },
-      { groupe: 'Référentiels', options: referentielsVoisins(ancre).map(option) },
+      ...groupes.map((g) => ({ groupe: g.groupe, options: g.noeuds.map(option) })),
       deja ? { groupe: 'Déjà choisi', options: [deja] } : null,
     ].filter((g) => g && g.options.length)
   }
@@ -1642,6 +1689,7 @@ function bandeauPhrase(vue) {
         changement()
       },
     }) : null
+    const reglerFamilles = modeAdmin() && (!c.source || c.source.startsWith('table:')) ? h('button', { class: 'discret icone-seule petit', title: 'Choisir les familles de tables proposées dans cette liste (administrateur)', onclick: choisirFamilles }, ic('table', 14)) : null
     const reglerColonnes = c.table && modeAdmin() ? h('button', { class: 'discret icone-seule petit', title: 'Choisir les colonnes proposées pour cette table (administrateur)', onclick: () => choisirColonnes(c.table) }, ic('reglages', 14)) : null
     const autreTable = c.table && c.table !== ancre && c.source?.startsWith('table:')
     const quand = nature === 'date' && c.colonne ? choixListe(Object.entries(QUAND).map(([valeur, libelle]) => ({ valeur, libelle })), c.quand || '', (v) => {
@@ -1650,7 +1698,7 @@ function bandeauPhrase(vue) {
       dessiner()
       changement()
     }, { classe: 'operateur quand' }) : null
-    return h('div', { class: 'condition' }, h('span', { class: 'mot-phrase' }, 'qui'), op, table, champ, reglerColonnes, quand, nature === 'date' ? editeurDate(c) : editeurValeur(c, col),
+    return h('div', { class: 'condition' }, h('span', { class: 'mot-phrase' }, 'qui'), op, table, reglerFamilles, champ, reglerColonnes, quand, nature === 'date' ? editeurDate(c) : editeurValeur(c, col),
       autreTable ? choixPassage(c, ancre) : null,
       // Une condition dans la condition : « qui ont des pièces (qui ont telle famille) ».
       autreTable && !c.sous?.length ? h('button', { class: 'pastille-ajout', title: `Préciser : des ${libelleTable(c.table)} qui…`, onclick: () => { c.sous = [{ ...nouvelleCondition(), ancre: c.table, source: `table:${c.table}`, table: c.table }]; dessiner() } }, ic('plus', 13), 'qui…') : null)

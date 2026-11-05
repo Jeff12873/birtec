@@ -40,7 +40,7 @@ export function routes(r) {
     if (etatConnexion().ouverte) await preparerAssociations(schema)
     const { mysql = {} } = reglagesPoste()
     const infos = {}
-    for (const cle of ['colonnes_phrase', 'passages_phrase', 'birtec.modele_donnees', 'types_tables', 'charte', 'disposition_schema']) {
+    for (const cle of ['colonnes_phrase', 'passages_phrase', 'familles_phrase', 'birtec.modele_donnees', 'types_tables', 'charte', 'disposition_schema']) {
       const v = lireInfo(cle)
       if (v !== null && v !== undefined) infos[cle] = v
     }
@@ -130,6 +130,18 @@ export function routes(r) {
     else delete tous[`${a.nom}|${b.nom}`]
     ecrireInfo('passages_phrase', tous)
     return tous
+  })
+
+  // Les familles de tables proposées dans « dans quelle table ? » (choisies par l'administrateur ; absent : le choix
+  // par défaut de l'interface).
+  r.get('/api/phrase/familles', () => lireInfo('familles_phrase') || null)
+  r.post('/api/phrase/familles', async (ctx) => {
+    ctx.exigerModeAdmin?.()
+    const { familles } = await ctx.json()
+    const connues = ['directes', 'principale', 'secondaire', 'intermediaire', 'referentiel', 'technique']
+    const propres = Array.isArray(familles) ? connues.filter((f) => familles.includes(f)) : null
+    ecrireInfo('familles_phrase', propres)
+    return propres
   })
 
   // Les choix guidés possibles pour une table de départ : parcs d'AITEC, table des machines, type de fiche technique.
