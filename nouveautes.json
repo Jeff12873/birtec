@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.15.7",
+      "date": "2026-11-05",
+      "points": [
+        "LA PHRASE : une table de la base nommée « parc » n'est plus confondue avec le choix guidé « le parc (AITEC) » (qui demandait « quel parc ? » avec une liste vide)"
+      ]
+    },
+    {
       "version": "0.15.6",
       "date": "2026-11-05",
       "points": [

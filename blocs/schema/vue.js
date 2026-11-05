@@ -1599,7 +1599,9 @@ function bandeauPhrase(vue) {
     const option = (n) => ({ valeur: n.table.nom, libelle: n.table.libelle ? `${n.table.libelle} (${n.table.nom})` : n.table.nom })
     const GUIDES = { parc: 'le parc (AITEC)', machine: 'la machine (et dessous)', fiche: 'la fiche technique' }
     const groupes = groupesDeTables(ancre)
-    const deja = GUIDES[garder] ? { valeur: garder, libelle: GUIDES[garder] }
+    // Un choix guidé arrive en « guide:parc » : une table de la base peut s'appeler parc, elle aussi.
+    const guide = String(garder || '').startsWith('guide:') ? garder.slice(6) : null
+    const deja = GUIDES[guide] ? { valeur: garder, libelle: GUIDES[guide] }
       : garder && garder !== ancre && !groupes.some((g) => g.noeuds.some((n) => n.table.nom === garder)) && noeud(garder) ? option(noeud(garder)) : null
     return [
       { groupe: ancre === etatPhrase.depart ? 'La table consultée' : 'Cette table', options: [option(noeud(ancre))] },
@@ -1670,15 +1672,15 @@ function bandeauPhrase(vue) {
     // D'abord où chercher (la table, une table liée, ou un choix guidé), puis la colonne de cette table.
     const ancre = ancreDe(c)
     // Un menu du thème (et non une liste du navigateur) : ses titres de famille peuvent être centrés et colorés.
-    const choisie = c.source && !c.source.startsWith('table:') ? c.source : c.table || ''
+    const choisie = c.source && !c.source.startsWith('table:') ? `guide:${c.source}` : c.table || ''
     const table = menuDeroulant({
-      choix: [{ valeur: '', libelle: '— dans quelle table ? —' }, ...sourcesCondition(c.source && !c.source.startsWith('table:') ? c.source : c.table, ancre)
+      choix: [{ valeur: '', libelle: '— dans quelle table ? —' }, ...sourcesCondition(choisie, ancre)
         .flatMap((g) => g.options.map((o) => ({ ...o, groupe: g.groupe })))],
       valeur: choisie,
       classe: `table-phrase${choisie ? ' choisi' : ''}`,
       surChoix: (v) => {
         Object.assign(c, { valeurs: [], valeur: null, valeurTexte: null, modele: null, champ: null, colonne: null })
-        if (['parc', 'machine', 'fiche'].includes(v)) Object.assign(c, { source: v, table: null })
+        if (v.startsWith('guide:')) Object.assign(c, { source: v.slice(6), table: null })
         else Object.assign(c, { source: v ? `table:${v}` : '', table: v || null, par: null, sous: [] })
         dessiner()
         changement()
