@@ -1,6 +1,14 @@
 {
   "versions": [
     {
+      "version": "0.15.5",
+      "date": "2026-11-05",
+      "points": [
+        "LA PHRASE : dans « dans quelle table ? », les titres de famille sont centrés sur un bandeau coloré et restent visibles en faisant défiler",
+        "La liste des tables a un champ « Filtrer… » quand elle est longue"
+      ]
+    },
+    {
       "version": "0.15.4",
       "date": "2026-11-05",
       "points": [

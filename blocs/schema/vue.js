@@ -1669,13 +1669,21 @@ function bandeauPhrase(vue) {
 
     // D'abord où chercher (la table, une table liée, ou un choix guidé), puis la colonne de cette table.
     const ancre = ancreDe(c)
-    const table = choixListe(sourcesCondition(c.source && !c.source.startsWith('table:') ? c.source : c.table, ancre), c.source && !c.source.startsWith('table:') ? c.source : c.table || '', (v) => {
-      Object.assign(c, { valeurs: [], valeur: null, valeurTexte: null, modele: null, champ: null, colonne: null })
-      if (['parc', 'machine', 'fiche'].includes(v)) Object.assign(c, { source: v, table: null })
-      else Object.assign(c, { source: v ? `table:${v}` : '', table: v || null, par: null, sous: [] })
-      dessiner()
-      changement()
-    }, { vide: '— dans quelle table ? —', classe: 'champ' })
+    // Un menu du thème (et non une liste du navigateur) : ses titres de famille peuvent être centrés et colorés.
+    const choisie = c.source && !c.source.startsWith('table:') ? c.source : c.table || ''
+    const table = menuDeroulant({
+      choix: [{ valeur: '', libelle: '— dans quelle table ? —' }, ...sourcesCondition(c.source && !c.source.startsWith('table:') ? c.source : c.table, ancre)
+        .flatMap((g) => g.options.map((o) => ({ ...o, groupe: g.groupe })))],
+      valeur: choisie,
+      classe: `table-phrase${choisie ? ' choisi' : ''}`,
+      surChoix: (v) => {
+        Object.assign(c, { valeurs: [], valeur: null, valeurTexte: null, modele: null, champ: null, colonne: null })
+        if (['parc', 'machine', 'fiche'].includes(v)) Object.assign(c, { source: v, table: null })
+        else Object.assign(c, { source: v ? `table:${v}` : '', table: v || null, par: null, sous: [] })
+        dessiner()
+        changement()
+      },
+    })
     const teinte = couleurTable(c.table)
     if (teinte) { table.style.setProperty('--teinte', teinte); table.classList.add('teintee') }
     // Le champ : un menu à bulle, qui montre quelques valeurs d'exemple de la colonne survolée.
