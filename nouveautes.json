@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.15.6",
+      "date": "2026-11-05",
+      "points": [
+        "LA PHRASE : les valeurs de fiche technique atteintes par les labels ou les catégories sont bien celles de l'objet consulté, même quand le modèle de données du .ktec ne décrit pas les colonnes d'objet des fiches (elles sont reconnues sur les données)"
+      ]
+    },
+    {
       "version": "0.15.5",
       "date": "2026-11-05",
       "points": [

@@ -511,7 +511,7 @@ export async function morceauxSql(spec, schema) {
     if (jointes.has(table.nom)) continue
     jointes.add(table.nom)
     const autre = de.nom === table.nom ? vers : de
-    lignes.push(`LEFT JOIN ${table.nom} ON ${de.nom}.${colonneDe(de, j.colonne).nom} = ${vers.nom}.${colonneDe(vers, j.versColonne).nom}${conditionDeType(de, colonneDe(de, j.colonne), vers, colonneDe(vers, j.versColonne))}${memeObjet(schema, table, autre, jointes)}`)
+    lignes.push(`LEFT JOIN ${table.nom} ON ${de.nom}.${colonneDe(de, j.colonne).nom} = ${vers.nom}.${colonneDe(vers, j.versColonne).nom}${conditionDeType(de, colonneDe(de, j.colonne), vers, colonneDe(vers, j.versColonne))}${memeObjet(schema, table, autre, jointes, depart, colonneDe(table, de.nom === table.nom ? j.colonne : j.versColonne))}`)
   }
   const ciblee = (f) => {
     const table = tableDe(schema, f.table)
@@ -577,18 +577,39 @@ export async function morceauxSql(spec, schema) {
   return { from: lignes.join('\n'), where: where ? `\nWHERE ${where}` : '', tri, jointes }
 }
 
-// Deux tables qui portent chacune un objet « à type » (identifiant + type de l’objet, colonnes décrites pour les fiches
-// techniques) parlent du même objet quand le chemin les relie : RI → modèles associés → modèle → réponses. Sans
-// cela, les réponses du modèle seraient celles de tous les objets qui l'utilisent, pas celles de cette RI.
-function memeObjet(schema, table, autre, jointes) {
+// Deux tables qui portent chacune un objet « à type » (identifiant + type de l’objet : celles des fiches techniques)
+// parlent du même objet quand le chemin les relie : RI → modèles associés → modèle → réponses. Sans cela, les réponses
+// du modèle seraient celles de tous les objets qui l'utilisent, pas celles de cette RI. Sans autre table « à type »
+// dans le chemin, les réponses sont celles de la table consultée (quand son type d'objet est connu).
+// colJointure : la colonne de la table qui sert à la jointure (si c'est l'identifiant d'objet, la jointure dit déjà
+// de quel objet il s'agit).
+function pairesObjet(t) {
   const v = lireModele()?.ficheTechnique?.valeurs
-  if (!v?.idObjet || !v?.typeObjet) return ''
-  const porte = (t) => colonneDe(t, v.idObjet) && colonneDe(t, v.typeObjet)
-  if (!porte(table)) return ''
-  const deja = [...jointes].map((n) => tableDe(schema, n)).find((t) => t && t.nom !== table.nom && t.nom !== autre.nom && porte(t))
-  if (!deja) return ''
-  const c = (t, n) => `${t.nom}.${colonneDe(t, n).nom}`
-  return ` AND ${c(table, v.idObjet)} = ${c(deja, v.idObjet)} AND ${c(table, v.typeObjet)} = ${c(deja, v.typeObjet)}`
+  const paires = []
+  const ajouter = (id, type) => {
+    const a = colonneDe(t, id)
+    const b = colonneDe(t, type)
+    if (a && b && !paires.some((p) => p.id === a.nom)) paires.push({ id: a.nom, type: b.nom })
+  }
+  if (v?.idObjet && v?.typeObjet) ajouter(v.idObjet, v.typeObjet)
+  // Les mêmes colonnes reconnues sur les données, si le modèle de données ne les décrit pas.
+  for (const [cle, a] of associations || []) if (cle.startsWith(`${t.nom.toLowerCase()}.`)) ajouter(cle.split('.')[1], a.colType)
+  return paires
+}
+function memeObjet(schema, table, autre, jointes, depart, colJointure) {
+  const p = pairesObjet(table)[0]
+  if (!p || colJointure?.nom.toLowerCase() === p.id.toLowerCase()) return ''
+  const memes = (t) => pairesObjet(t).find((x) => x.id.toLowerCase() === p.id.toLowerCase() && x.type.toLowerCase() === p.type.toLowerCase())
+  const deja = [...jointes].map((n) => tableDe(schema, n)).find((t) => t && t.nom !== table.nom && t.nom !== autre.nom && memes(t))
+  if (deja) {
+    const q = memes(deja)
+    return ` AND ${table.nom}.${p.id} = ${deja.nom}.${q.id} AND ${table.nom}.${p.type} = ${deja.nom}.${q.type}`
+  }
+  const a = associations?.get(`${table.nom}.${p.id}`.toLowerCase())
+  const code = typeDeTable(lireModele(), depart.nom) || a?.valeurs.find((x) => x.toLowerCase() === depart.nom.toLowerCase())
+  const cle = depart.colonnes.find((c) => c.cle)
+  if (!code || !cle || autre.nom === depart.nom) return ''
+  return ` AND ${table.nom}.${p.id} = ${depart.nom}.${cle.nom} AND ${table.nom}.${p.type} = ${litteral(code)}`
 }
 
 // ---------------------------------------------------------------- dates
