@@ -11,6 +11,7 @@ import { executerRequete, etatConnexion } from 'ktec/mysql.js'
 import { enregistrerRequete, lireInfo, ecrireInfo, enregistrerIndicateur } from 'ktec/ktec.js'
 import { reglagesPoste } from 'ktec/installation.js'
 import { obtenirSchema } from '../base/schema.js'
+import { arbresDe } from '../../interface/types.js'
 import { genererRapport } from '../rapports/serveur.js'
 import { reglagesIndicateurs, tester } from '../indicateurs/serveur.js'
 import { trouverFenetre, formaterNom } from '../indicateurs/indicateur.js'
@@ -63,14 +64,14 @@ export function routes(r) {
     const colonne = colonneDe(table, ctx.query.colonne)
     if (!table || !colonne) throw new ErreurHttp(400, 'Colonne inconnue.')
     const affichage = colonneLisible(table, colonne)
-    return valeursDe(table, colonne, affichage, affichage ? null : libelleParLien(schema, table, colonne))
+    return valeursDe(table, colonne, affichage, affichage ? null : libelleParLien(schema, table, colonne), '', ctx.query.q)
   })
 
   // { table, colonne, spec } : les valeurs d'une condition imbriquée, seulement celles des lignes qui respectent
   // les conditions qui l'englobent (spec : le chemin et ces conditions parentes, sans la condition elle-même).
   r.post('/api/phrase/valeurs', async (ctx) => {
     if (!etatConnexion().ouverte) return []
-    const { table: nomTable, colonne: nomColonne, spec } = await ctx.json()
+    const { table: nomTable, colonne: nomColonne, spec, q } = await ctx.json()
     const schema = await obtenirSchema()
     const table = tableDe(schema, nomTable)
     const colonne = colonneDe(table, nomColonne)
@@ -78,7 +79,7 @@ export function routes(r) {
     const affichage = colonneLisible(table, colonne)
     const { from, where } = await morceauxSql({ ...spec, tri: [] }, schema)
     const col = `${table.nom}.${colonne.nom}`
-    return valeursDe(table, colonne, affichage, affichage ? null : libelleParLien(schema, table, colonne), ` AND ${col} IN (SELECT ${col} ${from}${where})`)
+    return valeursDe(table, colonne, affichage, affichage ? null : libelleParLien(schema, table, colonne), ` AND ${col} IN (SELECT ${col} ${from}${where})`, q)
   })
 
   // Quelques valeurs d'exemple de chaque colonne d'une table (les plus récentes lignes), pour la bulle des champs.
@@ -393,10 +394,13 @@ function libelleParLien(schema, table, colonne) {
 
 // Les valeurs les plus fréquentes d'une colonne (avec sa désignation si l'IA l'a donnée) : les pastilles.
 // dans : une restriction de plus (« AND … IN (sous-requête) »), pour une condition imbriquée.
-async function valeursDe(table, colonne, affichage, parLien = null, dans = '') {
+// q : un bout de texte tapé ; les valeurs (ou leur désignation) qui le contiennent, même rares.
+async function valeursDe(table, colonne, affichage, parLien = null, dans = '', q = '') {
   const lib = parLien ? `${parLien.table}.${parLien.libelle}` : `${table.nom}.${affichage && affichage.nom !== colonne.nom ? affichage.nom : colonne.nom}`
   const jointure = parLien ? ` LEFT JOIN ${parLien.table} ON ${table.nom}.${parLien.colonne} = ${parLien.table}.${parLien.versColonne}` : ''
   const col = `${table.nom}.${colonne.nom}`
+  const motif = String(q || '').trim() ? `'%${echapper(String(q).trim().replace(/[%_]/g, (m) => `\\${m}`))}%'` : ''
+  if (motif) dans += ` AND (${col} LIKE ${motif} OR ${lib} LIKE ${motif})`
   try {
     const r = await executerRequete(
       `SELECT ${col} AS valeur, ${lib} AS libelle, COUNT(*) AS n FROM ${table.nom}${jointure} WHERE ${col} IS NOT NULL AND ${col} <> ''${dans} GROUP BY ${col}, ${lib} ORDER BY n DESC LIMIT ${VALEURS_MAX}`,
@@ -560,20 +564,30 @@ export async function morceauxSql(spec, schema) {
       default: throw new ErreurHttp(400, `Opérateur inconnu : ${f.op}`)
     }
   }
-  // « et tout ce qui est dessous » : une condition sur la table des machines garde les machines qu'elle trouve et
-  // toute leur descendance dans l'arborescence (celle réglée dans PDRTEC). La liste est figée à la fabrication.
+  // « et tout ce qui est dessous » : une condition sur une table rangée en arbre (les machines dans leur
+  // arborescence) garde les lignes qu'elle trouve et toute leur descendance. La liste est figée à la fabrication.
   const enCascade = async (f, propre) => {
-    const m = lireModele()
     const t = tableDe(schema, f.table)
-    if (!propre || !m?.machine || !t || t.nom !== tableDe(schema, m.machine.table)?.nom) return propre
-    const arbre = await lireArbre()
-    if (!arbre) throw new ErreurHttp(409, 'Arborescence illisible (requête réglée dans PDRTEC) : « et tout ce qui est dessous » est impossible.')
-    const code = `${t.nom}.${colonneDe(t, m.machine.code).nom}`
-    const r = await executerRequete(`SELECT DISTINCT ${code} FROM ${t.nom} WHERE ${propre}`, 100_000)
-    const trouvees = new Set(r.lignes.map((l) => String(l[0] ?? '').trim()).filter(Boolean))
-    const racines = [...arbre.noeuds.values()].filter((n) => trouvees.has(n.code)).map((n) => n.id)
-    const codes = [...new Set(sousLesNoeuds(arbre, racines).map((n) => n.code).filter(Boolean))]
-    return codes.length ? `${code} IN (${codes.map(litteral).join(', ')})` : '1 = 0'
+    const a = t && propre ? await arbreReel(schema, t) : null
+    if (!a) return propre
+    const cle = `${t.nom}.${cleDe(t).nom}`
+    const trouvees = new Set((await executerRequete(`SELECT DISTINCT ${cle} FROM ${t.nom} WHERE ${propre}`, 100_000)).lignes.map((l) => String(l[0])))
+    // L'arbre entier, une fois (ses lignes désactivées écartées) ; puis la descendance, de proche en proche.
+    const actif = colonneDe(tableDe(schema, a.table), 'ACTIF')
+    const lignes = (await executerRequete(`SELECT ${a.cle}, ${a.parent}, ${a.vers} FROM ${a.table}${actif ? ` WHERE (${actif.nom} = 1 OR ${actif.nom} IS NULL)` : ''}`, 2_000_000)).lignes
+    const enfants = new Map()
+    for (const [id, pere] of lignes) enfants.set(String(pere), [...(enfants.get(String(pere)) || []), String(id)])
+    const versDe = new Map(lignes.map(([id, , v]) => [String(id), String(v)]))
+    const pile = lignes.filter((l) => trouvees.has(String(l[2]))).map((l) => String(l[0]))
+    const vus = new Set()
+    while (pile.length) {
+      const id = pile.pop()
+      if (vus.has(id)) continue
+      vus.add(id)
+      pile.push(...(enfants.get(id) || []))
+    }
+    const ids = [...new Set([...trouvees, ...[...vus].map((id) => versDe.get(id)).filter((v) => v && v !== 'null')])]
+    return ids.length ? `${cle} IN (${ids.map((v) => litteralPour(cleDe(t), v)).join(', ')})` : '1 = 0'
   }
   const combiner = async (liste) => {
     const morceaux = []
@@ -590,6 +604,22 @@ export async function morceauxSql(spec, schema) {
   const where = await combiner([...anciens, ...(Array.isArray(spec.conditions) ? spec.conditions : [])])
   const tri = (Array.isArray(spec.tri) ? spec.tri : []).map((t) => ({ expression: ciblee(t).e, sens: t.sens === 'desc' ? 'DESC' : 'ASC' }))
   return { from: lignes.join('\n'), where: where ? `\nWHERE ${where}` : '', tri, jointes }
+}
+
+// Parmi les arbres possibles d'une table, celui dont les données en forment vraiment un : le plus de lignes dont le
+// parent existe dans la même table. Gardé par table le temps du lancement de K.NOVA.
+const arbresReels = new Map()
+async function arbreReel(schema, t) {
+  if (!arbresReels.has(t.nom)) {
+    let meilleur = null
+    for (const a of arbresDe(schema.tables, t.nom)) {
+      const n = await executerRequete(`SELECT COUNT(*) FROM ${a.table} e JOIN ${a.table} p ON e.${a.parent} = p.${a.cle} WHERE e.${a.vers} IS NOT NULL`, 1)
+        .then((r) => Number(r.lignes[0]?.[0] || 0)).catch(() => 0)
+      if (n > (meilleur?.n || 0)) meilleur = { ...a, n }
+    }
+    arbresReels.set(t.nom, meilleur)
+  }
+  return arbresReels.get(t.nom)
 }
 
 // Deux tables qui portent chacune un objet « à type » (identifiant + type de l’objet : celles des fiches techniques)

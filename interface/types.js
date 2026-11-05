@@ -85,3 +85,27 @@ export function coutLien(a, b, { nomme = false, composees = new Map() } = {}) {
   if (a.startsWith(b) || b.startsWith(a)) return 0.8
   return 1
 }
+
+// Les arbres qui peuvent ranger les lignes d'une table (une arborescence de machines) : une table dont chaque ligne
+// pointe vers sa ligne parente (un lien vers elle-même, ou une colonne « père » / « parent ») et vers la table cherchée.
+// → [{ table, cle, parent, vers }] (noms de colonnes de l'arbre ; vers : la colonne qui désigne la ligne cherchée).
+// Plusieurs candidats possibles : le serveur garde celui dont les données forment vraiment un arbre.
+// tables : celles du schéma ({ nom, colonnes, liens }).
+export function arbresDe(tables, nom) {
+  const cible = tables.find((t) => t.nom.toLowerCase() === String(nom || '').toLowerCase())
+  if (!cible) return []
+  const cleCible = (cible.colonnes.find((c) => c.cle) || cible.colonnes[0])?.nom
+  const trouves = []
+  for (const t of tables) {
+    const cle = (t.colonnes.find((c) => c.cle) || t.colonnes[0])?.nom
+    if (!cle) continue
+    const auto = (t.liens || []).find((l) => l.versTable.toLowerCase() === t.nom.toLowerCase() && l.colonne.toLowerCase() !== cle.toLowerCase())
+    const parent = auto?.colonne || t.colonnes.find((c) => c.nom !== cle && /(^|_)(pere|parent)(_|$)/i.test(c.nom))?.nom
+    if (!parent) continue
+    // La table elle-même est l'arbre, ou une autre table la désigne par un lien.
+    if (t === cible) { trouves.push({ table: t.nom, cle, parent, vers: cle }); continue }
+    const lien = (t.liens || []).find((l) => l.versTable.toLowerCase() === cible.nom.toLowerCase() && l.versColonne.toLowerCase() === String(cleCible).toLowerCase())
+    if (lien) trouves.push({ table: t.nom, cle, parent, vers: lien.colonne })
+  }
+  return trouves
+}

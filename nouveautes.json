@@ -1,6 +1,14 @@
 {
   "versions": [
     {
+      "version": "0.15.9",
+      "date": "2026-11-05",
+      "points": [
+        "LA PHRASE : « et tout ce qui est dessous » ne dépend plus du modèle de données ni de PDRTEC : l'arborescence est reconnue sur la structure (une table dont les lignes pointent vers leur ligne « père » ou « parent »), et vérifiée sur les données",
+        "Les valeurs proposées cherchent dans toute la colonne en tapant (2 lettres et plus) : une valeur rare, comme un nom de secteur, est maintenant proposée"
+      ]
+    },
+    {
       "version": "0.15.8",
       "date": "2026-11-05",
       "points": [

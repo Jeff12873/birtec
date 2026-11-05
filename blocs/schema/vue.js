@@ -23,7 +23,7 @@ import { extraireTables } from '../base/vue.js'
 import { pdfDepuisJpeg } from '/socle/pdf.js'
 import { MOTIFS, CATEGORIES, disposer, CASE_GALAXIE } from '../../interface/motifs.js'
 import { menuDeroulant } from '../../interface/menu-deroulant.js'
-import { TYPES, typeParId, devinerTypes, coutLien } from '../../interface/types.js'
+import { TYPES, typeParId, devinerTypes, coutLien, arbresDe } from '../../interface/types.js'
 
 let voirEcartees = false
 // Positions des bulles { x, y, fige } : chargées du .ktec, gardées d'une visite à l'autre.
@@ -1228,6 +1228,8 @@ function bandeauPhrase(vue) {
   api('/api/phrase/familles').then((x) => { if (Array.isArray(x)) familles = x }).catch(() => {})
 
   const noeud = (nom) => vue.graphe.parNom.get(String(nom || '').toLowerCase())
+  // Une table rangée en arbre (les machines dans leur arborescence) : « et tout ce qui est dessous » possible.
+  const enArbre = (nom) => Boolean(nom && arbresDe(vue.graphe.noeuds.map((n) => n.table), nom).length)
   const libelleTable = (nom) => noeud(nom)?.table.libelle || nom
   const colonneDe = (table, nom) => noeud(table)?.table.colonnes.find((c) => c.nom === nom)
   const libelleColonne = (c) => (c ? (c.libelle ? c.libelle : c.nom) : '')
@@ -1353,7 +1355,7 @@ function bandeauPhrase(vue) {
     const morceaux = []
     for (const c of liste) {
       const sous = c.sous?.length ? texteListe(c.sous) : ''
-      const t = c.groupe ? (() => { const x = texteListe(c.groupe); return x ? `(${x})` : '' })() : complete(c) ? `${texteCondition(c)}${c.cascade && c.table === guidesDispo.machines?.table ? ' et tout ce qui est dessous' : ''}${sous ? ` (${sous})` : ''}` : ''
+      const t = c.groupe ? (() => { const x = texteListe(c.groupe); return x ? `(${x})` : '' })() : complete(c) ? `${texteCondition(c)}${c.cascade && enArbre(c.table) ? ' et tout ce qui est dessous' : ''}${sous ? ` (${sous})` : ''}` : ''
       if (t) morceaux.push(`${morceaux.length ? (c.lien === 'ou' ? ' ou ' : ' et ') : ''}${t}`)
     }
     return morceaux.join('')
@@ -1373,7 +1375,7 @@ function bandeauPhrase(vue) {
     if (c.source === 'fiche') return { lien: c.lien, guide: 'fiche', op: c.op, type: guidesDispo.fiche?.type, modele: c.modele, champ: c.champ || null, valeurs: c.valeurs.filter(Boolean) }
     const sous = c.sous?.length ? versSpec(c.sous) : []
     const quand = c.quand !== undefined && c.quand !== null ? { quand: c.quand, valeurs: c.valeurs.slice(0, valeursQuand(c.quand)) } : {}
-    const cascade = c.cascade && c.colonne && c.table === guidesDispo.machines?.table ? { cascade: true } : {}
+    const cascade = c.cascade && c.colonne && enArbre(c.table) ? { cascade: true } : {}
     return { lien: c.lien, table: c.table, colonne: c.colonne, op: c.op, valeurs: c.valeurs.filter(Boolean), ...quand, ...cascade, ...(sous.length ? { sous } : {}) }
   }).filter((c) => c && (!c.groupe || c.groupe.length))
   const conditionsSpec = () => versSpec(etatPhrase.conditions)
@@ -1711,7 +1713,7 @@ function bandeauPhrase(vue) {
       changement()
     }, { classe: 'operateur quand' }) : null
     // Sur la table des machines : garder aussi tout ce qui est dessous dans l'arborescence (la cascade).
-    const cascade = c.colonne && c.table && c.table === guidesDispo.machines?.table ? h('button', { class: `pastille-cascade${c.cascade ? ' on' : ''}`, title: 'Garder aussi toutes les machines rangées dessous dans l’arborescence', onclick: () => { c.cascade = !c.cascade; dessiner(); changement() } }, ic(c.cascade ? 'coche' : 'plus', 13), 'et tout ce qui est dessous') : null
+    const cascade = c.colonne && c.table && enArbre(c.table) ? h('button', { class: `pastille-cascade${c.cascade ? ' on' : ''}`, title: 'Garder aussi tout ce qui est rangé dessous dans l’arborescence', onclick: () => { c.cascade = !c.cascade; dessiner(); changement() } }, ic(c.cascade ? 'coche' : 'plus', 13), 'et tout ce qui est dessous') : null
     return h('div', { class: 'condition' }, h('span', { class: 'mot-phrase' }, 'qui'), op, table, reglerFamilles, champ, reglerColonnes, quand, nature === 'date' ? editeurDate(c) : editeurValeur(c, col), cascade,
       autreTable ? choixPassage(c, ancre) : null,
       // Une condition dans la condition : « qui ont des pièces (qui ont telle famille) ».
@@ -1812,9 +1814,21 @@ function bandeauPhrase(vue) {
           listesValeurs.set(cle, vals)
           remplir(vals)
         }, { once: true })
+        // En tapant : les valeurs qui contiennent le texte, même rares (la liste n'a d'abord que les plus fréquentes).
+        let cherchees = []
         champ.addEventListener('input', () => {
-          const trouve = (listesValeurs.get(cle) || []).find((x) => x.valeur === champ.value)
+          const trouve = [...(listesValeurs.get(cle) || []), ...cherchees].find((x) => x.valeur === champ.value)
           c.valeurTexte = trouve && trouve.libelle !== trouve.valeur ? trouve.libelle : null
+          clearTimeout(champ._recherche)
+          const q = champ.value.trim()
+          if (q.length < 2 || trouve) return
+          champ._recherche = setTimeout(async () => {
+            const parQ = () => api(`/api/phrase/valeurs?table=${encodeURIComponent(c.table)}&colonne=${encodeURIComponent(c.colonne)}&q=${encodeURIComponent(q)}`).catch(() => [])
+            cherchees = contexte && vue.chemin?.etapes
+              ? await api('/api/phrase/valeurs', { methode: 'POST', corps: { table: c.table, colonne: c.colonne, spec: specDuChemin(vue.chemin, contexte), q } }).catch(parQ)
+              : await parQ()
+            if (champ.value.trim() === q) remplir(cherchees.length ? cherchees : listesValeurs.get(cle) || [])
+          }, 300)
         })
         champ._liste = liste
       }
