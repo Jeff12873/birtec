@@ -257,6 +257,9 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 .parenthese { font-size: 28px; line-height: 1; color: #c45bff; font-weight: 300; }
 .pastille-lien { font: inherit; font-size: 12px; font-weight: 700; letter-spacing: .04em; padding: 4px 10px; border-radius: 99px; border: 1px solid #c45bff; background: color-mix(in srgb, #c45bff 14%, transparent); color: var(--texte); cursor: pointer; margin-top: 4px; }
 .pastille-lien.ou { border-color: #3d9bff; background: color-mix(in srgb, #3d9bff 16%, transparent); }
+/* « et tout ce qui est dessous » : la cascade de l'arborescence des machines */
+.pastille-cascade { display: inline-flex; align-items: center; gap: 4px; font: inherit; font-size: 13px; padding: 3px 10px; border-radius: 99px; border: 1px dashed var(--bord-fort); background: none; color: var(--texte-2); cursor: pointer; }
+.pastille-cascade.on { border-style: solid; border-color: var(--accent); background: var(--accent-doux); color: var(--accent); font-weight: 600; }
 .ajouts-condition { display: flex; gap: 8px; flex-wrap: wrap; }
 .pastille-ajout { font: inherit; font-size: 13px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 99px; border: 1px dashed var(--bord); background: none; color: var(--texte-2); cursor: pointer; }
 .pastille-ajout:hover { border-color: var(--accent); color: var(--texte); }

@@ -1353,7 +1353,7 @@ function bandeauPhrase(vue) {
     const morceaux = []
     for (const c of liste) {
       const sous = c.sous?.length ? texteListe(c.sous) : ''
-      const t = c.groupe ? (() => { const x = texteListe(c.groupe); return x ? `(${x})` : '' })() : complete(c) ? `${texteCondition(c)}${sous ? ` (${sous})` : ''}` : ''
+      const t = c.groupe ? (() => { const x = texteListe(c.groupe); return x ? `(${x})` : '' })() : complete(c) ? `${texteCondition(c)}${c.cascade && c.table === guidesDispo.machines?.table ? ' et tout ce qui est dessous' : ''}${sous ? ` (${sous})` : ''}` : ''
       if (t) morceaux.push(`${morceaux.length ? (c.lien === 'ou' ? ' ou ' : ' et ') : ''}${t}`)
     }
     return morceaux.join('')
@@ -1373,7 +1373,8 @@ function bandeauPhrase(vue) {
     if (c.source === 'fiche') return { lien: c.lien, guide: 'fiche', op: c.op, type: guidesDispo.fiche?.type, modele: c.modele, champ: c.champ || null, valeurs: c.valeurs.filter(Boolean) }
     const sous = c.sous?.length ? versSpec(c.sous) : []
     const quand = c.quand !== undefined && c.quand !== null ? { quand: c.quand, valeurs: c.valeurs.slice(0, valeursQuand(c.quand)) } : {}
-    return { lien: c.lien, table: c.table, colonne: c.colonne, op: c.op, valeurs: c.valeurs.filter(Boolean), ...quand, ...(sous.length ? { sous } : {}) }
+    const cascade = c.cascade && c.colonne && c.table === guidesDispo.machines?.table ? { cascade: true } : {}
+    return { lien: c.lien, table: c.table, colonne: c.colonne, op: c.op, valeurs: c.valeurs.filter(Boolean), ...quand, ...cascade, ...(sous.length ? { sous } : {}) }
   }).filter((c) => c && (!c.groupe || c.groupe.length))
   const conditionsSpec = () => versSpec(etatPhrase.conditions)
   const triSpec = () => etatPhrase.tri.filter((t) => t.colonne).map(({ table, colonne, sens }) => ({ table, colonne, sens }))
@@ -1679,7 +1680,7 @@ function bandeauPhrase(vue) {
       valeur: choisie,
       classe: `table-phrase${choisie ? ' choisi' : ''}`,
       surChoix: (v) => {
-        Object.assign(c, { valeurs: [], valeur: null, valeurTexte: null, modele: null, champ: null, colonne: null })
+        Object.assign(c, { valeurs: [], valeur: null, valeurTexte: null, modele: null, champ: null, colonne: null, cascade: false })
         if (v.startsWith('guide:')) Object.assign(c, { source: v.slice(6), table: null })
         else Object.assign(c, { source: v ? `table:${v}` : '', table: v || null, par: null, sous: [] })
         dessiner()
@@ -1709,7 +1710,9 @@ function bandeauPhrase(vue) {
       dessiner()
       changement()
     }, { classe: 'operateur quand' }) : null
-    return h('div', { class: 'condition' }, h('span', { class: 'mot-phrase' }, 'qui'), op, table, reglerFamilles, champ, reglerColonnes, quand, nature === 'date' ? editeurDate(c) : editeurValeur(c, col),
+    // Sur la table des machines : garder aussi tout ce qui est dessous dans l'arborescence (la cascade).
+    const cascade = c.colonne && c.table && c.table === guidesDispo.machines?.table ? h('button', { class: `pastille-cascade${c.cascade ? ' on' : ''}`, title: 'Garder aussi toutes les machines rangées dessous dans l’arborescence', onclick: () => { c.cascade = !c.cascade; dessiner(); changement() } }, ic(c.cascade ? 'coche' : 'plus', 13), 'et tout ce qui est dessous') : null
+    return h('div', { class: 'condition' }, h('span', { class: 'mot-phrase' }, 'qui'), op, table, reglerFamilles, champ, reglerColonnes, quand, nature === 'date' ? editeurDate(c) : editeurValeur(c, col), cascade,
       autreTable ? choixPassage(c, ancre) : null,
       // Une condition dans la condition : « qui ont des pièces (qui ont telle famille) ».
       autreTable && !c.sous?.length ? h('button', { class: 'pastille-ajout', title: `Préciser : des ${libelleTable(c.table)} qui…`, onclick: () => { c.sous = [{ ...nouvelleCondition(), ancre: c.table, source: `table:${c.table}`, table: c.table }]; dessiner() } }, ic('plus', 13), 'qui…') : null)

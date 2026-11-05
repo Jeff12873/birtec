@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.15.8",
+      "date": "2026-11-05",
+      "points": [
+        "LA PHRASE : sur une condition qui porte sur la table des machines, la pastille « et tout ce qui est dessous » garde aussi toutes les machines rangées dessous dans l'arborescence (la cascade), par exemple toutes les pièces d'un secteur"
+      ]
+    },
+    {
       "version": "0.15.7",
       "date": "2026-11-05",
       "points": [

@@ -560,11 +560,26 @@ export async function morceauxSql(spec, schema) {
       default: throw new ErreurHttp(400, `Opérateur inconnu : ${f.op}`)
     }
   }
+  // « et tout ce qui est dessous » : une condition sur la table des machines garde les machines qu'elle trouve et
+  // toute leur descendance dans l'arborescence (celle réglée dans PDRTEC). La liste est figée à la fabrication.
+  const enCascade = async (f, propre) => {
+    const m = lireModele()
+    const t = tableDe(schema, f.table)
+    if (!propre || !m?.machine || !t || t.nom !== tableDe(schema, m.machine.table)?.nom) return propre
+    const arbre = await lireArbre()
+    if (!arbre) throw new ErreurHttp(409, 'Arborescence illisible (requête réglée dans PDRTEC) : « et tout ce qui est dessous » est impossible.')
+    const code = `${t.nom}.${colonneDe(t, m.machine.code).nom}`
+    const r = await executerRequete(`SELECT DISTINCT ${code} FROM ${t.nom} WHERE ${propre}`, 100_000)
+    const trouvees = new Set(r.lignes.map((l) => String(l[0] ?? '').trim()).filter(Boolean))
+    const racines = [...arbre.noeuds.values()].filter((n) => trouvees.has(n.code)).map((n) => n.id)
+    const codes = [...new Set(sousLesNoeuds(arbre, racines).map((n) => n.code).filter(Boolean))]
+    return codes.length ? `${code} IN (${codes.map(litteral).join(', ')})` : '1 = 0'
+  }
   const combiner = async (liste) => {
     const morceaux = []
     for (const f of Array.isArray(liste) ? liste : []) {
       // Une condition peut porter ses propres conditions (« des pièces qui ont telle famille ») : elles s'y ajoutent.
-      const propre = Array.isArray(f.groupe) ? await combiner(f.groupe) : await conditionDe(f)
+      const propre = Array.isArray(f.groupe) ? await combiner(f.groupe) : f.cascade ? await enCascade(f, await conditionDe(f)) : await conditionDe(f)
       const sous = !Array.isArray(f.groupe) && Array.isArray(f.sous) && f.sous.length ? await combiner(f.sous) : null
       const sql = propre && sous ? `${propre} AND (${sous})` : propre || sous
       if (sql) morceaux.push(`${morceaux.length ? (f.lien === 'ou' ? '\n  OR ' : '\n  AND ') : ''}(${sql})`)
