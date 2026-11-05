@@ -307,7 +307,7 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 /* Un aperçu à beaucoup de colonnes défile dans son cadre au lieu d'élargir la page (grille : min-width auto). */
 .bandeau-phrase > * { min-width: 0; }
 .sql-phrase summary { cursor: pointer; color: var(--texte-3); font-size: 13px; margin-top: 8px; }
-.et-maintenant { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--bord); }
+.et-maintenant { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--bord); }
 .et-maintenant h3 { display: flex; align-items: center; gap: 6px; font-size: 14px; margin: 0 0 8px; }
 .et-maintenant h3 svg { color: var(--accent); }
 

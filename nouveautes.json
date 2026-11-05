@@ -1,6 +1,14 @@
 {
   "versions": [
     {
+      "version": "0.15.4",
+      "date": "2026-11-05",
+      "points": [
+        "« Et maintenant ? » passe en haut du panneau du chemin",
+        "Un rapport ou un indicateur rouvert dans LA PHRASE peut être supprimé de là (« Supprimer le rapport », « Supprimer l'indicateur », avec confirmation ; la phrase reste)"
+      ]
+    },
+    {
       "version": "0.15.3",
       "date": "2026-11-05",
       "points": [

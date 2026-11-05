@@ -16,7 +16,7 @@
 //
 // Tout ce qui est saisi est gardé dans le fichier .ktec (dictionnaire) et sert à l'IA.
 
-import { h, vider, ic, notifier, fenetre, nombreFr } from '/socle/ui.js'
+import { h, vider, ic, notifier, fenetre, nombreFr, confirmer } from '/socle/ui.js'
 import { api } from '/socle/api.js'
 import { etat, modeAdmin } from '/socle/etat.js'
 import { extraireTables } from '../base/vue.js'
@@ -1481,6 +1481,7 @@ function bandeauPhrase(vue) {
     if (etatPhrase.depart) guidesDispo = await api(`/api/phrase/guides?depart=${encodeURIComponent(etatPhrase.depart)}`).catch(() => guidesDispo)
     phraseCourante = {
       texte, conditions: conditionsSpec, tri: triSpec, origine,
+      oublierOrigine: () => { origine = null },
       // La demande complète pour le serveur : chemin, conditions, tri, regroupement, colonnes montrées.
       spec: (chemin) => ({ ...specDuChemin(chemin, conditionsSpec(), triSpec()), groupe: groupeSpec(), apercu: { affichees: etatPhrase.affichees, sansCle: Boolean(etatPhrase.sansCle) } }),
       sauvegarde: () => JSON.parse(JSON.stringify({ conditions: etatPhrase.conditions, tri: triSpec(), affichees: etatPhrase.affichees, groupe: etatPhrase.groupe, sansCle: Boolean(etatPhrase.sansCle) })),
@@ -2031,10 +2032,25 @@ function etMaintenant(chemin, distinctes) {
   }
   const libelle = chemin.depart.table.libelle || chemin.depart.table.nom
   const origine = phraseCourante?.origine || null
+  // Supprimer le rapport ou l'indicateur rouvert ; la phrase reste, prête à en refaire un autre.
+  const supprimer = async (e) => {
+    const quoi = origine.type === 'rapport' ? 'le rapport' : 'l’indicateur'
+    if (!(await confirmer(`Supprimer ${quoi} « ${origine.titre} » ? La phrase reste à l’écran.`, { texte: 'Supprimer', danger: true }))) return
+    try {
+      await api(origine.type === 'rapport' ? `/api/rapports/${encodeURIComponent(origine.nom)}` : `/api/indicateurs/indicateurs/${origine.id}`, { methode: 'DELETE' })
+    } catch (erreur) {
+      return notifier(erreur.message, 'erreur')
+    }
+    notifier(`${origine.type === 'rapport' ? 'Rapport' : 'Indicateur'} « ${origine.titre} » supprimé`)
+    phraseCourante.oublierOrigine()
+    phraseCourante.origine = null
+    e.target.closest('.et-maintenant')?.replaceWith(etMaintenant(chemin, distinctes) || '')
+  }
   return h('div', { class: 'et-maintenant' },
     h('h3', {}, ic('etincelle', 15), 'Et maintenant ?'),
     h('div', { class: 'actions' },
       origine ? h('button', { class: 'petit principal', title: 'Refaire ce qui a été rouvert avec la phrase d’aujourd’hui (même nom)', onclick: () => (origine.type === 'rapport' ? creerRapport(actuel(), libelle, origine) : creerIndicateur(actuel(), origine)) }, ic('crayon', 14), `Mettre à jour « ${String(origine.titre || '').slice(0, 40)} »`) : null,
+      origine && !window.BIRTEC_ECO ? h('button', { class: 'petit discret danger', title: `Supprimer ${origine.type === 'rapport' ? 'ce rapport' : 'cet indicateur'} (la phrase reste)`, onclick: supprimer }, ic('poubelle', 14), origine.type === 'rapport' ? 'Supprimer le rapport' : 'Supprimer l’indicateur') : null,
       h('button', { class: `petit${origine ? '' : ' principal'}`, title: 'Un rapport BIRT fait de la phrase : ses colonnes, ou ses groupes et leurs calculs', onclick: () => creerRapport(actuel(), libelle) }, ic('document', 14), 'Créer un rapport'),
       // Dans BiRTEC éco+ (page seule) : ni fichier de connaissances ni base pour essayer un indicateur.
       window.BIRTEC_ECO ? null : h('button', { class: 'petit', title: 'Ranger cette requête dans les requêtes du site (fichier .ktec)', onclick: () => { const { phrase, spec } = actuel(); enregistrerSql(spec, phrase || libelle) } }, ic('base', 14), 'Enregistrer le SQL'),
@@ -2293,6 +2309,7 @@ function panneauChemin(chemin, vue, panneau) {
   const { sql, jointures, distinctes, erreur } = sqlDuChemin(chemin)
   const dejaVue = (n, i) => tables.findIndex((t) => t.table.nom === n.table.nom) < i
   return [
+    etMaintenant(chemin, distinctes),
     h('h2', { style: { marginBottom: '4px' } }, chemin.phrase ? 'Chemin de la phrase' : chemin.manuel ? 'Chemin construit' : 'Chemin le plus court'),
     chemin.manuel && !chemin.phrase ? h('p', { class: 'discret', style: { fontSize: '12px', margin: '0 0 4px' } }, 'Ctrl + Maj + clic sur une table pour prolonger.') : null,
     h('p', { class: 'discret', style: { fontSize: '13px', marginTop: 0 } }, `${jointures.length} jointure(s), ${distinctes.length} tables${distinctes.length < tables.length ? ` (${tables.length - distinctes.length} passage(s) en double, ignoré(s))` : ''}`),
@@ -2316,7 +2333,6 @@ function panneauChemin(chemin, vue, panneau) {
       chemin.manuel && !chemin.phrase ? h('button', { class: 'petit discret', title: 'Retirer la dernière table du chemin', onclick: () => vue.retirerDernier() }, ic('retour', 14), 'Retirer la dernière') : null,
       h('button', { class: 'petit discret', onclick: () => { vue.effacerChemin(); vider(panneau, panneauTable(chemin.depart, vue)) } }, ic('x', 14), 'Effacer'),
     ),
-    etMaintenant(chemin, distinctes),
   ]
 }
 
