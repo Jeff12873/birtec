@@ -570,7 +570,8 @@ export async function morceauxSql(spec, schema) {
     const t = tableDe(schema, f.table)
     const a = t && propre ? await arbreReel(schema, t) : null
     if (!a) return propre
-    const cle = `${t.nom}.${cleDe(t).nom}`
+    const colCible = colonneDe(t, a.versCible) || cleDe(t)
+    const cle = `${t.nom}.${colCible.nom}`
     const trouvees = new Set((await executerRequete(`SELECT DISTINCT ${cle} FROM ${t.nom} WHERE ${propre}`, 100_000)).lignes.map((l) => String(l[0])))
     // L'arbre entier, une fois (ses lignes désactivées écartées) ; puis la descendance, de proche en proche.
     const actif = colonneDe(tableDe(schema, a.table), 'ACTIF')
@@ -587,7 +588,7 @@ export async function morceauxSql(spec, schema) {
       pile.push(...(enfants.get(id) || []))
     }
     const ids = [...new Set([...trouvees, ...[...vus].map((id) => versDe.get(id)).filter((v) => v && v !== 'null')])]
-    return ids.length ? `${cle} IN (${ids.map((v) => litteralPour(cleDe(t), v)).join(', ')})` : '1 = 0'
+    return ids.length ? `${cle} IN (${ids.map((v) => litteralPour(colCible, v)).join(', ')})` : '1 = 0'
   }
   const combiner = async (liste) => {
     const morceaux = []

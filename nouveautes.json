@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.15.10",
+      "date": "2026-11-05",
+      "points": [
+        "LA PHRASE : « et tout ce qui est dessous » reconnaît l'arborescence même quand le lien entre l'arbre et les machines est déclaré dans l'autre sens, ou pas déclaré du tout (colonne du même nom)"
+      ]
+    },
+    {
       "version": "0.15.9",
       "date": "2026-11-05",
       "points": [

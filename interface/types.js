@@ -88,7 +88,7 @@ export function coutLien(a, b, { nomme = false, composees = new Map() } = {}) {
 
 // Les arbres qui peuvent ranger les lignes d'une table (une arborescence de machines) : une table dont chaque ligne
 // pointe vers sa ligne parente (un lien vers elle-même, ou une colonne « père » / « parent ») et vers la table cherchée.
-// → [{ table, cle, parent, vers }] (noms de colonnes de l'arbre ; vers : la colonne qui désigne la ligne cherchée).
+// → [{ table, cle, parent, vers, versCible }] (vers : la colonne de l'arbre qui désigne la ligne cherchée).
 // Plusieurs candidats possibles : le serveur garde celui dont les données forment vraiment un arbre.
 // tables : celles du schéma ({ nom, colonnes, liens }).
 export function arbresDe(tables, nom) {
@@ -103,9 +103,15 @@ export function arbresDe(tables, nom) {
     const parent = auto?.colonne || t.colonnes.find((c) => c.nom !== cle && /(^|_)(pere|parent)(_|$)/i.test(c.nom))?.nom
     if (!parent) continue
     // La table elle-même est l'arbre, ou une autre table la désigne par un lien.
-    if (t === cible) { trouves.push({ table: t.nom, cle, parent, vers: cle }); continue }
-    const lien = (t.liens || []).find((l) => l.versTable.toLowerCase() === cible.nom.toLowerCase() && l.versColonne.toLowerCase() === String(cleCible).toLowerCase())
-    if (lien) trouves.push({ table: t.nom, cle, parent, vers: lien.colonne })
+    if (t === cible) { trouves.push({ table: t.nom, cle, parent, vers: cle, versCible: cle }); continue }
+    // Le lien entre l'arbre et la table cherchée, dans un sens ou dans l'autre, sinon une colonne du même nom que la
+    // clé de la table cherchée. versCible : la colonne de la table cherchée qui lui correspond.
+    const nom = (x) => String(x || '').toLowerCase()
+    const aller = (t.liens || []).find((l) => nom(l.versTable) === nom(cible.nom))
+    const retour = (cible.liens || []).find((l) => nom(l.versTable) === nom(t.nom))
+    const meme = t.colonnes.find((c) => nom(c.nom) === nom(cleCible) && c.nom !== cle)
+    const paire = aller ? [aller.colonne, aller.versColonne] : retour ? [retour.versColonne, retour.colonne] : meme ? [meme.nom, cleCible] : null
+    if (paire) trouves.push({ table: t.nom, cle, parent, vers: paire[0], versCible: paire[1] })
   }
   return trouves
 }
