@@ -66,6 +66,21 @@ export function routes(r) {
     return valeursDe(table, colonne, affichage, affichage ? null : libelleParLien(schema, table, colonne))
   })
 
+  // { table, colonne, spec } : les valeurs d'une condition imbriquée, seulement celles des lignes qui respectent
+  // les conditions qui l'englobent (spec : le chemin et ces conditions parentes, sans la condition elle-même).
+  r.post('/api/phrase/valeurs', async (ctx) => {
+    if (!etatConnexion().ouverte) return []
+    const { table: nomTable, colonne: nomColonne, spec } = await ctx.json()
+    const schema = await obtenirSchema()
+    const table = tableDe(schema, nomTable)
+    const colonne = colonneDe(table, nomColonne)
+    if (!table || !colonne) throw new ErreurHttp(400, 'Colonne inconnue.')
+    const affichage = colonneLisible(table, colonne)
+    const { from, where } = await morceauxSql({ ...spec, tri: [] }, schema)
+    const col = `${table.nom}.${colonne.nom}`
+    return valeursDe(table, colonne, affichage, affichage ? null : libelleParLien(schema, table, colonne), ` AND ${col} IN (SELECT ${col} ${from}${where})`)
+  })
+
   // Quelques valeurs d'exemple de chaque colonne d'une table (les plus récentes lignes), pour la bulle des champs.
   r.get('/api/phrase/exemples', async (ctx) => {
     if (!etatConnexion().ouverte) return {}
@@ -365,13 +380,14 @@ function libelleParLien(schema, table, colonne) {
 }
 
 // Les valeurs les plus fréquentes d'une colonne (avec sa désignation si l'IA l'a donnée) : les pastilles.
-async function valeursDe(table, colonne, affichage, parLien = null) {
+// dans : une restriction de plus (« AND … IN (sous-requête) »), pour une condition imbriquée.
+async function valeursDe(table, colonne, affichage, parLien = null, dans = '') {
   const lib = parLien ? `${parLien.table}.${parLien.libelle}` : `${table.nom}.${affichage && affichage.nom !== colonne.nom ? affichage.nom : colonne.nom}`
   const jointure = parLien ? ` LEFT JOIN ${parLien.table} ON ${table.nom}.${parLien.colonne} = ${parLien.table}.${parLien.versColonne}` : ''
   const col = `${table.nom}.${colonne.nom}`
   try {
     const r = await executerRequete(
-      `SELECT ${col} AS valeur, ${lib} AS libelle, COUNT(*) AS n FROM ${table.nom}${jointure} WHERE ${col} IS NOT NULL AND ${col} <> '' GROUP BY ${col}, ${lib} ORDER BY n DESC LIMIT ${VALEURS_MAX}`,
+      `SELECT ${col} AS valeur, ${lib} AS libelle, COUNT(*) AS n FROM ${table.nom}${jointure} WHERE ${col} IS NOT NULL AND ${col} <> ''${dans} GROUP BY ${col}, ${lib} ORDER BY n DESC LIMIT ${VALEURS_MAX}`,
       VALEURS_MAX,
     )
     return r.lignes.map((l) => ({ valeur: String(l[0]), libelle: String(l[1] ?? l[0]), nombre: Number(l[2]) }))

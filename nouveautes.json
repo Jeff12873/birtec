@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.15.1",
+      "date": "2026-11-05",
+      "points": [
+        "LA PHRASE : dans une condition imbriquée (« qui ont … qui contiennent … qui ont … »), les valeurs proposées sont seulement celles qui respectent les conditions au-dessus"
+      ]
+    },
+    {
       "version": "0.15.0",
       "date": "2026-11-05",
       "points": [

@@ -1701,6 +1701,28 @@ function bandeauPhrase(vue) {
     return h('span', { class: 'valeurs-entre' }, c.quand === 'periode' ? liste(0, PERIODES) : jour(0))
   }
 
+  // Les conditions qui englobent c (de la plus haute à la plus proche), en une seule chaîne « qui … qui … » pour le
+  // serveur ; null si c n'est pas imbriquée ou si une condition parente n'est pas encore complète.
+  function contexteDe(c) {
+    const parents = (liste, chaine) => {
+      for (const x of liste) {
+        if (x === c) return chaine
+        const r = (x.groupe && parents(x.groupe, chaine)) || (x.sous?.length && parents(x.sous, [...chaine, x]))
+        if (r) return r
+      }
+      return null
+    }
+    const chaine = parents(etatPhrase.conditions, [])
+    if (!chaine?.length) return null
+    let spec = null
+    for (const a of [...chaine].reverse()) {
+      const s = versSpec([{ ...a, sous: [] }])[0]
+      if (!s) return null
+      spec = [{ ...s, lien: 'et', ...(spec ? { sous: spec } : {}) }]
+    }
+    return spec
+  }
+
   function editeurValeur(c, col) {
     if (c.source === 'parc') return choixListe(guidesDispo.parcs, c.valeur, (v, t) => { c.valeur = v || null; c.valeurTexte = t; dessiner(); changement() }, { vide: '— quel parc ? —' })
     if (c.source === 'machine') return editeurMachine(c)
@@ -1715,11 +1737,16 @@ function bandeauPhrase(vue) {
         const id = `valeurs-${c.id}`
         champ.setAttribute('list', id)
         const liste = h('datalist', { id })
-        const cle = `${c.table}.${c.colonne}`
+        // Dans une condition imbriquée, seulement les valeurs des lignes qui respectent les conditions parentes.
+        const contexte = contexteDe(c)
+        const cle = `${c.table}.${c.colonne}${contexte ? JSON.stringify(contexte) : ''}`
         const remplir = (vals) => vider(liste, vals.map((x) => h('option', { value: x.valeur }, x.libelle !== x.valeur ? x.libelle : '')))
         if (listesValeurs.has(cle)) remplir(listesValeurs.get(cle))
         else champ.addEventListener('focus', async () => {
-          const vals = await api(`/api/phrase/valeurs?table=${encodeURIComponent(c.table)}&colonne=${encodeURIComponent(c.colonne)}`).catch(() => [])
+          const toutes = () => api(`/api/phrase/valeurs?table=${encodeURIComponent(c.table)}&colonne=${encodeURIComponent(c.colonne)}`).catch(() => [])
+          const vals = contexte && vue.chemin?.etapes
+            ? await api('/api/phrase/valeurs', { methode: 'POST', corps: { table: c.table, colonne: c.colonne, spec: specDuChemin(vue.chemin, contexte) } }).catch(toutes)
+            : await toutes()
           listesValeurs.set(cle, vals)
           remplir(vals)
         }, { once: true })
