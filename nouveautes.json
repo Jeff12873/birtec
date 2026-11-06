@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.15.15",
+      "date": "2026-11-06",
+      "points": [
+        "Visite guidée « Composer une phrase » : K.NOVA choisit une table de votre base, ajoute une condition de date et mène jusqu'à « Et maintenant ? »"
+      ]
+    },
+    {
       "version": "0.15.14",
       "date": "2026-11-06",
       "points": [

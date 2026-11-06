@@ -2031,6 +2031,29 @@ function bandeauPhrase(vue) {
   // Les conditions enregistrées → l'état de l'éditeur (identifiants neufs).
   const reprendre = (liste) => liste.map((x) => (x.groupe ? { ...x, id: ++numeroCondition, groupe: reprendre(x.groupe) } : { ...nouvelleCondition(x.lien), ...x, id: ++numeroCondition, valeurs: x.valeurs || [], sous: reprendre(x.sous || []) }))
 
+  // Pour les visites guidées (interface/visites.js) : composer une phrase pas à pas, comme l'utilisateur le ferait.
+  // exemple() : une table principale (la plus reliée) qui a une date, prise dans la base du site : rien n'est écrit
+  // en dur dans le logiciel.
+  window.birtecPhrase = {
+    exemple() {
+      const estDate = (c) => famille(natureColonne(c)) === 'date'
+      // De préférence ce qui se passe dans le temps (interventions, demandes, travaux), et sa date de saisie.
+      const metier = (t) => (/interv|demande|travail|travaux|ordre|rapport/i.test(`${t.libelle || ''} ${t.nom}`) ? 1 : 0)
+      const n = vue.graphe.noeuds.filter((x) => x.type?.id === 'principale' && x.table.colonnes.some(estDate))
+        .sort((a, b) => metier(b.table) - metier(a.table) || b.degre - a.degre)[0]
+      if (!n) return null
+      const dates = n.table.colonnes.filter(estDate)
+      const date = dates.find((c) => /interv|saisie|cr[ée]|demande/i.test(`${c.libelle || ''} ${c.nom}`)) || dates[0]
+      return { table: n.table.nom, libelle: libelleTable(n.table.nom), date: date.nom, libelleDate: date.libelle || date.nom }
+    },
+    choisirDepart: (nom) => choisirDepart(nom),
+    ajouterCondition(c) {
+      etatPhrase.conditions.push({ ...nouvelleCondition(), source: `table:${c.table}`, ancre: etatPhrase.depart, ...c })
+      dessiner()
+      changement()
+    },
+  }
+
   dessinerDepart()
   const element = h('div', { class: 'carte bandeau-phrase' }, zoneDepart, zoneConditions, zoneGroupe, zoneResultat)
   return { element, majCompteur, restaurer }
