@@ -6,11 +6,12 @@
 // Le SQL (comptage, aperçu, requête enregistrée) est construit ici, à partir d'une description (tables, clés,
 // conditions, tri) vérifiée sur la structure : aucun SQL ne vient du navigateur.
 
-import { ErreurHttp } from 'ktec/http.js'
+import { ErreurHttp, envoyerOctets } from 'ktec/http.js'
 import { executerRequete, etatConnexion } from 'ktec/mysql.js'
 import { enregistrerRequete, lireInfo, ecrireInfo, enregistrerIndicateur } from 'ktec/ktec.js'
 import { reglagesPoste } from 'ktec/installation.js'
 import { obtenirSchema } from '../base/schema.js'
+import { classeurSimple } from '../base/classeur.js'
 import { arbresDe } from '../../interface/types.js'
 import { genererRapport } from '../rapports/serveur.js'
 import { reglagesIndicateurs, tester } from '../indicateurs/serveur.js'
@@ -19,6 +20,7 @@ import { lireRptdesign, phraseDuRapport } from './import.js'
 import { lireModele, enregistrerModele, reconnaitreModele, lireArbre, lireParcs, sousLesNoeuds, cheminDe } from './modele.js'
 
 const VALEURS_MAX = 30
+const LIGNES_MAX_EXCEL = 200_000
 
 // Le schéma pour BiRTEC éco+ : structure, réglages de LA PHRASE, associations à type, adresse et utilisateur de la base
 // (jamais de mot de passe). Exporté en fichier par la constellation, ou glissé dans la page éco+ téléchargée du portail.
@@ -212,6 +214,23 @@ export function routes(r) {
     }
     if (ctx.modeAdmin) reponse.sql = q.sql
     return reponse
+  })
+
+  // Le résultat de la phrase en classeur Excel : les colonnes de l'aperçu, toutes les lignes (200 000 au plus).
+  // Lecture seule : ouvert à tous.
+  r.post('/api/phrase/excel', async (ctx) => {
+    const spec = await ctx.json()
+    if (!etatConnexion().ouverte) throw new ErreurHttp(409, 'Connexion à la GMAO indisponible.')
+    const schema = await obtenirSchema()
+    const q = await requeteDeLaPhrase(spec, schema)
+    const r = await executerRequete(q.sql, LIGNES_MAX_EXCEL)
+    const entetes = q.colonnes.map((c) => (q.groupe || !c.colonne ? c.libelle : c.table !== q.depart.nom ? `${c.colonne} (${c.table})` : c.colonne))
+    const nom = String(q.depart.libelle || q.depart.nom)
+    const octets = classeurSimple(entetes, r.lignes.map((l) => l.slice(0, q.colonnes.length)), { feuille: nom })
+    const horodatage = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
+    ctx.res.setHeader('X-Lignes', String(r.lignes.length))
+    if (r.tronque) ctx.res.setHeader('X-Tronque', '1')
+    envoyerOctets(ctx.res, octets, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', nom: `${nom.replace(/[^\p{L}\p{N}.-]+/gu, '_')}-${horodatage}.xlsx`, telecharger: true })
   })
 
   // Un fichier .rptdesign (octets) → la phrase à reprendre : celle qu'il porte (rapport fait par LA PHRASE), sinon

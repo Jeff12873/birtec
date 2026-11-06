@@ -1,6 +1,14 @@
 {
   "versions": [
     {
+      "version": "0.15.16",
+      "date": "2026-11-06",
+      "points": [
+        "LA PHRASE : bouton « Excel » à côté du compteur, toutes les lignes de la phrase dans un classeur .xlsx (colonnes de l'aperçu, en-tête figé et filtrable)",
+        "Aperçu : un clic sur une case la copie dans le presse-papiers"
+      ]
+    },
+    {
       "version": "0.15.15",
       "date": "2026-11-06",
       "points": [

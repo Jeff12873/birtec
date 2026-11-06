@@ -95,3 +95,40 @@ in
   const metadonnees = Buffer.concat([u32(0), u32(meta.length), meta, u32(0)])
   return Buffer.concat([u32(0), u32(paquet.length), paquet, u32(permissions.length), permissions, u32(metadonnees.length), metadonnees, u32(0)])
 }
+
+// Un classeur simple : une feuille, la ligne d'en-tête en gras et figée, un filtre automatique. Les nombres
+// « propres » deviennent des nombres ; le reste (codes à zéro de tête comme 0915, textes) reste du texte.
+const NOMBRE = /^-?(0|[1-9]\d{0,14})(\.\d+)?$/
+const colonneExcel = (i) => { let n = ''; for (i++; i; i = Math.floor((i - 1) / 26)) n = String.fromCharCode(65 + ((i - 1) % 26)) + n; return n }
+
+export function classeurSimple(entetes, lignes, { feuille: nomFeuille = 'Données' } = {}) {
+  const cellule = (ref, v, style = 0) => {
+    if (v === null || v === undefined || v === '') return ''
+    const s = style ? ` s="${style}"` : ''
+    if (typeof v === 'number' && Number.isFinite(v)) return `<c r="${ref}"${s}><v>${v}</v></c>`
+    const t = v instanceof Date ? v.toISOString().slice(0, 19).replace('T', ' ') : String(v)
+    if (!style && NOMBRE.test(t)) return `<c r="${ref}"><v>${t}</v></c>`
+    return `<c r="${ref}" t="inlineStr"${s}><is><t xml:space="preserve">${x(t.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, ''))}</t></is></c>`
+  }
+  const lettres = entetes.map((_, i) => colonneExcel(i))
+  const rangee = (valeurs, n, style) => `<row r="${n}">${valeurs.map((v, i) => cellule(`${lettres[i]}${n}`, v, style)).join('')}</row>`
+  // Largeur des colonnes : d'après l'en-tête et les 200 premières lignes.
+  const largeurs = entetes.map((e, i) => Math.min(60, Math.max(8, String(e).length + 2, ...lignes.slice(0, 200).map((l) => String(l[i] ?? '').length + 2))))
+  const fin = `${lettres.at(-1) || 'A'}${lignes.length + 1}`
+  const feuilleXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${largeurs.map((l, i) => `<col min="${i + 1}" max="${i + 1}" width="${l}" customWidth="1"/>`).join('')}</cols><sheetData>${rangee(entetes, 1, 1)}${lignes.map((l, i) => rangee(l, i + 2, 0)).join('')}</sheetData>${entetes.length ? `<autoFilter ref="A1:${fin}"/>` : ''}</worksheet>`
+  const nom = x(String(nomFeuille).replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || 'Données')
+  return creerZip([
+    { nom: '[Content_Types].xml', octets: utf8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`) },
+    { nom: '_rels/.rels', octets: utf8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`) },
+    { nom: 'xl/workbook.xml', octets: utf8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${nom}" sheetId="1" r:id="rId1"/></sheets>${entetes.length ? `<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">'${nom.replace(/'/g, "''")}'!$A$1:$${fin.replace(/(\d+)$/, '$$$1')}</definedName></definedNames>` : ''}</workbook>`) },
+    { nom: 'xl/_rels/workbook.xml.rels', octets: utf8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`) },
+    { nom: 'xl/styles.xml', octets: utf8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>`) },
+    { nom: 'xl/worksheets/sheet1.xml', octets: utf8(feuilleXml) },
+  ])
+}

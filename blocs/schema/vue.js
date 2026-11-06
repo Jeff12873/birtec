@@ -17,7 +17,7 @@
 // Tout ce qui est saisi est gardé dans le fichier .ktec (dictionnaire) et sert à l'IA.
 
 import { h, vider, ic, notifier, fenetre, nombreFr, confirmer } from '/socle/ui.js'
-import { api } from '/socle/api.js'
+import { api, adresse } from '/socle/api.js'
 import { etat, modeAdmin } from '/socle/etat.js'
 import { extraireTables } from '../base/vue.js'
 import { pdfDepuisJpeg } from '/socle/pdf.js'
@@ -1905,7 +1905,46 @@ function bandeauPhrase(vue) {
     return teinte ? { '--teinte': teinte } : {}
   }
   const classeColonne = (c) => (couleurTable(c.table) ? ' colonne-table' : c.condition ? ' colonne-condition' : '')
-  const celluleApercu = (c, v) => h('td', { class: classeColonne(c).trim(), style: styleColonne(c), title: v === null ? '' : String(v) }, v === null ? '' : String(v))
+  // Un clic sur une case de l'aperçu la copie dans le presse-papiers.
+  const celluleApercu = (c, v) => h('td', { class: `${classeColonne(c)} copiable`.trim(), style: styleColonne(c), title: v === null ? '' : `${v}\n(cliquer pour copier)`, onclick: (e) => copierCase(e.currentTarget, v) }, v === null ? '' : String(v))
+  async function copierCase(td, v) {
+    if (v === null || getSelection()?.toString()) return // on laisse faire une sélection à la souris
+    const texte = String(v)
+    try {
+      await navigator.clipboard.writeText(texte)
+    } catch {
+      const zone = h('textarea', { style: { position: 'fixed', opacity: 0 } }, texte)
+      document.body.append(zone)
+      zone.select()
+      document.execCommand('copy')
+      zone.remove()
+    }
+    td.classList.remove('copiee')
+    void td.offsetWidth
+    td.classList.add('copiee')
+    notifier(`Copié : ${texte.length > 60 ? `${texte.slice(0, 60)}…` : texte}`)
+  }
+
+  // Le résultat entier de la phrase en classeur Excel (.xlsx), avec les colonnes de l'aperçu.
+  async function extraireExcel(bouton) {
+    bouton.disabled = true
+    try {
+      const reponse = await fetch(adresse('/api/phrase/excel'), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-KTEC': '1' }, body: JSON.stringify(phraseCourante.spec(vue.chemin)) })
+      if (!reponse.ok) throw new Error((await reponse.json().catch(() => ({}))).erreur || `Erreur ${reponse.status}`)
+      const nom = decodeURIComponent((reponse.headers.get('Content-Disposition') || '').match(/filename\*=UTF-8''([^;]+)/)?.[1] || 'phrase.xlsx')
+      const lien = h('a', { href: URL.createObjectURL(await reponse.blob()), download: nom })
+      document.body.append(lien)
+      lien.click()
+      lien.remove()
+      setTimeout(() => URL.revokeObjectURL(lien.href), 10_000)
+      const n = Number(reponse.headers.get('X-Lignes') || 0)
+      notifier(reponse.headers.get('X-Tronque') ? `Classeur limité aux ${nombreFr(n)} premières lignes : ${nom}` : `Classeur prêt (${nombreFr(n)} ligne${n > 1 ? 's' : ''}) : ${nom}`)
+    } catch (erreur) {
+      notifier(erreur.message, 'erreur')
+    } finally {
+      bouton.disabled = false
+    }
+  }
   const enteteTri = (c, i, toutes) => {
     const { table, colonne } = c
     const k = etatPhrase.tri.findIndex((t) => t.table === table && t.colonne === colonne)
@@ -2003,7 +2042,8 @@ function bandeauPhrase(vue) {
         if (numero !== demande) return
         const groupe = r.apercu?.groupe
         vider(zoneResultat,
-          h('div', { class: 'compteur-phrase' }, h('b', {}, nombreFr(r.nombre)), ` ${libelleTable(vue.chemin.depart.table.nom)} correspondent`, groupe ? h('span', { class: 'discret' }, ` · ${nombreFr(r.groupes)} groupe${r.groupes > 1 ? 's' : ''}`) : null),
+          h('div', { class: 'compteur-phrase' }, h('b', {}, nombreFr(r.nombre)), ` ${libelleTable(vue.chemin.depart.table.nom)} correspondent`, groupe ? h('span', { class: 'discret' }, ` · ${nombreFr(r.groupes)} groupe${r.groupes > 1 ? 's' : ''}`) : null,
+            r.nombre ? h('button', { class: 'petit discret bouton-excel-phrase', title: 'Toutes les lignes de la phrase dans un classeur Excel, avec les colonnes de l’aperçu', onclick: (e) => extraireExcel(e.currentTarget) }, ic('telecharger', 14), 'Excel') : null),
           r.apercu?.lignes.length ? h('div', { class: 'tableau-conteneur apercu-phrase' }, h('table', { class: 'tableau compact' },
             // Regroupé : une colonne par champ du regroupement et par calcul (pas de tri au clic).
             h('thead', {}, h('tr', {}, r.apercu.colonnes.map((c, i) => (groupe ? h('th', { class: c.mesure ? 'colonne-condition' : '' }, c.libelle) : enteteTri(c, i, r.apercu.colonnes))))),

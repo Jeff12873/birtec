@@ -306,6 +306,12 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 .etiquette-filtre svg { color: #f59e0b; }
 .compteur-phrase { font-size: 14px; }
 .compteur-phrase b { font-size: 22px; color: var(--accent); margin-right: 4px; }
+.compteur-phrase { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 4px; }
+.bouton-excel-phrase { margin-left: auto; align-self: center; }
+.apercu-phrase td.copiable { cursor: copy; }
+.apercu-phrase td.copiable:hover { outline: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); outline-offset: -1px; }
+.apercu-phrase td.copiee { animation: case-copiee 0.7s ease-out; }
+@keyframes case-copiee { from { background: color-mix(in srgb, var(--accent) 35%, transparent); } }
 .apercu-phrase { margin-top: 8px; max-height: 220px; }
 /* Un aperçu à beaucoup de colonnes défile dans son cadre au lieu d'élargir la page (grille : min-width auto). */
 .bandeau-phrase > * { min-width: 0; }
