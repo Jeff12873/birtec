@@ -1,0 +1,140 @@
+{
+  "sections": [
+    {
+      "titre": "Commencer",
+      "pages": [
+        {
+          "id": "premiers-pas",
+          "titre": "Premiers pas avec BiRTEC",
+          "mots": "découvrir menu",
+          "alias": [
+            "installation"
+          ]
+        },
+        {
+          "id": "cas-usage",
+          "titre": "Cas d'usage",
+          "mots": "exemples scénarios"
+        }
+      ]
+    },
+    {
+      "titre": "La constellation",
+      "pages": [
+        {
+          "id": "schema",
+          "titre": "La constellation des tables",
+          "ecran": "schema",
+          "mots": "bulles graphe liens chemin disposition"
+        },
+        {
+          "id": "la-phrase",
+          "titre": "LA PHRASE : interroger la base",
+          "ecran": "schema",
+          "mots": "conditions valeurs dates ou groupe tri colonnes"
+        },
+        {
+          "id": "regrouper",
+          "titre": "Regrouper et calculer",
+          "ecran": "schema",
+          "mots": "somme moyenne nombre par mois"
+        },
+        {
+          "id": "fiches-techniques",
+          "titre": "Fiches techniques et parcs dans la phrase",
+          "ecran": "schema",
+          "mots": "modèle champ valeur machine arborescence parc"
+        },
+        {
+          "id": "extraire",
+          "titre": "Extraire pour Excel, PDF de la constellation",
+          "ecran": "schema",
+          "mots": "power query csv zip a3 imprimer"
+        },
+        {
+          "id": "charger-rptdesign",
+          "titre": "Charger un .rptdesign",
+          "ecran": "schema",
+          "mots": "import rapport existant"
+        }
+      ]
+    },
+    {
+      "titre": "Mes créations",
+      "pages": [
+        {
+          "id": "rapports",
+          "titre": "Rapports",
+          "ecran": "rapports",
+          "mots": "export pdf excel word aperçu paramètres aspect thème"
+        },
+        {
+          "id": "indicateurs",
+          "titre": "Indicateurs GMAO",
+          "ecran": "indicateurs",
+          "mots": "requête liste val variables"
+        },
+        {
+          "id": "question-libre",
+          "titre": "Question libre (IA)",
+          "ecran": "assistant",
+          "mots": "assistant sql explication",
+          "alias": [
+            "assistant"
+          ]
+        }
+      ]
+    },
+    {
+      "titre": "Ma base",
+      "pages": [
+        {
+          "id": "base",
+          "titre": "Base de données et dictionnaire",
+          "ecran": "base",
+          "admin": true,
+          "mots": "console sql tables noms clairs"
+        },
+        {
+          "id": "connaissances",
+          "titre": "Connaissances du site",
+          "ecran": "connaissances",
+          "admin": true,
+          "mots": "notes requêtes fichiers birt charte import dossier"
+        },
+        {
+          "id": "configuration",
+          "titre": "Configuration et modèle de données",
+          "ecran": "configuration",
+          "admin": true,
+          "mots": "types d'objets machines fiches reconnaître"
+        }
+      ]
+    },
+    {
+      "titre": "Sans K.NOVA",
+      "pages": [
+        {
+          "id": "eco-plus",
+          "titre": "BiRTEC éco+",
+          "mots": "html seul schéma hors ligne"
+        }
+      ]
+    },
+    {
+      "titre": "Aide",
+      "pages": [
+        {
+          "id": "astuces",
+          "titre": "Trucs et astuces",
+          "mots": "conseils"
+        },
+        {
+          "id": "depannage",
+          "titre": "Questions fréquentes et dépannage",
+          "mots": "erreur problème valeur fausse"
+        }
+      ]
+    }
+  ]
+}

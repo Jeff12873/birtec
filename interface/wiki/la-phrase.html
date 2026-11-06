@@ -1,0 +1,49 @@
+<h1>LA PHRASE : interroger la base</h1>
+<p class="but">Le bandeau au-dessus de la constellation : on décrit en français ce qu'on veut voir, choix par choix, sans IA et sans SQL.</p>
+
+<script type="application/json" data-maquette>
+{ "titre": "LA PHRASE", "ratio": 44,
+  "blocs": [
+    [2,4,96,14,"Je souhaite consulter les  [rapports d'intervention]","carte"],
+    [5,22,90,12,"qui ont  [Machine] [Code]  [commence par]  [PRS]","zone"],
+    [5,37,90,12,"et qui ont  [Date de saisie]  [dans les derniers] [3] [mois]","zone"],
+    [5,52,20,9,"+ et qui…","bouton"], [27,52,22,9,"+ OU un autre cas","bouton"], [51,52,14,9,"( groupe )","bouton"], [67,52,20,9,"regrouper…","bouton"],
+    [2,66,70,30,"Aperçu (128 lignes)","zone"], [74,66,24,30,"Et maintenant ?","accent"]
+  ],
+  "reperes": [
+    [6,11,"Ce qu'on consulte : une table principale."],
+    [8,28,"Une condition : opérateur, table, champ, valeur (les valeurs de la base sont proposées)."],
+    [8,43,"Un champ de date a ses propres choix : depuis, entre, dans les derniers…"],
+    [28,56,"Ajouter une condition (ET) ou un autre cas (OU)."],
+    [6,72,"L'aperçu : cliquez un titre de colonne pour trier ; la pastille + choisit les colonnes."],
+    [86,80,"Rapport, indicateur, SQL, extraction Excel."]
+  ] }
+</script>
+
+<h2>Pas à pas</h2>
+<ol>
+<li><b>Je souhaite consulter les</b> : choisissez la table (les rapports d'intervention, les pièces…).</li>
+<li><b>qui ont</b> : choisissez l'opérateur (ont, n'ont pas, contiennent, commencent par, plus que, entre…), puis la table, le champ et la valeur. Sans valeur, « ont » veut dire que le champ est rempli.</li>
+<li>Ajoutez d'autres conditions avec <b>+ et qui…</b> ; un autre cas avec <b>+ OU un autre cas</b> (une ligne est gardée si elle remplit un des cas).</li>
+<li>Choisissez les colonnes avec la pastille <b>+</b> de la première colonne de chaque table ; triez en cliquant les titres (<kbd>Maj</kbd> + clic : tri secondaire).</li>
+<li><b>Et maintenant ?</b> : créer un rapport, un indicateur GMAO, enregistrer le SQL ou extraire pour Excel.</li>
+</ol>
+
+<h2>Les dates</h2>
+<p>Après un champ de date : le [jour], avant le, depuis le, entre le … et le …, dans les derniers [3] [mois], il y a plus de [1] [an], ou pendant [ce mois-ci, le mois dernier, cette année…]. Les périodes se recalculent chaque jour : un rapport « des 3 derniers mois » suit le calendrier.</p>
+
+<h2>Par où passe la jointure</h2>
+<p>Quand une condition porte sur une autre table, le menu <b>par …</b> montre par où passe la jointure (par exemple des interventions vers les pièces : par les mouvements de stock, ou par les pièces prévues). <span class="pastille-admin">Admin</span> le cadenas fixe un passage pour toutes les phrases.</p>
+
+<h2>Questions fréquentes</h2>
+<details><summary>Une valeur que je connais n'est pas proposée</summary><p>Les valeurs proposées tiennent compte des conditions déjà posées : si elle n'apparaît pas, aucune ligne ne l'a avec ces conditions. Retirez une condition pour vérifier.</p></details>
+<details><summary>Le nombre de lignes est plus grand que prévu</summary><p>Une jointure peut multiplier les lignes (une intervention et ses trois machines). Le nombre affiché compte les lignes distinctes de la table consultée ; l'aperçu, lui, montre chaque combinaison. Regroupez si besoin.</p></details>
+<details><summary>Une colonne d'une table liée affiche la valeur d'un autre objet</summary><p>Affichez l'identifiant de chaque table du chemin pour voir d'où vient la ligne, puis envoyez une capture au développeur. <span class="pastille-admin">Admin</span> vérifiez aussi les <a href="#/birtec/configuration">types d'objets</a> du modèle de données.</p></details>
+<details class="admin"><summary>Les utilisateurs voient trop de colonnes dans les choix</summary><p>La roue à côté du champ choisit les colonnes proposées pour chaque table.</p></details>
+
+<h2>Trucs et astuces</h2>
+<ul class="astuces">
+<li>« qui ont [table] », sans champ : garde les lignes qui ont au moins une ligne liée dans cette table (les machines qui ont des pièces, par exemple).</li>
+<li>La pastille <b>+ qui…</b> au bout d'une condition ajoute des conditions sur la table liée : « des pièces qui ont telle famille ».</li>
+<li>Pour garder une recherche sans en faire un rapport : Et maintenant ? › Enregistrer le SQL.</li>
+</ul>

@@ -1,0 +1,42 @@
+<h1>Premiers pas avec BiRTEC</h1>
+<p class="but">BiRTEC interroge la base de la GMAO sans écrire de SQL : on fait une phrase, il en tire un aperçu, un rapport BIRT, un indicateur GMAO ou un classeur Excel.</p>
+
+<script type="application/json" data-maquette>
+{ "titre": "BiRTEC — l'écran d'accueil (la constellation)", "ratio": 58,
+  "blocs": [
+    [0,0,17,100,"","menu"], [2,4,13,6,"BiRTEC","texte"], [2,16,13,5,"Constellation","accent"], [2,23,13,5,"Rapports","texte"], [2,30,13,5,"Indicateurs GMAO","texte"], [2,40,13,5,"Ma base (admin)","texte"], [2,88,13,5,"Autres applis","texte"],
+    [17,0,83,8,"","barre"],
+    [19,10,79,20,"Je souhaite consulter les [table] qui ont [champ] [valeur]…","carte"],
+    [19,33,79,40,"Constellation : les tables en bulles","graphe"],
+    [19,76,79,20,"Aperçu : les premières lignes","zone"]
+  ],
+  "reperes": [
+    [9,19,"Le menu : la constellation, vos rapports et indicateurs ; « Ma base » et les réglages pour l'administrateur."],
+    [21,13,"LA PHRASE : ce que vous voulez voir, en français, choix par choix."],
+    [21,36,"La constellation : le chemin entre les tables s'y allume tout seul."],
+    [21,79,"L'aperçu et le nombre de lignes suivent chaque choix."]
+  ] }
+</script>
+
+<h2>Pas à pas : votre premier résultat</h2>
+<ol>
+<li>Ouvrez BiRTEC depuis le portail : la constellation s'affiche.</li>
+<li>Dans LA PHRASE, choisissez ce que vous voulez consulter (« les rapports d'intervention », « les pièces »…).</li>
+<li>Ajoutez une condition : « qui ont » › la table › le champ › la valeur (les valeurs de la base sont proposées en tapant).</li>
+<li>Regardez l'aperçu : le nombre de lignes et les premières lignes suivent chaque choix.</li>
+<li>Cliquez <b>Et maintenant ?</b> : rapport, indicateur, SQL, ou extraction pour Excel.</li>
+</ol>
+
+<h2>Le menu</h2>
+<ul>
+<li><b>Constellation</b> : LA PHRASE, les chemins, « Et maintenant ? ».</li>
+<li><b>Mes créations</b> : <a href="#/birtec/rapports">Rapports</a>, <a href="#/birtec/indicateurs">Indicateurs GMAO</a>.</li>
+<li class="admin"><b>Ma base</b> : <a href="#/birtec/base">Base de données</a>, <a href="#/birtec/connaissances">Connaissances</a>.</li>
+<li class="admin"><b>Réglages</b> : <a href="#/birtec/configuration">Configuration</a>.</li>
+</ul>
+
+<h2>Trucs et astuces</h2>
+<ul class="astuces">
+<li>Commencez toujours par la phrase la plus simple, regardez l'aperçu, puis ajoutez les conditions une à une : on voit tout de suite laquelle vide le résultat.</li>
+<li>Plus le dictionnaire est riche (noms clairs des tables et colonnes), plus les choix proposés sont lisibles.</li>
+</ul>

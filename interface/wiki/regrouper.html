@@ -1,0 +1,27 @@
+<h1>Regrouper et calculer</h1>
+<p class="but">Une ligne par valeur d'un champ, avec des calculs : le nombre d'interventions par machine, les heures par mois…</p>
+
+<h2>Pas à pas</h2>
+<ol>
+<li>Faites votre phrase comme d'habitude.</li>
+<li>Sous les conditions, <b>regrouper (facultatif)</b> › choisissez le champ (« par Machine »), ou une date « par jour, semaine, mois, année ».</li>
+<li>Ajoutez si besoin un deuxième critère (« puis par… »).</li>
+<li>Ajoutez des calculs : nombre de lignes, somme, moyenne, minimum ou maximum d'un champ.</li>
+<li>L'aperçu, le rapport et la requête enregistrée suivent. « ne plus regrouper » revient à la liste.</li>
+</ol>
+
+<script type="application/json" data-maquette>
+{ "titre": "Le regroupement sous la phrase", "ratio": 30,
+  "blocs": [
+    [2,8,96,22,"regroupés par [Machine] puis par [Date d'intervention : par mois]","carte"],
+    [2,36,60,20,"calculs : [nombre de rapports] [somme de Durée]","zone"], [64,36,22,20,"ne plus regrouper","bouton"],
+    [2,64,96,30,"Aperçu : Machine | Mois | Nombre | Somme","zone"]
+  ],
+  "reperes": [ [4,19,"Un ou deux critères de regroupement ; une date se regroupe par période."], [4,46,"Les calculs, un par colonne."], [4,78,"L'aperçu : une ligne par groupe, les plus gros d'abord (ou dans l'ordre du calendrier)."] ] }
+</script>
+
+<h2>Trucs et astuces</h2>
+<ul class="astuces">
+<li>Regroupé par mois, le résultat est rangé dans l'ordre du calendrier : parfait pour une courbe dans Excel.</li>
+<li>Un indicateur GMAO compte toujours des lignes : le regroupement n'y sert pas.</li>
+</ul>

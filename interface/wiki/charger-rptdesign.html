@@ -1,0 +1,14 @@
+<h1>Charger un .rptdesign</h1>
+<p class="but">Reprendre la phrase d'un rapport BIRT existant, pour le retoucher ou en faire un autre.</p>
+
+<h2>Pas à pas</h2>
+<ol>
+<li>En haut de la constellation, <b>Charger un .rptdesign</b>, et choisissez le fichier.</li>
+<li>Un rapport fait par BiRTEC revient tel quel, avec sa phrase.</li>
+<li>Pour un autre rapport, BiRTEC lit sa requête : les tables donnent le chemin, les conditions simples deviennent des conditions, l'ordre devient le tri.</li>
+<li>Ce qu'il ne sait pas traduire (paramètre « ? », OU, calcul, regroupement SQL) est listé : refaites-le à la main dans la phrase.</li>
+</ol>
+
+<h2>Questions fréquentes</h2>
+<details><summary>Le chemin repris est incomplet</summary><p>Certains rapports utilisent des jointures que BiRTEC ne sait pas encore relier. Complétez le chemin avec <kbd>Ctrl</kbd> + <kbd>Maj</kbd> + clic, puis envoyez le fichier au développeur (sans mot de passe) : c'est en cours d'amélioration.</p></details>
+<details><summary>Le mot de passe de la base est-il repris ?</summary><p>Non, jamais : seule la requête est lue.</p></details>

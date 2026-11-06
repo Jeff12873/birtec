@@ -1,0 +1,55 @@
+<h1>La constellation des tables</h1>
+<p class="but">Toutes les tables de la base en bulles, reliées par leurs liens. C'est par elle qu'on trouve les tables et le chemin pour aller de l'une à l'autre.</p>
+
+<script type="application/json" data-maquette>
+{ "titre": "Constellation", "ratio": 56,
+  "blocs": [
+    [0,0,100,9,"","barre"], [2,2,18,5,"Rechercher une table","champ"], [22,2,16,5,"Dispositions ▾","bouton"], [62,2,12,5,"Charger .rptdesign","bouton"], [75,2,12,5,"PDF","bouton"], [88,2,10,5,"Imprimer","bouton"],
+    [2,12,70,74,"Le graphe","graphe"], [74,12,24,40,"Panneau de la table choisie","zone"], [76,54,20,16,"Raccourcis","carte"],
+    [2,89,96,9,"Force des liens · Écartement · Noms · Clés de liaison","zone"]
+  ],
+  "reperes": [
+    [10,5,"Chercher une table : le graphe se centre dessus."],
+    [28,5,"Les dispositions : la vôtre, par types, autour de la table choisie, impression…"],
+    [36,40,"Une bulle par table ; sa taille dit le nombre de liens, sa couleur son type."],
+    [86,30,"Clic sur une bulle : son nom clair, sa description, ses tables liées.", false],
+    [86,60,"Le rappel des raccourcis clavier et souris."],
+    [50,93,"Les curseurs : rapprocher, écarter, afficher les noms et les clés."]
+  ] }
+</script>
+
+<h2>Lire le graphe</h2>
+<ul>
+<li><b>Principale</b> (rose-rouge) : un objet métier (intervention, demande, machine, pièce, personne).</li>
+<li><b>Secondaire</b> (bleu) : le détail rattaché à une principale.</li>
+<li><b>Intermédiaire</b> (violet) : une table de liaison entre deux tables.</li>
+<li><b>Référentiel</b> (blanc cassé) : une liste de codes (types, familles…).</li>
+<li><b>Technique</b> (gris) : journaux, exports, paramètres.</li>
+</ul>
+<p>Orange : le chemin choisi. Vert : la table choisie.</p>
+
+<h2>Gestes</h2>
+<ul>
+<li>Molette : zoom. Glisser le fond : se déplacer. Glisser une bulle : la déplacer (elle reste là où on la lâche).</li>
+<li><kbd>Ctrl</kbd> + clic sur une autre bulle : le chemin le plus court entre les deux, avec les clés et le SQL.</li>
+<li><kbd>Ctrl</kbd> + <kbd>Maj</kbd> + clic : construire le chemin soi-même, table par table.</li>
+<li>Double-clic sur une bulle figée : la libérer. « Tout libérer » : toutes repartent.</li>
+</ul>
+
+<h2 class="admin">Corriger la constellation</h2>
+<ul>
+<li>Le type d'une table : panneau de la table › « Type de table ».</li>
+<li>Un lien manquant : panneau de la table › « Ajouter un lien ».</li>
+<li>Un lien nommé est préféré pour les chemins : clic sur le lien pour le nommer.</li>
+<li>« Tables écartées de l'IA » : celles qui ne sont pas proposées.</li>
+</ul>
+
+<h2>Questions fréquentes</h2>
+<details><summary>Le chemin proposé passe par une table qui n'a rien à voir</summary><p>Quand un autre chemin est presque aussi court, le panneau le propose (« Autre chemin : par … »). Vous pouvez aussi construire le chemin vous-même avec <kbd>Ctrl</kbd> + <kbd>Maj</kbd> + clic.</p></details>
+<details><summary>Ma disposition a disparu</summary><p>Une autre disposition ne fait que montrer : choisissez « Ma disposition » dans le menu des dispositions, elle est gardée dans le fichier de connaissances.</p></details>
+
+<h2>Trucs et astuces</h2>
+<ul class="astuces">
+<li>Disposez d'abord le graphe à votre goût : le PDF et l'impression reprennent exactement la disposition à l'écran.</li>
+<li>La disposition « Tables entières » (Impression) tient tout sur une feuille A3 sans chevauchement : idéale à afficher au mur du bureau des méthodes.</li>
+</ul>

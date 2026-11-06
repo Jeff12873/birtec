@@ -1,0 +1,35 @@
+<h1>Configuration et modèle de données</h1>
+<p class="but"><span class="pastille-admin">Admin</span> Ce que LA PHRASE doit savoir de la base pour guider : la table des machines, les fiches techniques, et les types d'objets.</p>
+
+<script type="application/json" data-maquette>
+{ "titre": "Configuration › Modèle de données", "ratio": 52,
+  "blocs": [
+    [3,4,94,92,"","zone"], [6,8,40,7,"Modèle de données","texte"],
+    [6,18,88,6,"Machines : table, code, nom","texte"], [6,25,88,6,"Fiches techniques : valeurs, modèles, champs","texte"],
+    [6,36,88,6,"Types d'objets","texte"],
+    [6,44,14,7,"PIECE","champ"], [22,44,4,7,"→","texte"], [27,44,22,7,"table des pièces ▾","champ"], [51,44,5,7,"🗑","bouton"],
+    [6,53,14,7,"RI","champ"], [22,53,4,7,"→","texte"], [27,53,22,7,"table des rapports ▾","champ"], [51,53,5,7,"🗑","bouton"],
+    [6,63,20,7,"+ Ajouter un type","bouton"],
+    [6,74,40,7,"Corriger à la main ▸","texte"],
+    [60,84,16,8,"Reconnaître","bouton"], [78,84,16,8,"Enregistrer","accent"]
+  ],
+  "reperes": [
+    [8,21,"Le résumé : la table des machines et les tables des fiches techniques."],
+    [8,47,"Un type d'objet : la valeur écrite dans la colonne « type » des fiches, et la table qu'elle désigne."],
+    [8,66,"Ajouter un type que BiRTEC n'a pas reconnu tout seul."],
+    [8,77,"Le détail complet, en texte, pour les cas rares."],
+    [68,88,"Reconnaître : BiRTEC propose le modèle d'après la base ; vérifiez, puis Enregistrer."]
+  ] }
+</script>
+
+<h2>Pas à pas</h2>
+<ol>
+<li>Configuration › carte <b>Modèle de données</b> › <b>Reconnaître</b> : BiRTEC regarde la forme des tables et quelques valeurs, et propose.</li>
+<li>Vérifiez le résumé (machines, fiches techniques).</li>
+<li>Dans <b>Types d'objets</b>, vérifiez que chaque type utilisé par vos fiches a sa table ; ajoutez ceux qui manquent (<b>+ Ajouter un type</b>, la table dans la liste).</li>
+<li><b>Enregistrer</b> : le modèle est rangé dans le fichier de connaissances, pour tous les postes.</li>
+</ol>
+
+<h2>Questions fréquentes</h2>
+<details><summary>Quand ajouter un type d'objet à la main ?</summary><p>Quand des fiches techniques existent sur un nouveau type d'objet (des demandes, des machines…), ou quand des valeurs s'affichent sur la mauvaise ligne. Les types réglés ici passent avant ce que BiRTEC reconnaît tout seul.</p></details>
+<details><summary>La connexion à la GMAO se règle-t-elle ici ?</summary><p>Non : dans les Réglages du portail, pour toutes les applications. Voir <a href="#/ktec/connexion-gmao">Connexion à la GMAO</a>.</p></details>

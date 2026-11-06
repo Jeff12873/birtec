@@ -1,0 +1,26 @@
+<h1>Fiches techniques et parcs dans la phrase</h1>
+<p class="but">Les choix guidés de LA PHRASE : chercher par parc ou machine de l'arborescence, et par réponse d'une fiche technique (modèle, champ, valeur).</p>
+
+<h2>Par parc ou par machine</h2>
+<ol>
+<li>La table des machines doit être dans le chemin (<kbd>Ctrl</kbd> + <kbd>Maj</kbd> + clic pour l'ajouter).</li>
+<li>Condition › <b>dans le parc</b> (les parcs d'AITEC) ou <b>sous la machine</b> : toutes les machines de l'arborescence en dessous sont comprises.</li>
+<li>« et tout ce qui est dessous » sur une condition de la table des machines garde aussi toute la descendance.</li>
+</ol>
+
+<h2>Par fiche technique</h2>
+<ol>
+<li>Consultez la table de l'objet (pièces, rapports d'intervention…).</li>
+<li>Condition › <b>fiche technique</b> › le modèle › le champ › la valeur. Seuls les modèles et champs utilisés pour ce type d'objet sont proposés.</li>
+<li>Pour afficher les réponses en colonnes, ajoutez au chemin les tables des fiches : chaque ligne ne montre que les réponses de son propre objet.</li>
+</ol>
+
+<h2>Questions fréquentes</h2>
+<details><summary>« Fiches techniques non décrites » ou « Machines non décrites »</summary><p class="admin">Le modèle de données du site n'est pas réglé : Configuration › Modèle de données › Reconnaître, vérifier, Enregistrer. Voir <a href="#/birtec/configuration">Configuration</a>.</p></details>
+<details><summary>Une ligne affiche la réponse d'un autre objet (un 1 au lieu d'un 0)</summary><p>Mettez BiRTEC à jour (corrigé en 0.15.12), puis rouvrez la phrase et cliquez <b>Mettre à jour</b> sur le rapport : un rapport déjà fabriqué garde son ancienne requête.</p><p class="admin">Si le type de l'objet n'est pas reconnu, ajoutez-le dans Configuration › Modèle de données › <b>Types d'objets</b> (par exemple <code>RI → la table des rapports</code>).</p></details>
+<details><summary>« La table des machines n'est pas dans le chemin »</summary><p>Ajoutez-la avec <kbd>Ctrl</kbd> + <kbd>Maj</kbd> + clic sur sa bulle, puis refaites la condition.</p></details>
+
+<h2>Trucs et astuces</h2>
+<ul class="astuces">
+<li>Pour vérifier une valeur de fiche, affichez à côté l'identifiant de l'objet et celui de la table des réponses : ils doivent être identiques sur chaque ligne.</li>
+</ul>

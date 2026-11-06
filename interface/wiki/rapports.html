@@ -1,0 +1,45 @@
+<h1>Rapports</h1>
+<p class="but">Les rapports BIRT créés par BiRTEC : les voir, choisir leurs paramètres, les exporter, et les déposer dans la GMAO.</p>
+
+<script type="application/json" data-maquette>
+{ "titre": "Rapports", "ratio": 50,
+  "blocs": [
+    [0,0,17,100,"","menu"], [17,0,83,8,"","barre"],
+    [19,12,20,30,"Vignette","carte"], [41,12,20,30,"Vignette","carte"], [19,46,20,30,"Vignette","carte"], [41,46,20,30,"Vignette","carte"],
+    [64,12,34,84,"Rapport choisi : paramètres, aperçu, export","zone"],
+    [67,70,13,8,"Aperçu","bouton"], [82,70,13,8,"Exporter","accent"], [67,82,28,8,"Télécharger le .rptdesign","bouton"]
+  ],
+  "reperes": [
+    [21,15,"Une vignette par rapport : titre, description, petite constellation de ses tables."],
+    [30,38,"Clic sur la petite constellation : rouvrir le rapport dans la constellation pour le modifier.", true],
+    [66,15,"Le détail : paramètres (dates…), aperçu, aspect."],
+    [88,74,"Exporter : PDF, Excel, Word, page web, LibreOffice, PowerPoint."],
+    [69,86,"Le fichier .rptdesign, à déposer dans la GMAO.", true]
+  ] }
+</script>
+
+<h2>Pas à pas : exporter un rapport</h2>
+<ol>
+<li>Cliquez sur la vignette du rapport.</li>
+<li>Remplissez les paramètres s'il y en a (dates…), puis <b>Aperçu</b>.</li>
+<li>Choisissez le format et <b>Exporter</b>.</li>
+</ol>
+
+<h2 class="admin">Créer ou modifier un rapport</h2>
+<ol>
+<li>Dans la constellation, faites la phrase (et si besoin un regroupement).</li>
+<li><b>Et maintenant ?</b> › <b>Créer un rapport</b>, donnez un titre.</li>
+<li>Pour le modifier : clic sur sa petite constellation › retouchez la phrase › <b>Mettre à jour</b>.</li>
+<li><b>Aspect</b> : thème, image en haut, logo de la GMAO. La charte des rapports (écran Connaissances) donne des rapports qui ressemblent à ceux du site.</li>
+</ol>
+
+<h2>Questions fréquentes</h2>
+<details><summary>Le rapport est vide</summary><p>BiRTEC le signale quand les valeurs par défaut ne donnent aucune ligne : un filtre trop strict, ou une période sans données. Changez les paramètres.</p></details>
+<details><summary>Le rapport ne montre pas encore une correction de BiRTEC</summary><p class="admin">Un rapport fabriqué garde sa requête : rouvrez-le dans la constellation et cliquez <b>Mettre à jour</b>, puis redéposez le .rptdesign dans la GMAO.</p></details>
+<details><summary>Le mot de passe de la base est-il dans le fichier ?</summary><p>Non, jamais. La GMAO utilise sa propre connexion.</p></details>
+
+<h2>Trucs et astuces</h2>
+<ul class="astuces">
+<li>L'aperçu de BiRTEC utilise sa propre connexion : un rapport qui marche ici marche aussi dans la GMAO si la source de données de la charte est bonne.</li>
+<li>Une description claire sur la vignette (crayon, administrateur) évite les doublons : on retrouve le rapport existant au lieu d'en refaire un.</li>
+</ul>

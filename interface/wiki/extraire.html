@@ -1,0 +1,21 @@
+<h1>Extraire pour Excel, PDF de la constellation</h1>
+<p class="but">Sortir les données dans un classeur Excel qui se met à jour, ou la constellation en PDF A3.</p>
+
+<h2>Extraire pour Excel</h2>
+<ol>
+<li>Faites un chemin (ou choisissez une table), puis <b>Et maintenant ?</b> › <b>Extraire pour Excel</b> (ou « Télécharger la table »).</li>
+<li>Vous recevez un zip : le dossier <code>sources</code> (un CSV par table, entière), <code>analyse.xlsx</code> (une requête Power Query par CSV), <code>constellation.png</code> (le tracé du chemin) et un lisez-moi.</li>
+<li>Dézippez sur un <b>disque local</b> et ouvrez <code>analyse.xlsx</code> : Données › Requêtes et connexions.</li>
+</ol>
+
+<h2>La constellation en PDF</h2>
+<p><b>PDF</b> (en haut) enregistre une page A3 paysage sur fond blanc : tout le graphe tel qu'il est disposé, le chemin choisi en surbrillance avec ses clés, et une légende. <b>Imprimer</b> envoie la même page à l'imprimante.</p>
+
+<h2>Questions fréquentes</h2>
+<details><summary>Excel refuse d'actualiser (« pare-feu de confidentialité », source introuvable)</summary><p>Le classeur cherche ses CSV à côté de lui : dézippez tout le dossier sur un disque local, pas dans OneDrive ni SharePoint, et ne déplacez pas <code>analyse.xlsx</code> seul.</p></details>
+<details><summary>Une table est coupée</summary><p>200 000 lignes au plus par table. Filtrez avec une phrase avant d'extraire.</p></details>
+
+<h2>Trucs et astuces</h2>
+<ul class="astuces">
+<li>Pour mettre à jour le classeur, refaites l'extraction et remplacez seulement le dossier <code>sources</code> : vos onglets d'analyse restent.</li>
+</ul>

@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.15.14",
+      "date": "2026-11-06",
+      "points": [
+        "L'aide passe dans le wiki de K.NOVA : 17 pages remises à jour (LA PHRASE, fiches techniques, extraction Excel, modèle de données…), avec maquettes annotées et cas d'usage"
+      ]
+    },
+    {
       "version": "0.15.13",
       "date": "2026-11-06",
       "points": [
