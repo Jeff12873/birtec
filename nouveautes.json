@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.15.13",
+      "date": "2026-11-06",
+      "points": [
+        "Configuration › Modèle de données : tableau des types d'objets (valeur du type → table) à compléter sans éditer le texte ; il passe avant la reconnaissance automatique"
+      ]
+    },
+    {
       "version": "0.15.12",
       "date": "2026-11-06",
       "points": [

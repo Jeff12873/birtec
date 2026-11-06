@@ -352,6 +352,9 @@ input[type=checkbox] { width: auto; flex: none; padding: 0; }
 /* Configuration : le modèle de données */
 .ligne-modele { display: flex; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--bord); font-size: 13px; }
 .ligne-modele > span:first-child { min-width: 170px; }
+.types-objets { margin-top: 8px; display: grid; gap: 6px; justify-items: start; }
+.ligne-type { display: flex; gap: 8px; align-items: center; }
+.ligne-type input { width: 120px; }
 
 /* LA PHRASE : une date (« dans les 3 derniers mois ») : le choix et ses valeurs restent sur une ligne, à leur taille */
 .pastille-choix.quand, .valeurs-entre .pastille-choix { width: auto; flex: none; }
