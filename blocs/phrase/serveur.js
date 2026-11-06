@@ -11,7 +11,6 @@ import { executerRequete, etatConnexion } from 'ktec/mysql.js'
 import { enregistrerRequete, lireInfo, ecrireInfo, enregistrerIndicateur } from 'ktec/ktec.js'
 import { reglagesPoste } from 'ktec/installation.js'
 import { obtenirSchema } from '../base/schema.js'
-import { classeurSimple } from '../base/classeur.js'
 import { arbresDe } from '../../interface/types.js'
 import { genererRapport } from '../rapports/serveur.js'
 import { reglagesIndicateurs, tester } from '../indicateurs/serveur.js'
@@ -21,6 +20,8 @@ import { lireModele, enregistrerModele, reconnaitreModele, lireArbre, lireParcs,
 
 const VALEURS_MAX = 30
 const LIGNES_MAX_EXCEL = 200_000
+// Chargé à la demande : la page éco+ embarque ce module et ne peut pas emporter le classeur (modules Node).
+const MODULE_CLASSEUR = '../base/classeur.js'
 
 // Le schéma pour BiRTEC éco+ : structure, réglages de LA PHRASE, associations à type, adresse et utilisateur de la base
 // (jamais de mot de passe). Exporté en fichier par la constellation, ou glissé dans la page éco+ téléchargée du portail.
@@ -226,6 +227,7 @@ export function routes(r) {
     const r = await executerRequete(q.sql, LIGNES_MAX_EXCEL)
     const entetes = q.colonnes.map((c) => (q.groupe || !c.colonne ? c.libelle : c.table !== q.depart.nom ? `${c.colonne} (${c.table})` : c.colonne))
     const nom = String(q.depart.libelle || q.depart.nom)
+    const { classeurSimple } = await import(MODULE_CLASSEUR)
     const octets = classeurSimple(entetes, r.lignes.map((l) => l.slice(0, q.colonnes.length)), { feuille: nom })
     const horodatage = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
     ctx.res.setHeader('X-Lignes', String(r.lignes.length))
