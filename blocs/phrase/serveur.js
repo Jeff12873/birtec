@@ -650,13 +650,17 @@ function memeObjet(schema, table, autre, jointes, depart, colJointure) {
   const p = pairesObjet(table)[0]
   if (!p || colJointure?.nom.toLowerCase() === p.id.toLowerCase()) return ''
   const memes = (t) => pairesObjet(t).find((x) => x.id.toLowerCase() === p.id.toLowerCase() && x.type.toLowerCase() === p.type.toLowerCase())
-  const deja = [...jointes].map((n) => tableDe(schema, n)).find((t) => t && t.nom !== table.nom && t.nom !== autre.nom && memes(t))
+  // La table d'où l'on vient compte aussi (réponses jointes aux modèles associés par le seul numéro de modèle).
+  const deja = [...jointes].map((n) => tableDe(schema, n)).find((t) => t && t.nom !== table.nom && memes(t))
   if (deja) {
     const q = memes(deja)
     return ` AND ${table.nom}.${p.id} = ${deja.nom}.${q.id} AND ${table.nom}.${p.type} = ${deja.nom}.${q.type}`
   }
   const a = associations?.get(`${table.nom}.${p.id}`.toLowerCase())
-  const code = typeDeTable(lireModele(), depart.nom) || a?.valeurs.find((x) => x.toLowerCase() === depart.nom.toLowerCase())
+  // Le type de la table de départ : le modèle, sinon les valeurs reconnues (un échantillon : les objets récents,
+  // comme les RI, peuvent y manquer), sinon son nom en majuscules quand une table « à type » pointe vers elle.
+  const pointe = schema.tables.some((t) => pairesObjet(t).some((x) => x.id.toLowerCase() === p.id.toLowerCase()) && t.liens.some((l) => l.colonne.toLowerCase() === p.id.toLowerCase() && l.versTable.toLowerCase() === depart.nom.toLowerCase()))
+  const code = typeDeTable(lireModele(), depart.nom) || a?.valeurs.find((x) => x.toLowerCase() === depart.nom.toLowerCase()) || (pointe ? depart.nom.toUpperCase() : null)
   const cle = depart.colonnes.find((c) => c.cle)
   if (!code || !cle || autre.nom === depart.nom) return ''
   return ` AND ${table.nom}.${p.id} = ${depart.nom}.${cle.nom} AND ${table.nom}.${p.type} = ${litteral(code)}`

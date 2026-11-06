@@ -1,6 +1,14 @@
 {
   "versions": [
     {
+      "version": "0.15.12",
+      "date": "2026-11-06",
+      "points": [
+        "LA PHRASE : les réponses de fiche technique restent celles de l'objet de la ligne quand elles sont reliées directement aux modèles associés (une RI à 0 n'affiche plus le 1 d'une autre RI du même modèle)",
+        "Type d'objet retrouvé même quand les objets récents (les RI) manquent à l'échantillon lu au démarrage"
+      ]
+    },
+    {
       "version": "0.15.11",
       "date": "2026-11-05",
       "points": [
