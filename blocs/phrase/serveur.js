@@ -732,10 +732,13 @@ function conditionDate(e, format, quand, v) {
   const garde = format === 'date8' ? `${e} >= '19000101'` : format === 'unix' ? `${e} > 0` : `${e} >= DATE '1900-01-01'`
   const intervalle = (debut, fin) => [garde, debut && `${e} >= ${borne(debut)}`, fin && `${e} < ${borne(fin)}`].filter(Boolean).join(' AND ')
   const lendemain = (x) => `${jourSql(x)} + INTERVAL 1 DAY`
+  // « mois du calendrier » : des mois entiers, celui en cours compris (3 → du 1er du mois d'il y a 2 mois à la fin
+  // de ce mois-ci) ; les autres unités comptent à partir d'aujourd'hui.
+  const calendrier = v[1] === 'mois_calendrier'
   const duree = () => {
     const n = Number(v[0])
-    if (!Number.isInteger(n) || n < 1 || n > 9999 || !UNITES_SQL[v[1]]) throw new ErreurHttp(400, 'Durée illisible.')
-    return `CURDATE() - INTERVAL ${n} ${UNITES_SQL[v[1]]}`
+    if (!Number.isInteger(n) || n < 1 || n > 9999 || !(UNITES_SQL[v[1]] || calendrier)) throw new ErreurHttp(400, 'Durée illisible.')
+    return calendrier ? `${PREMIER_DU_MOIS} - INTERVAL ${n - 1} MONTH` : `CURDATE() - INTERVAL ${n} ${UNITES_SQL[v[1]]}`
   }
   switch (quand) {
     case '': return garde // la date est remplie
@@ -748,7 +751,7 @@ function conditionDate(e, format, quand, v) {
       const [a, b] = [...v].sort((x, y) => String(x).replace(/-/g, '').localeCompare(String(y).replace(/-/g, '')))
       return intervalle(jourSql(a), lendemain(b))
     }
-    case 'derniers': return intervalle(duree(), 'CURDATE() + INTERVAL 1 DAY')
+    case 'derniers': return intervalle(duree(), calendrier ? `${PREMIER_DU_MOIS} + INTERVAL 1 MONTH` : 'CURDATE() + INTERVAL 1 DAY')
     case 'plus_de': return intervalle(null, duree())
     case 'periode': {
       const p = PERIODES_SQL[v[0]]

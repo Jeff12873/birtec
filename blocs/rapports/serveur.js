@@ -126,7 +126,7 @@ export function routes(r) {
     const resultat = await rendreHtml(fichier, sortie, ctx.params.nom, parametres)
     // Nombre de lignes de la requête avec ces paramètres (rapports créés par BiRTEC seulement).
     const description = lireJson(fichier.replace(/\.rptdesign$/, '.birtec.json'))
-    const lignes = description && unSeulTableau(description) ? await compterLignes(description, parametres).catch(() => null) : null
+    const lignes = (description?.blocs || description?.requete) && unSeulTableau(description) ? await compterLignes(description, parametres).catch(() => null) : null
     return { erreurs: resultat.erreurs, lignes, adresse: `/api/rapports/${encodeURIComponent(ctx.params.nom)}/apercu.html?t=${Date.now()}` }
   })
 
@@ -154,6 +154,34 @@ export function routes(r) {
     const resultat = await rendreRapport(fichierRapport(ctx.params.nom), format, sortie, parametres, dossierRessources(chemins.cache))
     if (!fs.existsSync(sortie)) throw new ErreurHttp(500, `Export impossible : ${resultat.erreurs.join(' ; ') || 'erreur inconnue'}`)
     envoyerOctets(ctx.res, fs.readFileSync(sortie), { type: FORMATS[format].type, nom: `${ctx.params.nom}.${format}`, telecharger: true })
+  })
+
+  // Un .rptdesign venu d'ailleurs (BIRT Designer), gardé tel quel : graphiques, groupes, scripts et images
+  // compris. Seule sa connexion change : l'adresse et le compte du site remplacent les siens, son mot de passe
+  // (chiffré ou non) et son profil de connexion (fichier du poste qui l'a fait) sont retirés. Au rendu, le moteur
+  // donne de toute façon la connexion du site. En-tête X-Nom : le nom du fichier d'origine.
+  r.post('/api/rapports/importer', async (ctx) => {
+    ctx.exigerModeAdmin?.()
+    const xml = (await ctx.octets()).toString('utf8')
+    if (!/<report\b[^>]*xmlns="http:\/\/www\.eclipse\.org\/birt/.test(xml)) throw new ErreurHttp(400, 'Ce fichier n’est pas un rapport BIRT (.rptdesign).')
+    const origine = decodeURIComponent(String(ctx.req.headers['x-nom'] || 'rapport.rptdesign')).replace(/\.rptdesign$/i, '')
+    const { mysql } = reglagesPoste()
+    const propre = connexionDuSite(xml, mysql?.serveur ? { url: `jdbc:mysql://${mysql.serveur}:${mysql.port || 3306}/${mysql.base}`, utilisateur: mysql.utilisateur || '' } : null)
+    const dossier = path.join(dossierTravail(), 'rapports')
+    fs.mkdirSync(dossier, { recursive: true })
+    const base = nomDeFichier(lireTitre(propre) || origine)
+    let nom = base
+    for (let i = 2; fs.existsSync(path.join(dossier, `${nom}.rptdesign`)); i++) nom = `${base}-${i}`
+    const fichier = path.join(dossier, `${nom}.rptdesign`)
+    fs.writeFileSync(fichier, propre)
+    const verification = await verifierRapport(fichier, dossierRessources(chemins.cache)).catch((e) => ({ erreurs: [e.message] }))
+    const bloquantes = (verification.erreurs || []).filter((e) => !/style sheet .* is not found|The style ".*" .* is not found|library .* not found/i.test(e))
+    if (bloquantes.length) {
+      fs.rmSync(fichier, { force: true })
+      throw new ErreurHttp(400, `BIRT refuse ce rapport : ${bloquantes.join(' ; ')}`)
+    }
+    journal(`Rapport importé tel quel : ${nom}`)
+    return { nom, titre: lireTitre(propre) || origine }
   })
 
   r.get('/api/rapports/:nom/fichier', (ctx) => {
@@ -381,6 +409,20 @@ export async function resumerParIA(quoi, contenu) {
   } catch {
     return null
   }
+}
+
+// Les sources JDBC d'un .rptdesign, sans les identifiants d'origine : connexion = { url, utilisateur } du site.
+export function connexionDuSite(xml, connexion) {
+  return xml.replace(/(<oda-data-source\b[^>]*extensionID="[^"]*jdbc[^"]*"[^>]*>)([\s\S]*?)(<\/oda-data-source>)/g, (_, debut, corps, fin) => {
+    let c = corps
+      .replace(/\s*<encrypted-property name="odaPassword"[\s\S]*?<\/encrypted-property>/g, '')
+      .replace(/\s*<property name="(?:odaPassword|OdaConnProfileName|OdaConnProfileStorePath)">[\s\S]*?<\/property>/g, '')
+    for (const [cle, valeur] of [['odaURL', connexion?.url || ''], ['odaUser', connexion?.utilisateur || '']]) {
+      const ligne = `<property name="${cle}">${valeur.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</property>`
+      c = new RegExp(`<property name="${cle}">`).test(c) ? c.replace(new RegExp(`<property name="${cle}">[\\s\\S]*?</property>`), ligne) : `${c.replace(/\s*$/, '')}\n            ${ligne}\n        `
+    }
+    return debut + c + fin
+  })
 }
 
 function lireTitre(xml) {

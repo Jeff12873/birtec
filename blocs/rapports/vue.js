@@ -113,7 +113,7 @@ async function afficherRapport(zone, nom) {
         ),
       ),
       champs.length ? h('div', { class: 'parametres-rapport' }, champs.map((c) => c.element)) : null,
-      rapport.description && modeAdmin() ? await reglagesAspect(nom, rapport.description, apercu) : null,
+      (rapport.description?.blocs || rapport.description?.requete) && modeAdmin() ? await reglagesAspect(nom, rapport.description, apercu) : null,
       h('div', { class: 'actions', style: { marginTop: '12px' } },
         h('button', { class: 'principal', onclick: apercu }, ic('oeil', 16), 'Aperçu'),
         h('span', { style: { flex: 1 } }),

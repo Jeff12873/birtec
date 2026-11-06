@@ -1172,7 +1172,7 @@ const libelleOperateur = (op, nature) => (nature === 'date' && op === 'sup' ? 'o
 const SANS_VALEUR = new Set(['vide', 'non_vide'])
 // Une date : quand elle tombe. Les périodes et les durées se recalculent chaque jour (un rapport enregistré suit).
 const QUAND = { '': '— n’importe quand —', le: 'le', avant: 'avant le', depuis: 'depuis le', entre: 'entre le', derniers: 'dans les derniers', plus_de: 'il y a plus de', periode: 'pendant' }
-const UNITES = { jours: 'jours', semaines: 'semaines', mois: 'mois', annees: 'années' }
+const UNITES = { jours: 'jours', semaines: 'semaines', mois: 'mois', annees: 'années', mois_calendrier: 'mois du calendrier' }
 const PERIODES = { aujourdhui: 'aujourd’hui', hier: 'hier', cette_semaine: 'cette semaine', semaine_derniere: 'la semaine dernière', ce_mois: 'ce mois-ci', mois_dernier: 'le mois dernier', cette_annee: 'cette année', annee_derniere: 'l’année dernière' }
 // Combien de valeurs demande chaque choix de date (durée : nombre + unité).
 const valeursQuand = (q) => ({ le: 1, avant: 1, depuis: 1, entre: 2, derniers: 2, plus_de: 2, periode: 1 })[q] || 0
@@ -2556,13 +2556,27 @@ function chargerRptdesign(restaurer) {
       large: true,
       contenu: h('div', {},
         h('p', { class: 'texte-2', style: { marginTop: 0 } }, `Table consultée : ${p.depart}. Chemin : ${p.tables.join(' → ')}. ${p.conditions.length} condition${p.conditions.length > 1 ? 's' : ''} reprise${p.conditions.length > 1 ? 's' : ''}${p.tri.length ? `, ${p.tri.length} tri${p.tri.length > 1 ? 's' : ''}` : ''}.${r.autresRequetes ? ` Le rapport a ${r.autresRequetes} autre${r.autresRequetes > 1 ? 's' : ''} requête${r.autresRequetes > 1 ? 's' : ''} (en-tête, paramètres…) : seule la principale est reprise.` : ''}`),
-        p.nonReconnu.length ? [h('h3', {}, 'À refaire à la main'), h('ul', {}, p.nonReconnu.map((x) => h('li', { class: 'mono', style: { fontSize: '12px' } }, x)))] : h('p', { class: 'texte-2' }, 'Tout a été repris.'),
+        p.nonReconnu.length
+          ? [h('h3', {}, 'Ce que LA PHRASE ne dit pas'), h('p', { class: 'texte-2' }, 'Ces parties restent dans le rapport d’origine : gardez-le tel quel pour les avoir, ou refaites-les à la main.'), h('ul', {}, p.nonReconnu.map((x) => h('li', { class: 'mono', style: { fontSize: '12px' } }, x)))]
+          : h('p', { class: 'texte-2' }, 'Tout a été repris.'),
         h('details', {}, h('summary', { class: 'discret' }, 'La requête du rapport'), h('pre', { class: 'code' }, h('code', {}, r.requete)))),
-      boutons: [{ texte: 'Fermer', classe: 'principal', valeur: true }],
+      boutons: [
+        // Le rapport entier (graphiques, groupes, scripts), rangé avec les rapports du site, connexion du site.
+        modeAdmin() ? { texte: 'Garder le rapport tel quel', classe: 'discret', action: () => garderTelQuel(fichier) } : null,
+        { texte: 'Fermer', classe: 'principal', valeur: true },
+      ].filter(Boolean),
     })
   })
   document.body.append(choix)
   choix.click()
+}
+
+// Le .rptdesign entier rangé avec les rapports du site (Mes créations › Rapports), sans ses identifiants d'origine.
+async function garderTelQuel(fichier) {
+  const r = await api('/api/rapports/importer', { methode: 'POST', fichier, entetes: { 'X-Nom': encodeURIComponent(fichier.name) } })
+  notifier(`« ${r.titre} » est dans les rapports, tel quel`)
+  location.hash = `#/rapports/${encodeURIComponent(r.nom)}`
+  return true
 }
 
 // Le SQL d'un chemin, dans un ordre que BIRT accepte : on part de la première table, et une jointure n'ajoute sa

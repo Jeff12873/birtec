@@ -1,6 +1,15 @@
 {
   "versions": [
     {
+      "version": "0.15.17",
+      "date": "2026-11-06",
+      "points": [
+        "Charger un .rptdesign : requête « enveloppe » lue de l'intérieur, sous-requêtes jointes et colonnes calculées listées clairement, jointures découpées hors parenthèses",
+        "Périodes calculées reconnues (CURDATE, LAST_DAY…) ; nouvelle unité « mois du calendrier » (mois en cours compris) dans les dates de LA PHRASE",
+        "Garder le rapport tel quel (administrateur) : le .rptdesign entier rejoint les rapports du site, sans adresse, compte, mot de passe ni profil de connexion d'origine"
+      ]
+    },
+    {
       "version": "0.15.16",
       "date": "2026-11-06",
       "points": [
