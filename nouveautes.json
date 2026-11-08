@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.15.18",
+      "date": "2026-11-08",
+      "points": [
+        "Le bouton « Rejouer l'allumage des étoiles » n'est plus marqué comme un bouton IA"
+      ]
+    },
+    {
       "version": "0.15.17",
       "date": "2026-11-06",
       "points": [

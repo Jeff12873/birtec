@@ -156,7 +156,7 @@ export default {
           recherche,
           h('datalist', { id: 'birtec-tables' }, graphe.noeuds.map((n) => h('option', { value: n.table.nom }, n.table.libelle || ''))),
           zoneMotif,
-          h('button', { class: 'discret icone-seule', title: 'Rejouer l’allumage des étoiles', onclick: () => vue.rejouer() }, ic('etincelle', 16)),
+          h('button', { class: 'discret icone-seule pas-ia', title: 'Rejouer l’allumage des étoiles', onclick: () => vue.rejouer() }, ic('etincelle', 16)),
           h('button', { class: 'discret', title: 'Voir tout le graphe', onclick: () => vue.toutVoir() }, ic('rafraichir', 16), 'Tout voir'),
           h('button', { title: 'Enregistre toute la constellation, telle qu’elle est disposée, dans un fichier PDF (A3 paysage)', onclick: () => telechargerPdf(graphe, vue, schema).catch((e) => notifier(`PDF impossible : ${e.message}`, 'erreur')) }, ic('document', 16), 'Constellation en PDF'),
           h('button', { class: 'discret', title: 'La même page, envoyée à l’imprimante', onclick: () => imprimer(graphe, vue, schema) }, ic('document', 16), 'Imprimer'),
