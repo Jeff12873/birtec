@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.15.19",
+      "date": "2026-11-08",
+      "points": [
+        "Présentation guidée au premier lancement, avec un bouton pour la relancer"
+      ]
+    },
+    {
       "version": "0.15.18",
       "date": "2026-11-08",
       "points": [

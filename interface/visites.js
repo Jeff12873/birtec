@@ -3,6 +3,7 @@
 // (window.birtecPhrase.exemple(), blocs/schema/vue.js) : aucun nom de table n'est écrit ici.
 
 const phrase = () => window.birtecPhrase
+const allerPuis = async (adresse) => { location.hash = adresse; await new Promise((ok) => setTimeout(ok, 600)) }
 let ex = null // la table d'exemple, choisie au début de la visite
 
 // Le panneau de fin : « Et maintenant ? » (administrateur), sinon le titre « Chemin de la phrase » et ce qui suit.
@@ -13,6 +14,14 @@ function panneauFinal() {
 }
 
 export const visites = {
+  'les-ecrans': {
+    titre: 'Ce que devient une phrase',
+    etapes: [
+      { avant: () => allerPuis('#/rapports'), attendre: '.contenu > :first-child', cible: '.contenu > :first-child', titre: 'Les rapports', texte: 'Une phrase enregistrée devient un rapport à ouvrir, à exporter et à partager.' },
+      { avant: () => allerPuis('#/indicateurs'), attendre: '.contenu > :first-child', cible: '.contenu > :first-child', titre: 'Les indicateurs', texte: 'Elle peut aussi devenir un indicateur : un chiffre et sa courbe, suivis dans le temps.' },
+      { avant: () => { location.hash = '#/schema' }, attendre: '.ligne-depart-phrase', cible: '[data-presentation]', titre: 'À vous', texte: 'Ce bouton relance la présentation quand vous voulez.' },
+    ],
+  },
   'composer-une-phrase': {
     titre: 'Composer une phrase',
     etapes: [
@@ -64,3 +73,5 @@ export const visites = {
     ],
   },
 }
+
+export const presentation = ['composer-une-phrase', 'les-ecrans']
